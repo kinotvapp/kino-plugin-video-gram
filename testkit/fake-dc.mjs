@@ -94,6 +94,7 @@ export class FakeDc {
     this.userMigrateTo = null;
     this.gzipResults = true;
     this.gzipFiles = false;
+    this.gzipMessages = false;
     this.hooks = [];
     this.connections = [];
     this.stats = { connections: 0, keyExchanges: 0, botLogins: 0, exportAuth: 0, importAuth: 0, getFile: 0, initConnection: 0, layers: [], badSalts: 0, acks: 0 };
@@ -245,7 +246,8 @@ class DcConnection {
   flush({ authKey, sessionId, pending }) {
     if (!pending.length) return;
     const body = pending.length === 1 ? pending[0] : this.container(sessionId, pending);
-    this.sendEncrypted(authKey, sessionId, body);
+    // gzipMessages: the whole message (a container too) inside gzip_packed, as Telegram may send it.
+    this.sendEncrypted(authKey, sessionId, this.dc.gzipMessages ? new Writer().int(CTOR.gzipPacked).bytes(gzipSync(Buffer.from(body))).done() : body);
   }
   nextSeq(sessionId, content = true) {
     const s = this.sessions.get(sessionId);
