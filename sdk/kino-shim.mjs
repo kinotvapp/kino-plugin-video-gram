@@ -597,6 +597,8 @@ export function tokenBucket(capacity, windowMs, now = Date.now) {
   };
 }
 
+// A plugin runs in its own vm realm, so its Uint8Array is not `instanceof` this realm's; the app (one realm) accepts exactly Uint8Array.
+const isUint8Array = (v) => ArrayBuffer.isView(v) && Object.prototype.toString.call(v) === "[object Uint8Array]";
 const plainObject = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
 
 /** Kino 0.9.55's title normalisation (KinoMetaTitleMatch.normalise): lowercase, no accents, punctuation and spaces as one space. */
@@ -779,6 +781,8 @@ export function createKino(manifest, { appVersion = "sdk", lang = "es-CO", devic
   const f = contract.fetch;
   const kinoDevice = deviceFor(device, env);
   const storage = loadJson(storageFile, {});
+  // apiVersion 12, capability "storageLarge": contract.storage.largeMaxTotalBytes / largeMaxValueBytes / largeMaxKeys / largeMaxKeyChars instead of maxTotalBytes.
+  const storageLarge = () => Array.isArray(manifest?.capabilities) && manifest.capabilities.includes("storageLarge");
   // An entry is a bare string (permanent, the format before ttlMs existed) or { v, e } (expires at
   // epoch ms `e`). Dropped lazily, on the next read or write that touches this instance -- never a
   // background timer -- so it stops counting against the cap the moment it is noticed.
@@ -1434,7 +1438,7 @@ export function createKino(manifest, { appVersion = "sdk", lang = "es-CO", devic
         settled = true;
         resolve(Object.freeze({
           send: async (data) => {
-            if (!(data instanceof Uint8Array)) throw kinoError("invalid_request", "send() takes a Uint8Array");
+            if (!isUint8Array(data)) throw kinoError("invalid_request", "send() takes a Uint8Array");
             if (data.length > C.maxSendBytes) throw kinoError("too_large", "frame too large");
             if (reason !== null || sock.readyState !== 1) throw kinoError("closed", "the socket is closed");
             sock.send(data);
@@ -1454,6 +1458,10 @@ export function createKino(manifest, { appVersion = "sdk", lang = "es-CO", devic
     });
     return Object.freeze({ open });
   })();
+
+  // --- kino.catalog (apiVersion 12, capability "catalog"): the app's PluginCatalogDb mirrored in memory (catalogAnswer
+  // below), behind the same wrapper the app's prelude.js puts in front of it. Undefined without the capability. ---
+  const catalogApi = (manifest.capabilities || []).includes("catalog") ? catalogKino(newCatalogState()) : null;
 
   const kino = Object.freeze({
     apiVersion: contract.apiVersion,
@@ -1488,11 +1496,24 @@ export function createKino(manifest, { appVersion = "sdk", lang = "es-CO", devic
           expiresAt = Date.now() + ttlMs;
         }
         purgeExpiredStorage();
-        const previous = storage[k];
-        storage[k] = expiresAt === undefined ? value : { v: value, e: expiresAt };
-        if (Buffer.byteLength(JSON.stringify(storage)) > contract.storage.maxTotalBytes) {
-          if (previous === undefined) delete storage[k]; else storage[k] = previous;
-          throw kinoError("too_large", `plugin storage full (${kb(contract.storage.maxTotalBytes)})`);
+        // apiVersion 12, capability "storageLarge": the app's larger quota (PluginStorage, one file per value there), else
+        // the 256 KB one. The large total counts every key and value in UTF-8, as the app's index does.
+        if (storageLarge()) {
+          const st = contract.storage;
+          if (k.length > st.largeMaxKeyChars) throw kinoError("invalid_request", `kino.storage.set: with storageLarge a key is at most ${st.largeMaxKeyChars} characters`);
+          if (Buffer.byteLength(value) > st.largeMaxValueBytes) throw kinoError("too_large", `plugin storage full (${kb(st.largeMaxValueBytes)} per value)`);
+          const others = Object.keys(storage).filter((x) => x !== k);
+          if (others.length >= st.largeMaxKeys) throw kinoError("too_large", `plugin storage full (${st.largeMaxKeys} keys)`);
+          const total = others.reduce((sum, x) => sum + Buffer.byteLength(x) + Buffer.byteLength(storageEntryValue(storage[x])), 0);
+          if (total + Buffer.byteLength(k) + Buffer.byteLength(value) > st.largeMaxTotalBytes) throw kinoError("too_large", `plugin storage full (${kb(st.largeMaxTotalBytes)})`);
+          storage[k] = expiresAt === undefined ? value : { v: value, e: expiresAt };
+        } else {
+          const previous = storage[k];
+          storage[k] = expiresAt === undefined ? value : { v: value, e: expiresAt };
+          if (Buffer.byteLength(JSON.stringify(storage)) > contract.storage.maxTotalBytes) {
+            if (previous === undefined) delete storage[k]; else storage[k] = previous;
+            throw kinoError("too_large", `plugin storage full (${kb(contract.storage.maxTotalBytes)})`);
+          }
         }
         saveJson(storageFile, storage);
       },
@@ -1505,6 +1526,8 @@ export function createKino(manifest, { appVersion = "sdk", lang = "es-CO", devic
     }),
     // apiVersion 12, capability "socket": undefined without it, like the app.
     ...(wsApi ? { ws: wsApi } : {}),
+    // apiVersion 12, capability "catalog": undefined without it, like the app.
+    ...(catalogApi ? { catalog: catalogApi } : {}),
     cookies: Object.freeze({
       get(url, name) {
         let u;
@@ -1594,8 +1617,10 @@ export function signingLane(kino) {
   const why = (api) => kinoError("not_allowed", `sign() can't use ${api}: whatever you need must come in signContext`);
   const refused = (api) => () => { throw why(api); };
   const methods = (names, api) => Object.freeze(Object.fromEntries(names.map((n) => [n, refused(api)])));
+  // The app's lane host is no catalog host: sign() has no kino.catalog at all.
+  const { catalog: _noCatalog, ...laneKino } = kino;
   return Object.freeze({
-    ...kino,
+    ...laneKino,
     fetch: async () => { throw kinoError("host_not_allowed", "sign can't use the network"); },
     storage: methods(["get", "set", "remove", "keys"], "kino.storage"),
     cookies: methods(["get", "clear"], "kino.cookies"),
@@ -1649,3 +1674,239 @@ export function browserCaptureOptions(opts) {
   }
   if (captureAll && match === null && cookie !== null) throw kinoError("invalid_request", "captureAll needs match when waitForCookie is used");
 }
+
+// --- kino.catalog (apiVersion 12): the app's PluginCatalogDb, in memory --------------------------------------------------
+// Same validation order, messages, normalisation, matching and ordering as the app (pinned by the shared vectors in
+// docs/plugins/catalog-vectors.json, which the app's PluginCatalogTest runs too). Two differences, both documented: the
+// catalog lives in memory for one createKino (the app keeps a SQLite file), and maxDbBytes is checked against an estimate
+// of the file size (the app measures SQLite's used pages).
+const CAT = contract.catalog;
+const CATALOG_DAMAGED = "kino.catalog: the catalog file was damaged and has been reset to empty; rebuild it";
+// JavaScript's \s, written out so the app's Kotlin regex can be the very same class.
+// Control characters other than whitespace (NUL, escape, C1): dropped from what is searched, as the app does.
+const CATALOG_CONTROLS = /[\u0000-\u0008\u000E-\u001F\u007F-\u009F]+/g;
+const CATALOG_SPACES = /[\t\n\u000B\f\r \u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF]+/;
+
+/** A title as the catalog searches it: lower-cased, then NFD without combining marks ("Película" -> "pelicula"). */
+export function catalogNorm(s) {
+  return String(s).toLowerCase().normalize("NFD").replace(/\p{Mn}+/gu, "").replace(CATALOG_CONTROLS, "");
+}
+
+/** A query's tokens: normalised like a title, split on whitespace, each once. */
+export function catalogTokens(q) {
+  return [...new Set(catalogNorm(q).split(CATALOG_SPACES).filter((t) => t.length > 0))];
+}
+
+/** SQLite's BINARY order over UTF-8 text is code-point order (not JavaScript's UTF-16 order). */
+function cmpCodePoints(a, b) {
+  const x = [...a], y = [...b];
+  for (let i = 0; i < Math.min(x.length, y.length); i++) {
+    const d = x[i].codePointAt(0) - y[i].codePointAt(0);
+    if (d !== 0) return d < 0 ? -1 : 1;
+  }
+  return x.length === y.length ? 0 : x.length < y.length ? -1 : 1;
+}
+
+const nonFinite = (v) => typeof v === "number" && !Number.isFinite(v);
+const cmpNum = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+const isPlainObject = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+const wholeNumber = (v) => typeof v === "number" && Number.isInteger(v);
+
+export function newCatalogState(maxDbBytes = CAT.maxDbBytes) {
+  return { rows: new Map(), bytes: 0, maxDbBytes };
+}
+
+// An estimate of what a row costs in the app's SQLite file: the row (id, title, norm, sort, data) plus its two indexes.
+function catalogRowBytes(r) {
+  return Buffer.byteLength(r.id) * 3 + Buffer.byteLength(r.title) * 2 + Buffer.byteLength(r.norm) * 2 + (r.data === null ? 0 : Buffer.byteLength(r.data)) + 40;
+}
+
+class CatalogRefusal extends Error {
+  constructor(code, message) { super(message); this.code = code; }
+}
+const refuse = (code, message) => { throw new CatalogRefusal(code, message); };
+
+function catalogItem(i, raw) {
+  if (!isPlainObject(raw)) refuse("invalid_request", `kino.catalog.upsert: item ${i} must be an object`);
+  const id = raw.id;
+  if (typeof id !== "string" || id.length === 0) refuse("invalid_request", `kino.catalog.upsert: item ${i} needs an id, a string of 1 to ${CAT.maxIdChars} characters`);
+  if (id.length > CAT.maxIdChars) refuse("too_large", `kino.catalog.upsert: item ${i} id is over ${CAT.maxIdChars} characters (maxIdChars)`);
+  const title = raw.title;
+  if (typeof title !== "string") refuse("invalid_request", `kino.catalog.upsert: item ${i} needs a title, a string of at most ${CAT.maxTitleChars} characters`);
+  if (title.length > CAT.maxTitleChars) refuse("too_large", `kino.catalog.upsert: item ${i} title is over ${CAT.maxTitleChars} characters (maxTitleChars)`);
+  let sort = 0;
+  if (raw.sort !== undefined && raw.sort !== null) {
+    if (!wholeNumber(raw.sort) || !Number.isSafeInteger(raw.sort)) refuse("invalid_request", `kino.catalog.upsert: item ${i} sort must be a whole number`);
+    sort = raw.sort;
+  }
+  let data = null;
+  if (raw.data !== undefined && raw.data !== null) {
+    const d = raw.data;
+    if (typeof d !== "string") refuse("invalid_request", `kino.catalog.upsert: item ${i} data must be an object`);
+    if (Buffer.byteLength(d) > CAT.maxDataBytes) refuse("too_large", `kino.catalog.upsert: item ${i} data is over ${CAT.maxDataBytes} bytes as JSON (maxDataBytes)`);
+    let ok = d.length >= 2 && d[0] === "{" && d[d.length - 1] === "}";
+    if (ok) { try { ok = isPlainObject(JSON.parse(d)); } catch { ok = false; } }
+    if (!ok) refuse("invalid_request", `kino.catalog.upsert: item ${i} data must be an object`);
+    data = d;
+  }
+  return { id, title, norm: catalogNorm(title), sort, data };
+}
+
+function catalogIdsOf(op, args) {
+  const raw = args.ids;
+  if (!Array.isArray(raw)) refuse("invalid_request", `kino.catalog.${op} takes an array of ids`);
+  if (raw.length > CAT.maxUpsertBatch) refuse("too_large", `kino.catalog.${op}: at most ${CAT.maxUpsertBatch} ids per call (maxUpsertBatch)`);
+  raw.forEach((id, i) => { if (typeof id !== "string") refuse("invalid_request", `kino.catalog.${op}: id ${i} must be a string`); });
+  return [...new Set(raw)];
+}
+
+const catalogRowOut = (r) => ({ id: r.id, title: r.title, sort: r.sort, data: r.data });
+
+function catalogOp(state, op, args) {
+  switch (op) {
+    case "upsert": {
+      if (!Array.isArray(args.items)) refuse("invalid_request", "kino.catalog.upsert takes an array of items");
+      if (args.items.length > CAT.maxUpsertBatch) refuse("too_large", `kino.catalog.upsert: at most ${CAT.maxUpsertBatch} items per call (maxUpsertBatch)`);
+      const items = args.items.map((raw, i) => catalogItem(i, raw));
+      // All or nothing, like the app's transaction: the totals are computed before anything is written.
+      const after = new Map();
+      for (const it of items) after.set(it.id, it);
+      let count = state.rows.size, bytes = state.bytes;
+      for (const [id, it] of after) {
+        const old = state.rows.get(id);
+        if (old) bytes -= catalogRowBytes(old); else count++;
+        bytes += catalogRowBytes(it);
+      }
+      if (count > CAT.maxItems) refuse("limit", `kino.catalog.upsert: the catalog is full (maxItems ${CAT.maxItems})`);
+      if (bytes > state.maxDbBytes) refuse("limit", `kino.catalog.upsert: the catalog file is full (maxDbBytes ${state.maxDbBytes % 1048576 === 0 ? `${state.maxDbBytes / 1048576} MiB` : `${state.maxDbBytes} bytes`})`);
+      for (const [id, it] of after) state.rows.set(id, it);
+      state.bytes = bytes;
+      return { count: items.length };
+    }
+    case "search": {
+      let q = "";
+      if (args.q !== undefined && args.q !== null) {
+        if (typeof args.q !== "string") refuse("invalid_request", "kino.catalog.search: q must be a string");
+        q = args.q;
+      }
+      if (q.length > CAT.maxQueryChars) refuse("too_large", `kino.catalog.search: q is over ${CAT.maxQueryChars} characters (maxQueryChars)`);
+      let limit = CAT.defaultSearchLimit;
+      if (args.limit !== undefined && args.limit !== null) {
+        if (!wholeNumber(args.limit) || args.limit < 1) refuse("invalid_request", `kino.catalog.search: limit must be a whole number from 1 to ${CAT.maxSearchLimit}`);
+        limit = args.limit;
+      }
+      if (limit > CAT.maxSearchLimit) refuse("too_large", `kino.catalog.search: limit is over ${CAT.maxSearchLimit} (maxSearchLimit)`);
+      let offset = 0;
+      if (args.offset !== undefined && args.offset !== null) {
+        if (!wholeNumber(args.offset) || args.offset < 0) refuse("invalid_request", `kino.catalog.search: offset must be a whole number from 0 to ${CAT.maxOffset}`);
+        offset = args.offset;
+      }
+      if (offset > CAT.maxOffset) refuse("too_large", `kino.catalog.search: offset is over ${CAT.maxOffset} (maxOffset)`);
+      let order = CAT.orders[0];
+      if (args.order !== undefined && args.order !== null) {
+        if (typeof args.order !== "string" || !CAT.orders.includes(args.order)) refuse("invalid_request", 'kino.catalog.search: order must be "newest", "oldest" or "title"');
+        order = args.order;
+      }
+      const tokens = catalogTokens(q);
+      const hits = [...state.rows.values()].filter((r) => tokens.every((t) => r.norm.includes(t)));
+      const byId = (a, b) => cmpCodePoints(a.id, b.id);
+      const sorters = {
+        newest: (a, b) => cmpNum(b.sort, a.sort) || byId(a, b),
+        oldest: (a, b) => cmpNum(a.sort, b.sort) || byId(a, b),
+        title: (a, b) => cmpCodePoints(a.norm, b.norm) || cmpCodePoints(a.title, b.title) || byId(a, b),
+      };
+      hits.sort(sorters[order]);
+      return { items: hits.slice(offset, offset + limit).map(catalogRowOut), total: hits.length };
+    }
+    case "get": {
+      const ids = catalogIdsOf("get", args);
+      return { items: ids.filter((id) => state.rows.has(id)).map((id) => catalogRowOut(state.rows.get(id))) };
+    }
+    case "remove": {
+      const ids = catalogIdsOf("remove", args);
+      let count = 0;
+      for (const id of ids) {
+        const old = state.rows.get(id);
+        if (old) { state.rows.delete(id); state.bytes -= catalogRowBytes(old); count++; }
+      }
+      return { count };
+    }
+    case "clear":
+      state.rows.clear();
+      state.bytes = 0;
+      return {};
+    case "count":
+      return { count: state.rows.size };
+    default:
+      return refuse("invalid_request", "kino.catalog: unknown operation");
+  }
+}
+
+/**
+ * One catalog operation as the app's PluginCatalogDb.answer takes it: [op] and its arguments as the prelude sends them
+ * (JSON text). Answers JSON text; a refusal is {"error":{code,message}}, never thrown.
+ */
+export function catalogAnswer(state, op, argsJson) {
+  try {
+    let args;
+    try { args = JSON.parse(argsJson); } catch { args = undefined; }
+    if (!isPlainObject(args)) refuse("invalid_request", "kino.catalog: invalid request");
+    return JSON.stringify(catalogOp(state, op, args));
+  } catch (e) {
+    if (e instanceof CatalogRefusal) return JSON.stringify({ error: { code: e.code, message: e.message } });
+    throw e;
+  }
+}
+
+/** The app's prelude.js wrapper (kino.catalog), over [state]: the same request building, checks and typed errors. */
+function catalogKino(state) {
+  const call = async (op, args) => {
+    await null;
+    let text;
+    try { text = String(JSON.stringify(args)); } catch { throw kinoError("invalid_request", `kino.catalog.${op}: the request can't be turned into JSON`); }
+    if (text.length > CAT.maxRequestChars) throw kinoError("too_large", `kino.catalog.${op}: the request is over ${CAT.maxRequestChars} characters (maxRequestChars)`);
+    const r = JSON.parse(catalogAnswer(state, op, text));
+    if (r && r.error) throw kinoError(r.error.code, r.error.message);
+    return r;
+  };
+  const dataIn = (d) => {
+    if (d === undefined || d === null) return null;
+    let t;
+    try { t = JSON.stringify(d); } catch { t = undefined; }
+    return typeof t === "string" ? t : false;
+  };
+  const itemsOut = (list) => list.map((it) => ({ id: it.id, title: it.title, sort: it.sort, data: it.data === null || it.data === undefined ? null : JSON.parse(it.data) }));
+  const idsIn = async (op, ids) => {
+    await null;
+    if (!Array.isArray(ids)) throw kinoError("invalid_request", `kino.catalog.${op} takes an array of ids`);
+    if (ids.length > CAT.maxUpsertBatch) throw kinoError("too_large", `kino.catalog.${op}: at most ${CAT.maxUpsertBatch} ids per call (maxUpsertBatch)`);
+    return [...ids];
+  };
+  return Object.freeze({
+    async upsert(items) {
+      await null;
+      if (!Array.isArray(items)) throw kinoError("invalid_request", "kino.catalog.upsert takes an array of items");
+      if (items.length > CAT.maxUpsertBatch) throw kinoError("too_large", `kino.catalog.upsert: at most ${CAT.maxUpsertBatch} items per call (maxUpsertBatch)`);
+      // NaN and Infinity would become null in JSON (the default): refused first, as the app's prelude does.
+      items.forEach((it, i) => { if (it !== null && typeof it === "object" && nonFinite(it.sort)) throw kinoError("invalid_request", `kino.catalog.upsert: item ${i} sort must be a whole number`); });
+      const out = items.map((it) => (it === null || typeof it !== "object" ? it : { id: it.id, title: it.title, sort: it.sort, data: dataIn(it.data) }));
+      const r = await call("upsert", { items: out });
+      return { count: r.count };
+    },
+    async search(options) {
+      await null;
+      const o = options === undefined || options === null ? {} : options;
+      if (typeof o !== "object" || Array.isArray(o)) throw kinoError("invalid_request", "kino.catalog.search takes { q, limit, offset, order }");
+      if (nonFinite(o.limit)) throw kinoError("invalid_request", `kino.catalog.search: limit must be a whole number from 1 to ${CAT.maxSearchLimit}`);
+      if (nonFinite(o.offset)) throw kinoError("invalid_request", `kino.catalog.search: offset must be a whole number from 0 to ${CAT.maxOffset}`);
+      const r = await call("search", { q: o.q, limit: o.limit, offset: o.offset, order: o.order });
+      return { items: itemsOut(r.items), total: r.total };
+    },
+    async get(ids) { const r = await call("get", { ids: await idsIn("get", ids) }); return itemsOut(r.items); },
+    async remove(ids) { const r = await call("remove", { ids: await idsIn("remove", ids) }); return { count: r.count }; },
+    async clear() { await call("clear", {}); },
+    async count() { return (await call("count", {})).count; },
+  });
+}
+
+export { CATALOG_DAMAGED };

@@ -6,13 +6,13 @@
   "additiveFromApp": { "kino.meta": "0.9.53", "kino.tmdb": "0.9.53", "catalogOnly": "0.9.54", "kino.browser.captureAll": "0.9.54", "fetch.errorHost": "0.9.55", "kino.fetchAnyHost": "0.9.55",
     "kino.meta.byTitle": "0.9.55", "kino.device": "0.9.55", "kino.seed": "0.9.55", "panel.loading": "0.9.64" },
   "capabilities": {
-    "names": ["search", "home", "browse", "episodes", "resolve", "download", "drm", "channels", "migrate", "scopedSearch", "meta", "subtitles", "tracking", "segments", "playlists", "externalResolve", "socket", "byteSource"],
+    "names": ["search", "home", "browse", "episodes", "resolve", "download", "drm", "channels", "migrate", "scopedSearch", "meta", "subtitles", "tracking", "segments", "playlists", "externalResolve", "socket", "byteSource", "storageLarge", "catalog"],
     "required": ["resolve"],
     "atLeastOneOf": ["search", "home"],
     "standalone": ["subtitles", "tracking", "segments"],
     "anyPluginExports": ["subtitles"],
-    "declarative": ["download", "drm", "scopedSearch", "externalResolve", "socket"],
-    "apiVersions": { "download": 2, "drm": 2, "channels": 3, "migrate": 6, "scopedSearch": 6, "meta": 6, "tracking": 7, "segments": 7, "playlists": 10, "externalResolve": 11, "socket": 12, "byteSource": 12 },
+    "declarative": ["download", "drm", "scopedSearch", "externalResolve", "socket", "storageLarge", "catalog"],
+    "apiVersions": { "download": 2, "drm": 2, "channels": 3, "migrate": 6, "scopedSearch": 6, "meta": 6, "tracking": 7, "segments": 7, "playlists": 10, "externalResolve": 11, "socket": 12, "byteSource": 12, "storageLarge": 12, "catalog": 12 },
     "requires": { "scopedSearch": "search" },
     "requiresMessage": "The \"{capability}\" capability also needs \"{requires}\"",
     "needsApproval": ["download", "drm", "channels", "migrate", "tracking"],
@@ -464,7 +464,12 @@
   },
   "storage": {
     "maxTotalBytes": 262144,
-    "maxTtlMs": 2592000000
+    "maxTtlMs": 2592000000,
+    "largeApiVersion": 12,
+    "largeMaxTotalBytes": 16777216,
+    "largeMaxValueBytes": 2097152,
+    "largeMaxKeys": 1000,
+    "largeMaxKeyChars": 256
   },
   "crypto": {
     "hashes": ["md5", "sha1", "sha256", "sha512"],
@@ -509,6 +514,23 @@
     "readAheadChunks": 3,
     "cacheChunks": 8,
     "maxHandleChars": 512
+  },
+  "catalog": {
+    "apiVersion": 12,
+    "fileName": "catalog.db",
+    "maxItems": 100000,
+    "maxIdChars": 128,
+    "maxTitleChars": 300,
+    "maxDataBytes": 4096,
+    "maxUpsertBatch": 500,
+    "defaultSearchLimit": 50,
+    "maxSearchLimit": 100,
+    "maxOffset": 1000000,
+    "maxQueryChars": 256,
+    "maxDbBytes": 67108864,
+    "maxRequestChars": 6291456,
+    "orders": ["newest", "oldest", "title"],
+    "errorCodes": ["invalid_request", "too_large", "limit", "unavailable"]
   },
   "sleep": {
     "maxMs": 5000
