@@ -104,12 +104,13 @@ const inRange = (v, p) => v > 1n && v < p - 1n && v > LIMIT && v < p - LIMIT;
 
 /**
  * A new auth key on transport `t` (opened on DC `dc`). `publicKeys` is { signedDecimalFingerprint: { n: hex, e: decimal } }.
- * Answers { authKey (256 bytes), authKeyId (8 bytes), serverSalt (8 bytes), timeOffset (s) }.
+ * Answers { authKey (256 bytes), authKeyId (8 bytes), serverSalt (8 bytes), timeOffset (s) }. `rand(n)` is the
+ * randomness source (kino.crypto by default; tests inject a broken one to reach the g_b check).
  */
-export async function createAuthKey(t, { dc, publicKeys, now = () => Date.now(), timeoutMs = 20000 }) {
+export async function createAuthKey(t, { dc, publicKeys, now = () => Date.now(), timeoutMs = 20000, rand = random }) {
   const msgIds = new MsgIds(now);
   const opts = { msgIds, timeoutMs };
-  const nonce = random(16);
+  const nonce = rand(16);
   let r = await plainCall(t, reqPqMulti(nonce), opts);
   if (r.int() !== CTOR.resPQ) throw protocol("expected resPQ");
   if (!equal(r.int128(), nonce)) throw protocol("nonce mismatch");
@@ -119,7 +120,7 @@ export async function createAuthKey(t, { dc, publicKeys, now = () => Date.now(),
   const fp = fps.find((f) => Object.prototype.hasOwnProperty.call(publicKeys, f));
   if (!fp) throw protocol("no known server key among " + fps.join(", "));
   const [p, q] = factorPq(pq);
-  const newNonce = random(32);
+  const newNonce = rand(32);
   const inner = pqInnerDataDc({ pq: bigToBytes(pq), p: bigToBytes(p), q: bigToBytes(q), nonce, serverNonce, newNonce, dc });
   if (inner.length > 144) throw protocol("inner data too long");
 
@@ -128,13 +129,14 @@ export async function createAuthKey(t, { dc, publicKeys, now = () => Date.now(),
   const n = BigInt("0x" + key.n), nHex = evenHex(n), eHex = evenHex(BigInt(key.e));
   let encrypted;
   for (let attempt = 0; attempt < 32 && !encrypted; attempt++) {
-    const withPad = concat(inner, random(192 - inner.length));
-    const tempKey = random(32);
+    const withPad = concat(inner, rand(192 - inner.length));
+    const tempKey = rand(32);
     const dataWithHash = concat(reversed(withPad), sha256(tempKey, withPad));
     const aesEnc = igeEncrypt(dataWithHash, tempKey, new Uint8Array(32));
     const keyAesEnc = concat(xor(tempKey, sha256(aesEnc)), aesEnc);
     if (bigFromBytes(keyAesEnc) >= n) continue;
-    encrypted = fromHex(modPowHex(toHex(keyAesEnc), eHex, nHex)).slice(-256);
+    // The app's modPow pads its answer to the modulus' width (PluginCrypto.modPow); pad here too, never truncate.
+    encrypted = bigToBytes(BigInt("0x" + modPowHex(toHex(keyAesEnc), eHex, nHex)), 256);
   }
   if (!encrypted) throw protocol("RSA_PAD found no value below the modulus");
 
@@ -163,20 +165,21 @@ export async function createAuthKey(t, { dc, publicKeys, now = () => Date.now(),
 
   const primeHex = bigToHex(dhPrime, 256);
   let b, gB;
-  for (;;) {
-    b = random(256);
+  for (let attempt = 0; ; attempt++) {
+    if (attempt === 8) throw protocol("g_b out of range");
+    b = rand(256);
     gB = bigFromBytes(fromHex(modPowHex(evenHex(BigInt(g)), toHex(b), primeHex)));
     if (inRange(gB, dhPrime)) break;
   }
   const cInner = clientDHInnerData({ nonce, serverNonce, retryId: 0n, gB: bigToBytes(gB) });
   const withHash = concat(sha1(cInner), cInner);
-  const cPadded = concat(withHash, random((16 - (withHash.length % 16)) % 16));
+  const cPadded = concat(withHash, rand((16 - (withHash.length % 16)) % 16));
   r = await plainCall(t, setClientDHParams({ nonce, serverNonce, encryptedData: igeEncrypt(cPadded, tmpKey, tmpIv) }), opts);
   const res = r.int();
   if (res !== CTOR.dhGenOk) throw protocol(res === CTOR.dhGenRetry ? "dh_gen_retry" : res === CTOR.dhGenFail ? "dh_gen_fail" : "unexpected answer to set_client_DH_params");
   if (!equal(r.int128(), nonce) || !equal(r.int128(), serverNonce)) throw protocol("nonce mismatch in dh_gen_ok");
   const newNonceHash1 = r.int128();
-  const authKey = fromHex(modPowHex(toHex(gABytes), toHex(b), primeHex));
+  const authKey = bigToBytes(BigInt("0x" + modPowHex(toHex(gABytes), toHex(b), primeHex)), 256);
   const authHash = sha1(authKey);
   if (!equal(sha1(newNonce, Uint8Array.of(1), authHash.subarray(0, 8)).subarray(4, 20), newNonceHash1)) throw protocol("new_nonce_hash1 mismatch");
   return {

@@ -19,6 +19,7 @@ const sha256 = (...b) => createHash("sha256").update(Buffer.concat(b)).digest();
 const big = (b) => (b.length ? BigInt("0x" + Buffer.from(b).toString("hex")) : 0n);
 const bytesOf = (n, len) => { let h = n.toString(16); if (h.length % 2) h = "0" + h; const b = Buffer.from(h, "hex"); return len ? Buffer.concat([Buffer.alloc(len - b.length), b]) : b; };
 function modPow(b, e, m) { let r = 1n; b %= m; while (e > 0n) { if (e & 1n) r = (r * b) % m; e >>= 1n; b = (b * b) % m; } return r; }
+const flip = (b) => { const c = Buffer.from(b); c[c.length - 1] ^= 1; return c; };
 const xor = (a, b) => Buffer.from(a.map((v, i) => v ^ b[i]));
 function ige(data, key, iv, encrypt) {
   const c = (encrypt ? createCipheriv : createDecipheriv)("aes-256-ecb", key, null);
@@ -95,6 +96,10 @@ export class FakeDc {
     this.gzipResults = true;
     this.gzipFiles = false;
     this.gzipMessages = false;
+    // Handshake tampering for the security tests (each field breaks one thing the client must check):
+    // resPqNonce, dhNonce, dhServerNonce, innerNonce, innerServerNonce, answerHash, prime (BigInt), g (number),
+    // dhGen ("retry" | "fail"), dhGenNonce, dhGenServerNonce, newNonceHash.
+    this.tamper = {};
     this.hooks = [];
     this.connections = [];
     this.stats = { connections: 0, keyExchanges: 0, botLogins: 0, exportAuth: 0, importAuth: 0, getFile: 0, initConnection: 0, layers: [], badSalts: 0, acks: 0 };
@@ -126,7 +131,8 @@ class DcConnection {
   }
   serverMsgId() {
     let id = (BigInt(this.dc.now()) << 32n) | (BigInt(randomBytes(4).readUInt32LE(0) & 0x7ffffffc) | 1n);
-    if (id <= this.lastMsgId) id = this.lastMsgId + 4n;
+    // Increasing within one second only: a test may jump the fake clock backwards (clockSkew).
+    if (id <= this.lastMsgId && id >> 32n === this.lastMsgId >> 32n) id = this.lastMsgId + 4n;
     return (this.lastMsgId = id);
   }
   onPacket(p) {
@@ -149,7 +155,7 @@ class DcConnection {
       const P = generatePrimeSync(31, { bigint: true }), Q = generatePrimeSync(31, { bigint: true });
       this.dh = { nonce, serverNonce: randomBytes(16), p: P < Q ? P : Q, q: P < Q ? Q : P };
       this.dh.pq = this.dh.p * this.dh.q;
-      this.plainReply(new Writer().int(CTOR.resPQ).raw(nonce).raw(this.dh.serverNonce).bytes(bytesOf(this.dh.pq)).vectorLong([BigInt(rsa.fingerprint), 42n]).done());
+      this.plainReply(new Writer().int(CTOR.resPQ).raw(this.dc.tamper.resPqNonce ? flip(nonce) : nonce).raw(this.dh.serverNonce).bytes(bytesOf(this.dh.pq)).vectorLong([BigInt(rsa.fingerprint), 42n]).done());
     } else if (ctor === CTOR.reqDHParams) {
       const s = this.dh;
       if (!Buffer.from(r.int128()).equals(s.nonce) || !Buffer.from(r.int128()).equals(s.serverNonce)) throw new Error("fake DC: nonce");
@@ -169,13 +175,17 @@ class DcConnection {
       s.newNonce = Buffer.from(ir.int256());
       if (ir.int() !== this.dc.id) throw new Error("fake DC: inner dc");
       s.a = big(randomBytes(256));
-      const gA = this.dc.forceGa !== undefined ? this.dc.forceGa : modPow(BigInt(g), s.a, prime);
-      const answer = Buffer.from(new Writer().int(CTOR.serverDHInnerData).raw(s.nonce).raw(s.serverNonce).int(g).bytes(bytesOf(prime)).bytes(bytesOf(gA)).int(this.dc.now()).done());
-      const withHash = Buffer.concat([sha1(answer), answer]);
+      const t = this.dc.tamper;
+      const useG = t.g !== undefined ? t.g : g, usePrime = t.prime !== undefined ? t.prime : prime;
+      const gA = this.dc.forceGa !== undefined ? this.dc.forceGa : modPow(BigInt(useG), s.a, usePrime);
+      const answer = Buffer.from(new Writer().int(CTOR.serverDHInnerData).raw(t.innerNonce ? flip(s.nonce) : s.nonce).raw(t.innerServerNonce ? flip(s.serverNonce) : s.serverNonce)
+        .int(useG).bytes(bytesOf(usePrime)).bytes(bytesOf(gA)).int(this.dc.now()).done());
+      s.prime = usePrime;
+      const withHash = Buffer.concat([t.answerHash ? flip(sha1(answer)) : sha1(answer), answer]);
       const padded = Buffer.concat([withHash, randomBytes((16 - (withHash.length % 16)) % 16)]);
       s.tmpKey = Buffer.concat([sha1(s.newNonce, s.serverNonce), sha1(s.serverNonce, s.newNonce).subarray(0, 12)]);
       s.tmpIv = Buffer.concat([sha1(s.serverNonce, s.newNonce).subarray(12), sha1(s.newNonce, s.newNonce), s.newNonce.subarray(0, 4)]);
-      this.plainReply(new Writer().int(CTOR.serverDHParamsOk).raw(s.nonce).raw(s.serverNonce).bytes(ige(padded, s.tmpKey, s.tmpIv, true)).done());
+      this.plainReply(new Writer().int(CTOR.serverDHParamsOk).raw(t.dhNonce ? flip(s.nonce) : s.nonce).raw(t.dhServerNonce ? flip(s.serverNonce) : s.serverNonce).bytes(ige(padded, s.tmpKey, s.tmpIv, true)).done());
     } else if (ctor === CTOR.setClientDHParams) {
       const s = this.dh;
       r.int128(); r.int128();
@@ -185,13 +195,16 @@ class DcConnection {
       ir.int128(); ir.int128(); ir.long();
       const gB = big(ir.bytes());
       if (!sha1(dec.subarray(20, 20 + ir.o)).equals(dec.subarray(0, 20))) throw new Error("fake DC: client inner hash");
-      const authKey = bytesOf(modPow(gB, s.a, prime), 256);
+      const authKey = bytesOf(modPow(gB, s.a, s.prime), 256);
       const authKeyId = sha1(authKey).subarray(12, 20);
       const hash1 = sha1(s.newNonce, Buffer.from([1]), sha1(authKey).subarray(0, 8)).subarray(4, 20);
       this.dc.authKeys.set(authKeyId.toString("hex"), { key: authKey, authorized: false });
       this.dc.salt = xor(s.newNonce.subarray(0, 8), s.serverNonce.subarray(0, 8));
       this.dc.stats.keyExchanges++;
-      this.plainReply(new Writer().int(CTOR.dhGenOk).raw(s.nonce).raw(s.serverNonce).raw(hash1).done());
+      const t = this.dc.tamper;
+      const genCtor = t.dhGen === "retry" ? CTOR.dhGenRetry : t.dhGen === "fail" ? CTOR.dhGenFail : CTOR.dhGenOk;
+      this.plainReply(new Writer().int(genCtor).raw(t.dhGenNonce ? flip(s.nonce) : s.nonce).raw(t.dhGenServerNonce ? flip(s.serverNonce) : s.serverNonce)
+        .raw(t.newNonceHash ? flip(hash1) : hash1).done());
     } else {
       throw new Error("fake DC: unexpected plain ctor 0x" + ctor.toString(16));
     }
@@ -220,6 +233,14 @@ class DcConnection {
     const ctor = body.readUInt32LE(0);
     if (ctor === CTOR.msgsAck) { this.dc.stats.acks++; return; }
     if ((seqno & 1) === 0) throw new Error("fake DC: a request with an even seqno");
+    // Telegram's msg_id time window: at most 300 s in the past (16, too low) or 30 s in the future (17, too high).
+    const msgTime = Number(msgId >> 32n);
+    const timeCode = msgTime < this.dc.now() - 300 ? 16 : msgTime > this.dc.now() + 30 ? 17 : 0;
+    if (timeCode) {
+      this.dc.stats.badTimes = (this.dc.stats.badTimes || 0) + 1;
+      out.pending.push(new Writer().int(CTOR.badMsgNotification).long(msgId).int(seqno).int(timeCode).done());
+      return this.flush(out);
+    }
     if (!salt.equals(this.dc.salt)) {
       this.dc.stats.badSalts++;
       out.pending.push(new Writer().int(CTOR.badServerSalt).long(msgId).int(seqno).int(48).raw(this.dc.salt).done());
@@ -234,6 +255,9 @@ class DcConnection {
         return this.flush(out);
       }
       if (reply && reply.silent) return;
+      if (reply && reply.close) { this.socket.serverClose(); return; }
+      if (reply && reply.hugeLength) { this.transport.sendLengthOnly(reply.hugeLength); return; }
+      if (reply && reply.tamper) out.tamper = reply.tamper;
       if (reply && reply.error) { out.pending.push(rpcResult(msgId, rpcError(...reply.error))); return this.flush(out); }
     }
     let result;
@@ -243,11 +267,11 @@ class DcConnection {
     out.pending.push(rpcResult(msgId, result, gzip));
     this.flush(out);
   }
-  flush({ authKey, sessionId, pending }) {
+  flush({ authKey, sessionId, pending, tamper }) {
     if (!pending.length) return;
     const body = pending.length === 1 ? pending[0] : this.container(sessionId, pending);
     // gzipMessages: the whole message (a container too) inside gzip_packed, as Telegram may send it.
-    this.sendEncrypted(authKey, sessionId, this.dc.gzipMessages ? new Writer().int(CTOR.gzipPacked).bytes(gzipSync(Buffer.from(body))).done() : body);
+    this.sendEncrypted(authKey, sessionId, this.dc.gzipMessages ? new Writer().int(CTOR.gzipPacked).bytes(gzipSync(Buffer.from(body))).done() : body, tamper);
   }
   nextSeq(sessionId, content = true) {
     const s = this.sessions.get(sessionId);
@@ -258,12 +282,16 @@ class DcConnection {
     for (const b of bodies) w.long(this.serverMsgId()).int(this.nextSeq(sessionId)).int(b.length).raw(b);
     return w.done();
   }
-  sendEncrypted(authKey, sessionIdHex, body) {
-    const head = Buffer.from(new Writer().raw(this.dc.salt).raw(Buffer.from(sessionIdHex, "hex")).long(this.serverMsgId()).int(this.nextSeq(sessionIdHex)).int(body.length).raw(body).done());
+  /** `tamper`: "byte" flips one encrypted byte (msg_key no longer matches), "session" answers under another session id. */
+  sendEncrypted(authKey, sessionIdHex, body, tamper) {
+    const sid = tamper === "session" ? randomBytes(8) : Buffer.from(sessionIdHex, "hex");
+    const head = Buffer.from(new Writer().raw(this.dc.salt).raw(sid).long(this.serverMsgId()).int(this.nextSeq(sessionIdHex)).int(body.length).raw(body).done());
     const plain = Buffer.concat([head, randomBytes(12 + ((16 - ((head.length + 12) % 16)) % 16))]);
     const msgKey = sha256(authKey.subarray(96, 128), plain).subarray(8, 24);
     const { key, iv } = kdf(authKey, msgKey, 8);
-    this.transport.send(Buffer.concat([sha1(authKey).subarray(12, 20), msgKey, ige(plain, key, iv, true)]));
+    const enc = ige(plain, key, iv, true);
+    if (tamper === "byte") enc[enc.length - 20] ^= 0x40;
+    this.transport.send(Buffer.concat([sha1(authKey).subarray(12, 20), msgKey, enc]));
   }
 
   rpc(r, entry) {

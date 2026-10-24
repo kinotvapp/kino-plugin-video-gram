@@ -33,10 +33,12 @@ export class Session {
     this.log = log;
     this.msgIds = new MsgIds(now);
     this.pendingAcks = [];
+    this.oldSessions = new Set();
     this.newSession();
   }
 
   newSession() {
+    if (this.sessionId) this.oldSessions.add(this.sessionId);
     this.sessionId = toHex(random(8));
     this.seq = 0;
   }
@@ -68,7 +70,7 @@ export class Session {
     }
   }
 
-  /** One transport packet -> its message [{ id, seqno, body }] (empty when it belongs to an older session). */
+  /** One transport packet -> its message [{ id, seqno, body }] (empty when it belongs to one of our older sessions). */
   async recvMessages(deadline) {
     const hex = await this.t.recvHex(Math.max(1, deadline - this.now()), this.now);
     if (hex.length === 8) throw fromTransportError(readI32LE(fromHex(hex), 0));
@@ -80,7 +82,11 @@ export class Session {
     const { key, iv } = this.keyIv(msgKey, 8);
     const plainHex = igeDecryptHex(encHex, key, iv);
     if (sha256Hex(this.ak.slice(192, 256) + plainHex).slice(16, 48) !== msgKey) throw protocol("msg_key mismatch");
-    if (plainHex.slice(16, 32) !== this.sessionId) { this.log("message for another session ignored"); return []; }
+    const sid = plainHex.slice(16, 32);
+    if (sid !== this.sessionId) {
+      if (this.oldSessions.has(sid)) { this.log("message for an older session ignored"); return []; }
+      throw protocol("answer for another session");
+    }
     const h = new Reader(fromHex(plainHex.slice(32, 64)));
     const id = h.long(), seqno = h.int(), len = h.int();
     const total = plainHex.length / 2;
@@ -137,7 +143,11 @@ export class Session {
             const code = r.int();
             if (bad !== reqId) break;
             if (code === 16 || code === 17) {
+              // The server's own msg_id carries its clock. Ids made under the old offset may be far ahead (17), and
+              // MsgIds only ever goes up: drop that floor and start a new session so the next ids follow the new clock.
               this.state.timeOffset = Number(m.id >> 32n) - Math.floor(this.now() / 1000);
+              this.msgIds.last = 0n;
+              this.newSession();
               await resend(code);
             } else if (code === 32 || code === 33) {
               this.newSession();

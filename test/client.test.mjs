@@ -21,7 +21,8 @@ const SIZE = 2 * MiB + 12345;
 const DATA = fileData(SIZE);
 
 let tg;
-const newClient = (extra = {}) => new TelegramClient({ apiId: CREDS.apiId, publicKeys: fakeRsa().publicKeys, timeoutMs: 3000, ...extra });
+const newClient = (extra = {}) => new TelegramClient({ apiId: CREDS.apiId, publicKeys: fakeRsa().publicKeys, timeoutMs: 3000, store: memoryStore(), ...extra });
+const loginTimes = (store) => JSON.parse(store.get("mtproto.botLogins") || "[]");
 beforeEach(() => {
   tg = new FakeTelegram().install();
   tg.addFile({ ...DOC, dc: 2, data: DATA });
@@ -161,16 +162,30 @@ test("bad_server_salt mid-download: the request goes again with the new salt, an
   await c.close();
 });
 
-test("a server clock far ahead: bad_msg_notification 17 fixes the time offset and the request goes again", async () => {
+test("a server clock far ahead: bad_msg_notification 16 (msg_id too low) fixes the time offset and the request goes again", async () => {
   const c = await newClient().connect(2);
   await c.botLogin(CREDS);
   const dc = tg.dc(2);
   dc.clockSkew = 4000;
-  dc.once("getFile", () => ({ badMsg: 17 }));
   assert.equal((await c.getFile({ ...DOC, dcId: 2 }, 0, 4096)).length, 4096);
+  assert.equal(dc.stats.badTimes, 1);
   assert.ok(Math.abs(c.exportState().dcs["2"].timeOffset - 4000) <= 2);
   dc.once("getFile", () => ({ badMsg: 64 }));
   await assert.rejects(c.getFile({ ...DOC, dcId: 2 }, 0, 4096), (e) => e.code === "bad_msg" && e.badMsgCode === 64);
+  await c.close();
+});
+
+test("a server clock far behind: bad_msg_notification 17 (msg_id too high) lowers the next ids and the request goes again", async () => {
+  const c = await newClient().connect(2);
+  await c.botLogin(CREDS);
+  const dc = tg.dc(2);
+  dc.clockSkew = -4000;
+  const chunk = await c.getFile({ ...DOC, dcId: 2 }, 0, 4096);
+  assert.ok(Buffer.from(chunk).equals(DATA.subarray(0, 4096)));
+  assert.equal(dc.stats.badTimes, 1, "one refusal, then the corrected id is accepted");
+  assert.ok(Math.abs(c.exportState().dcs["2"].timeOffset + 4000) <= 2);
+  assert.equal((await c.getFile({ ...DOC, dcId: 2 }, 4096, 4096)).length, 4096);
+  assert.equal(dc.stats.badTimes, 1);
   await c.close();
 });
 
@@ -262,6 +277,67 @@ test("botLogin spends the budget and refuses a fourth login in an hour without c
   await assert.rejects(c.botLogin(CREDS), (e) => e.code === "login_budget" && e.seconds > 0);
   assert.equal(tg.dc(2).stats.botLogins, 3);
   await c.close();
+});
+
+test("a client without a store is refused; only an explicit store: false goes without the budget", () => {
+  assert.throws(() => new TelegramClient({ apiId: 1, publicKeys: fakeRsa().publicKeys }), (e) => e.code === "invalid_request" && /store/.test(e.message));
+  assert.throws(() => new TelegramClient({ apiId: 1, store: null }), (e) => e.code === "invalid_request");
+  assert.throws(() => new TelegramClient({ apiId: 1, store: {} }), (e) => e.code === "invalid_request");
+  assert.ok(new TelegramClient({ apiId: 1, store: false }));
+});
+
+test("a socket dropped during the bot login: the retry spends a second budget slot", async () => {
+  const store = memoryStore();
+  const c = await newClient({ store }).connect(2);
+  tg.dc(2).once("login", () => ({ close: true }));
+  assert.equal((await c.botLogin(CREDS)).userId, 777001n);
+  assert.equal(loginTimes(store).length, 2);
+  assert.equal(tg.dc(2).stats.botLogins, 1);
+  await c.close();
+});
+
+test("a socket dropped during the bot login with no budget left: the retry is refused, nothing more is sent", async () => {
+  const store = memoryStore();
+  const now = Date.now();
+  store.set("mtproto.botLogins", JSON.stringify([now - 1000, now - 500]));
+  const c = await newClient({ store }).connect(2);
+  tg.dc(2).once("login", () => ({ close: true }));
+  await assert.rejects(c.botLogin(CREDS), (e) => e.code === "login_budget");
+  assert.equal(loginTimes(store).length, 3);
+  assert.equal(tg.dc(2).stats.botLogins, 0);
+  await c.close();
+});
+
+test("USER_MIGRATE then a failed login there leaves the home DC where it was", async () => {
+  tg.dc(2).userMigrateTo = 4;
+  tg.dc(4).once("login", () => ({ error: [400, "ACCESS_TOKEN_INVALID"] }));
+  const c = await newClient().connect(2);
+  await assert.rejects(c.botLogin(CREDS), (e) => e.code === "rpc_error" && e.rpc === "ACCESS_TOKEN_INVALID");
+  assert.equal(c.exportState().homeDc, 2);
+  await c.close();
+});
+
+test("a packet length over the cap is a protocol error at once, not a wait", async () => {
+  const c = await newClient({ timeoutMs: 3000 }).connect(2);
+  await c.botLogin(CREDS);
+  tg.dc(2).once("getFile", () => ({ hugeLength: 3 * MiB }));
+  const t0 = Date.now();
+  await assert.rejects(c.getFile({ ...DOC, dcId: 2 }, 0, 4096), (e) => e.code === "protocol" && /cap/.test(e.message));
+  assert.ok(Date.now() - t0 < 2000);
+  assert.equal((await c.getFile({ ...DOC, dcId: 2 }, 0, 4096)).length, 4096, "a new connection works");
+  await c.close();
+});
+
+test("a Session that cannot be built closes the transport it was given", async () => {
+  const c1 = await newClient().connect(2);
+  const state = c1.exportState();
+  await c1.close();
+  const c2 = newClient();
+  c2.importState(state);
+  c2.dcs.get(2).authKey = new Uint8Array(10);   // damaged in memory after the import checks
+  await assert.rejects(c2.connect(2), (e) => e.code === "invalid_request");
+  const sockets = tg.fake.sockets;
+  assert.equal(sockets[sockets.length - 1].readyState, 3, "the socket was closed");
 });
 
 test("calls are serialised: concurrent getFile calls each get their own bytes", async () => {

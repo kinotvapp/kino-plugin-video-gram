@@ -51,6 +51,12 @@ export class ServerTransport {
     const step = Math.ceil(wire.length / split);
     for (let i = 0; i < wire.length; i += step) this.socket.deliver(new Uint8Array(wire.subarray(i, i + step)));
   }
+  /** Only a packet header announcing `n` bytes, and nothing after it. */
+  sendLengthOnly(n) {
+    const len = Buffer.alloc(4);
+    len.writeUInt32LE(n);
+    this.sendWire(this.enc.update(len), 1);
+  }
   /** A 4-byte transport error packet. */
   sendError(status) {
     const b = Buffer.alloc(4);

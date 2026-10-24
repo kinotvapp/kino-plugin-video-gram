@@ -11,6 +11,7 @@ import { mtError } from "./errors.js";
 
 export const DC_HOSTS = Object.freeze({ 1: "pluto", 2: "venus", 3: "aurora", 4: "vesta", 5: "flora" });
 export const MAX_SEND_BYTES = 786000; // kino.ws frame cap
+export const MAX_PACKET_BYTES = (2 << 20) + 1024; // a 1 MiB chunk is ~1 MiB + 100 bytes; anything past 2 MiB is not MTProto
 const MASK128 = (1n << 128n) - 1n;
 const ZEROS = "00".repeat(16);
 
@@ -105,6 +106,10 @@ export class Transport {
     for (;;) {
       if (this.bufHex.length >= 8) {
         const n = readU32LE(fromHex(this.bufHex.slice(0, 8)), 0) & 0x7fffffff;
+        if (n > MAX_PACKET_BYTES) {
+          await this.close();
+          throw mtError("protocol", "packet of " + n + " bytes announced: over the " + MAX_PACKET_BYTES + "-byte cap");
+        }
         if (this.bufHex.length >= 8 + n * 2) {
           const payload = this.bufHex.slice(8, 8 + n * 2);
           this.bufHex = this.bufHex.slice(8 + n * 2);

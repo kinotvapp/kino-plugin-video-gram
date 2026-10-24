@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { bundle } from "../scripts/build.mjs";
 import { loadPlugin, scanMissingGlobals } from "../sdk/sandbox.mjs";
-import { installKino } from "../testkit/kino.mjs";
+import { installKino, memoryStore } from "../testkit/kino.mjs";
 import { FakeTelegram, fakeRsa } from "../testkit/fake-dc.mjs";
 
 const kino = installKino();
@@ -48,7 +48,8 @@ test("inside the plugin sandbox: key exchange, bot login, state reuse and chunks
     tg.addFile({ ...doc, dc: 2, data });
     const { plugin, sandboxed } = await loadPlugin(file, sandboxKino, { console: { log() {}, info() {}, warn() {}, error() {} } });
     assert.equal(sandboxed, true);
-    const c = new plugin.TelegramClient({ apiId: 1, publicKeys: fakeRsa().publicKeys, timeoutMs: 5000 });
+    const store = memoryStore();
+    const c = new plugin.TelegramClient({ apiId: 1, publicKeys: fakeRsa().publicKeys, timeoutMs: 5000, store });
     await c.connect(2);
     assert.equal((await c.botLogin({ apiHash: "h", botToken: "1:t" })).userId, 777001n);
     const chunk = await c.getFile({ ...doc, dcId: 2 }, 0, 1048576);
@@ -56,12 +57,14 @@ test("inside the plugin sandbox: key exchange, bot login, state reuse and chunks
     assert.equal(plugin.toBase64(chunk), data.subarray(0, 1048576).toString("base64"));
     const state = JSON.parse(JSON.stringify(c.exportState()));
     await c.close();
-    const c2 = new plugin.TelegramClient({ apiId: 1, publicKeys: fakeRsa().publicKeys });
+    const c2 = new plugin.TelegramClient({ apiId: 1, publicKeys: fakeRsa().publicKeys, store });
     await c2.connect(2, state);
     const tail = await c2.getFile({ ...doc, dcId: 2 }, 1048576, 1048576);
     assert.equal(Buffer.from(tail).toString("hex"), data.subarray(1048576).toString("hex"));
     assert.equal(tg.dc(2).stats.keyExchanges, 1);
     assert.equal(tg.dc(2).stats.botLogins, 1);
+    assert.equal(JSON.parse(store.get("mtproto.botLogins")).length, 1, "the login spent one budget slot");
+    assert.throws(() => new plugin.TelegramClient({ apiId: 1 }), /store/);
     await c2.close();
   } finally {
     tg.restore();

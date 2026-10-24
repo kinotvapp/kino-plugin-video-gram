@@ -69,9 +69,15 @@ function checkRange(offset, limit) {
 export class TelegramClient {
   /**
    * `apiId` is needed for initConnection on every new connection. `publicKeys` defaults to Telegram's (tests inject a
-   * fake DC's). `store` (kino.storage) enables the login budget. `wsOpen`/`urlFor` are for tests and other transports.
+   * fake DC's). `store` is REQUIRED: kino.storage (or any get/set of strings) for the login budget, which keeps a
+   * burst of bot logins from earning a FLOOD_WAIT of almost an hour; only a test may pass `store: false` to go without.
+   * `wsOpen`/`urlFor` are for tests and other transports.
    */
-  constructor({ apiId, publicKeys = TELEGRAM_PUBLIC_KEYS, device = {}, store = null, timeoutMs = 20000, now = () => Date.now(), log = () => {}, onUpdate = null, wsOpen, urlFor } = {}) {
+  constructor({ apiId, publicKeys = TELEGRAM_PUBLIC_KEYS, device = {}, store, timeoutMs = 20000, now = () => Date.now(), log = () => {}, onUpdate = null, wsOpen, urlFor } = {}) {
+    if (store === false) store = null;
+    else if (!store || typeof store.get !== "function" || typeof store.set !== "function") {
+      throw mtError("invalid_request", "TelegramClient needs `store` (kino.storage) for the bot login budget; only tests may pass store: false");
+    }
     this.apiId = apiId;
     this.publicKeys = publicKeys;
     this.device = { ...DEFAULT_DEVICE, ...device };
@@ -137,7 +143,14 @@ export class TelegramClient {
       }
       this.dcs.set(dc, st);
     }
-    c = { transport, session: new Session(transport, st, { now: this.now, timeoutMs: this.timeoutMs, onUpdate: this.onUpdate, log: this.log }), inited: false };
+    let session;
+    try {
+      session = new Session(transport, st, { now: this.now, timeoutMs: this.timeoutMs, onUpdate: this.onUpdate, log: this.log });
+    } catch (e) {
+      await transport.close();
+      throw e;
+    }
+    c = { transport, session, inited: false };
     this.conns.set(dc, c);
     return c;
   }
@@ -148,8 +161,12 @@ export class TelegramClient {
     if (c) await c.transport.close();
   }
 
-  /** One API call on DC `dc`; the first call of each connection goes inside invokeWithLayer(initConnection(...)). */
-  async invoke(dc, body, retried = false) {
+  /**
+   * One API call on DC `dc`; the first call of each connection goes inside invokeWithLayer(initConnection(...)).
+   * A closed socket is retried once on a new connection unless `retry` is false (the bot login retries by itself, so
+   * that every attempt spends the budget).
+   */
+  async invoke(dc, body, { retry = true } = {}) {
     const c = await this.conn(dc);
     const wrapped = c.inited ? body : invokeWithLayer(LAYER, initConnection({ apiId: this.apiId, ...this.device }, body));
     try {
@@ -157,9 +174,9 @@ export class TelegramClient {
       c.inited = true;
       return res;
     } catch (e) {
-      if (e.code === "closed" && !retried) {
+      if (e.code === "closed" && retry) {
         await this.drop(dc);
-        return this.invoke(dc, body, true);
+        return this.invoke(dc, body, { retry: false });
       }
       if (e.code === "timeout" || e.code === "closed" || e.code === "protocol") await this.drop(dc);
       if (e.code === "auth_key_unregistered") {
@@ -172,7 +189,8 @@ export class TelegramClient {
 
   /**
    * Logs the bot in on the home DC once: a DC already logged in (also from a stored state) sends nothing and answers
-   * { reused: true, userId }. Follows USER_MIGRATE_n. Spends the login budget when the client has a `store`.
+   * { reused: true, userId }. Follows USER_MIGRATE_n (the home DC changes only when the login there succeeds) and
+   * retries once after a closed socket. Every attempt sent, migrations and retries included, spends a budget slot.
    */
   botLogin({ apiId, apiHash, botToken }) {
     return this.serial(async () => {
@@ -181,11 +199,12 @@ export class TelegramClient {
       if (!apiHash || !botToken || !this.apiId) throw mtError("invalid_request", "apiId, apiHash and botToken are required");
       const home = this.dcs.get(this.homeDc);
       if (home && home.loggedIn) return { reused: true, userId: home.userId };
-      if (this.store) loginBudget(this.store, this.now()).record();
       let dc = this.homeDc;
-      for (let hop = 0; ; hop++) {
+      let hops = 0, closedRetries = 0;
+      for (;;) {
+        if (this.store) loginBudget(this.store, this.now()).record();
         try {
-          const auth = parseAuthorization(await this.invoke(dc, importBotAuthorization({ apiId: this.apiId, apiHash, botToken })));
+          const auth = parseAuthorization(await this.invoke(dc, importBotAuthorization({ apiId: this.apiId, apiHash, botToken }), { retry: false }));
           if (auth.ctor !== CTOR.authAuthorization) throw mtError("protocol", "unexpected answer to the bot login");
           const st = this.dcs.get(dc);
           st.loggedIn = true;
@@ -193,7 +212,8 @@ export class TelegramClient {
           this.homeDc = dc;
           return { userId: auth.userId };
         } catch (e) {
-          if (e.code === "user_migrate" && hop < 2 && e.dc !== dc) { dc = e.dc; this.homeDc = dc; continue; }
+          if (e.code === "user_migrate" && hops < 2 && e.dc !== dc) { hops++; dc = e.dc; continue; }
+          if (e.code === "closed" && closedRetries < 1) { closedRetries++; continue; }
           throw e;
         }
       }
