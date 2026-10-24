@@ -17,6 +17,11 @@
 //     and keeps its pts; the other channels go on. A failed common-box answer keeps the common state, and the known
 //     channels are still scanned. Flood waits stop the scan and keep the progress.
 //
+// For a shell that keeps the index elsewhere (Kino's kino.catalog), `persistEntries: false` saves only the update
+// state (pts, channels) and gives each refresh its `changes`: the entries added or edited, the keys removed, the channel
+// chats dropped (forbidden or invalid: every entry of that chat is gone) and the common-box message ids deleted (private
+// chats and basic groups, whose chat the update does not name). Nothing of the index stays in memory between calls.
+//
 // Known gap: after updates.differenceTooLong the common box jumps to a fresh getState. What happened in the gap is
 // skipped: a channel the bot joined during it shows up only with its next post (or another update naming it), and
 // private-chat videos sent during it are lost. Known channels are rescanned from pts 1, so their videos are not lost.
@@ -164,12 +169,25 @@ function utf8Length(s) {
 const storedCost = (s) => utf8Length(JSON.stringify(s));
 
 /**
- * createDiscovery({ client, store, budgetBytes = 160000 }): `client` a logged-in TelegramClient (its `call`), `store`
+ * A Map that records what an operation did to an index it does not hold (persistEntries false): `set` is an upsert,
+ * `delete` a removal (even of a key it never held), plus the chats dropped and the common-box ids deleted.
+ */
+class Journal extends Map {
+  constructor() { super(); this.removed = new Set(); this.droppedChats = []; this.commonDeletedIds = []; }
+  set(k, v) { this.removed.delete(k); return super.set(k, v); }
+  delete(k) { const had = super.delete(k); this.removed.add(k); return had; }
+  changes() {
+    return { upserted: sorted(this), removed: [...this.removed].sort(), droppedChats: [...this.droppedChats], commonDeletedIds: [...this.commonDeletedIds] };
+  }
+}
+
+/**
+ * createDiscovery({ client, store, budgetBytes = 160000, persistEntries = true }): `client` a logged-in TelegramClient (its `call`), `store`
  * the same get/set storage the client uses, `budgetBytes` the most the saved value may take (pass more when the
  * plugin has a larger storage quota). Operations run one at a time; each starts from the in-memory state when this
  * runtime has one that is newer than (or equal to) the saved copy, else from the saved state.
  */
-export function createDiscovery({ client, store, budgetBytes = DEFAULT_BUDGET_BYTES, log = () => {} }) {
+export function createDiscovery({ client, store, budgetBytes = DEFAULT_BUDGET_BYTES, persistEntries = true, log = () => {} }) {
   if (!client || typeof client.call !== "function") throw mtError("invalid_request", "createDiscovery needs a TelegramClient");
   if (!store || typeof store.get !== "function" || typeof store.set !== "function") throw mtError("invalid_request", "createDiscovery needs a get/set store");
   let chain = Promise.resolve();
@@ -183,16 +201,18 @@ export function createDiscovery({ client, store, budgetBytes = DEFAULT_BUDGET_BY
     try { raw = store.get(STATE_KEY); } catch { raw = null; }
     if (mem && (mem.unsaved || raw === mem.raw)) return mem;
     const st = parseState(raw);
-    mem = { raw, unsaved: false, st, index: new Map(st.entries.map((e) => [e.key, e])) };
+    mem = { raw, unsaved: false, st, index: new Map(persistEntries ? st.entries.map((e) => [e.key, e]) : []) };
     return mem;
   };
+  /** This operation's state and index: the kept index, or (persistEntries false) a fresh Journal. */
+  const begin = () => { const m = load(); return { st: m.st, index: persistEntries ? m.index : new Journal() }; };
   /**
    * Writes state + index within budgetBytes (newest entries first, the oldest left out); never throws.
    * -> { persisted, truncated, error? }
    */
   const save = (st, index) => {
     const head = JSON.stringify(publicState(st));
-    const all = sorted(index);
+    const all = persistEntries ? sorted(index) : [];
     let room = budgetBytes - storedCost(head.slice(0, -1) + ',"entries":[]}');
     let n = 0;
     for (; n < all.length; n++) {
@@ -239,6 +259,7 @@ export function createDiscovery({ client, store, budgetBytes = DEFAULT_BUDGET_BY
   }
   function dropChannel(st, index, id) {
     delete st.channels[id];
+    if (index instanceof Journal) index.droppedChats.push(channelChatId(id));
     const prefix = channelChatId(id) + ":";
     for (const k of [...index.keys()]) if (k.startsWith(prefix)) index.delete(k);
   }
@@ -248,7 +269,7 @@ export function createDiscovery({ client, store, budgetBytes = DEFAULT_BUDGET_BY
     return ch && st.channels[ch] ? st.channels[ch].title : "";
   };
   /** A new or edited message: index it when it is a video, otherwise make sure it is not indexed. */
-  function putMessage(st, index, titles, msg) {
+  function putMessage(st, index, titles, msg, authoritative = false) {
     if (!msg || (msg._ !== "message" && msg._ !== "messageService" && msg._ !== "messageEmpty")) return;
     const chatId = chatIdOf(msg.peer_id);
     const e = videoEntry(msg, chatId === null ? "" : titleOf(st, titles, chatId));
@@ -256,15 +277,19 @@ export function createDiscovery({ client, store, budgetBytes = DEFAULT_BUDGET_BY
       const old = index.get(e.key);
       if (!e.chatTitle && old) e.chatTitle = old.chatTitle;
       index.set(e.key, e);
-    } else if (chatId !== null) {
+    } else if (chatId !== null && (authoritative || index.has(chatId + ":" + msg.id))) {
+      // An edit or a re-read message that is no video (any more) removes its entry; a new text post has none to remove.
       index.delete(chatId + ":" + msg.id);
     }
   }
   function applyUpdates(st, index, titles, updates) {
     for (const u of updates || []) {
       switch (u._) {
-        case "updateNewMessage": case "updateEditMessage": case "updateNewChannelMessage": case "updateEditChannelMessage":
+        case "updateNewMessage": case "updateNewChannelMessage":
           putMessage(st, index, titles, u.message);
+          break;
+        case "updateEditMessage": case "updateEditChannelMessage":
+          putMessage(st, index, titles, u.message, true);
           break;
         case "updateDeleteChannelMessages": {
           const prefix = channelChatId(u.channel_id) + ":";
@@ -274,6 +299,7 @@ export function createDiscovery({ client, store, budgetBytes = DEFAULT_BUDGET_BY
         case "updateDeleteMessages": {
           // Common-box ids (private chats and basic groups) are unique per account, so they need no chat.
           const ids = new Set(u.messages);
+          if (index instanceof Journal) index.commonDeletedIds.push(...u.messages);
           for (const [k, e] of index) if (channelIdOfChat(e.chatId) === null && ids.has(e.msgId)) index.delete(k);
           break;
         }
@@ -288,7 +314,7 @@ export function createDiscovery({ client, store, budgetBytes = DEFAULT_BUDGET_BY
     const found = [];
     for (const m of res.messages || []) {
       if (m._ === "messageEmpty") { const c = chatIdFor(m); if (c !== null) index.delete(c + ":" + m.id); continue; }
-      putMessage(st, index, titles, m);
+      putMessage(st, index, titles, m, true);
       const c = chatIdOf(m.peer_id);
       const e = c !== null && index.get(c + ":" + m.id);
       if (e) found.push(e);
@@ -305,9 +331,9 @@ export function createDiscovery({ client, store, budgetBytes = DEFAULT_BUDGET_BY
    * Also: `persisted` (false when the store refused the write), `truncated` (the saved copy left the oldest entries
    * out), `errors` [{ scope: "common" | "channel" | "storage", channelId?, code, message }] for what was isolated.
    */
-  function refresh({ maxPages = 20 } = {}) {
+  function refresh({ maxPages = 20, shouldScan = null } = {}) {
     return serial(async () => {
-      const { st, index } = load();
+      const { st, index } = begin();
       const before = new Set(index.keys());
       const titles = new Map();
       const errors = [];
@@ -356,6 +382,7 @@ export function createDiscovery({ client, store, budgetBytes = DEFAULT_BUDGET_BY
         if (!incomplete) {
           for (const id of Object.keys(st.channels)) {
             if (incomplete) break;
+            if (shouldScan && !shouldScan(id)) continue; // left where it is: its pts does not move
             try {
               await scanChannel(st, index, titles, id, spend);
             } catch (e) {
@@ -385,6 +412,7 @@ export function createDiscovery({ client, store, budgetBytes = DEFAULT_BUDGET_BY
       if (saved.truncated) out.truncated = true;
       if (incomplete) out.incomplete = true;
       if (floodWait !== undefined) out.floodWait = floodWait;
+      if (index instanceof Journal) out.changes = index.changes();
       return out;
     });
   }
@@ -431,7 +459,7 @@ export function createDiscovery({ client, store, budgetBytes = DEFAULT_BUDGET_BY
   function refetch(entry) {
     return serial(async () => {
       if (!entry || typeof entry.chatId !== "string" || !isInt(entry.msgId)) throw mtError("invalid_request", "refetch needs an IndexEntry");
-      const { st, index } = load();
+      const { st, index } = begin();
       const titles = new Map();
       const key = entry.chatId + ":" + entry.msgId;
       const chId = channelIdOfChat(entry.chatId);
@@ -467,7 +495,7 @@ export function createDiscovery({ client, store, budgetBytes = DEFAULT_BUDGET_BY
       if (!isInt(fromId) || fromId < 1 || !isInt(count) || count < 1) throw mtError("invalid_request", "backfill needs fromId >= 1 and count >= 1");
       let id;
       try { id = String(channelId).startsWith("-") ? channelIdOfChat(String(channelId)) : String(BigInt(channelId)); } catch { id = null; }
-      const { st, index } = load();
+      const { st, index } = begin();
       const c = id && st.channels[id];
       if (!c) throw mtError("channel_invalid", "the channel is not known to the discovery");
       const titles = new Map();
@@ -487,10 +515,28 @@ export function createDiscovery({ client, store, budgetBytes = DEFAULT_BUDGET_BY
     });
   }
 
+  /** resetChannel(id | "-100..." chat id) -> boolean: the channel is read again from pts 1 on the next refresh. */
+  function resetChannel(channelId) {
+    return serial(async () => {
+      let id;
+      try { id = String(channelId).startsWith("-") ? channelIdOfChat(String(channelId)) : String(BigInt(channelId)); } catch { id = null; }
+      const { st, index } = begin();
+      const c = id && st.channels[id];
+      if (!c) return false;
+      c.pts = 1;
+      delete c.backfill;
+      save(st, index);
+      return true;
+    });
+  }
+
   return {
     refresh,
     refetch,
     backfill,
+    resetChannel,
+    /** The known channels [{ id, chatId, title }] from the saved state (ascending id), without any network call. */
+    knownChannels: () => serial(async () => Object.entries(load().st.channels).map(([id, c]) => ({ id, chatId: channelChatId(id), title: c.title }))),
     /** The saved index (newest first), without any network call. */
     entries: () => serial(async () => sorted(load().index)),
   };
