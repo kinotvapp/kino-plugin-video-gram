@@ -92,8 +92,10 @@ export class Transport {
     try {
       await this.ws.send(fromHex(wire));
     } catch (e) {
+      const code = e && e.code;
+      if (code === "too_large" || code === "invalid_request") throw mtError("invalid_request", "send refused: " + (e && e.message), { cause: code });
       this.closed = true;
-      throw mtError("closed", "send failed: " + (e && e.message), { cause: e && e.code });
+      throw mtError("closed", "send failed: " + (e && e.message), { cause: code });
     }
   }
 
