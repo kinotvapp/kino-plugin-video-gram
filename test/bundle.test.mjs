@@ -71,3 +71,33 @@ test("inside the plugin sandbox: key exchange, bot login, state reuse and chunks
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("inside the plugin sandbox: the discovery finds the videos of a channel through the bundle", async () => {
+  const { FakeBotWorld } = await import("../testkit/fake-world.mjs");
+  const dir = mkdtempSync(join(tmpdir(), "tg-bundle-"));
+  const file = join(dir, "plugin.js");
+  writeFileSync(file, source);
+  const tg = new FakeTelegram().install();
+  try {
+    const world = new FakeBotWorld();
+    tg.api = world;
+    world.addChannel({ id: 1987654321n, accessHash: 99n, title: "Pelis" });
+    world.post(1987654321n, { text: "A film", doc: world.doc({ mime: "video/mp4", size: 1000, fileName: "film.mp4", video: { duration: 9, w: 4, h: 3 } }) });
+    world.post(1987654321n, { doc: world.doc({ mime: "application/pdf", size: 10, fileName: "a.pdf" }) });
+    const { plugin } = await loadPlugin(file, sandboxKino, { console: { log() {}, info() {}, warn() {}, error() {} } });
+    const store = memoryStore();
+    const c = new plugin.TelegramClient({ apiId: 1, publicKeys: fakeRsa().publicKeys, timeoutMs: 5000, store });
+    await c.connect(2);
+    await c.botLogin({ apiHash: "h", botToken: "1:t" });
+    const d = plugin.createDiscovery({ client: c, store });
+    const res = await d.refresh();
+    assert.equal(res.entries.length, 1);
+    assert.equal(res.entries[0].title, "film");
+    assert.equal(plugin.decode(new Uint8Array(Buffer.from("3e2a6ca5" + "01000000" + "00000000" + "01000000" + "00000000" + "00000000", "hex")))._, "updates.state");
+    assert.ok(plugin.schemaStats().constructors > 600);
+    await c.close();
+  } finally {
+    tg.restore();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
