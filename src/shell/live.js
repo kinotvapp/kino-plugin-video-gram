@@ -57,7 +57,12 @@ export async function markDevice(id = kino.crypto.randomBytes(16)) {
  * one) is dropped together with what came with it from the same backup, the update state and the shell state, and
  * this device's catalog is rebuilt from scratch under a new mark: the settings stay. Answers this device's mark.
  */
-export async function checkDevice() {
+let checking = null; // one check at a time: two at once could each write a different mark
+export function checkDevice() {
+  if (!checking) checking = runCheckDevice().finally(() => { checking = null; });
+  return checking;
+}
+async function runCheckDevice() {
   const stored = readJson(KEYS.session);
   let mark = await deviceMark();
   if (stored && (!mark || stored.device !== mark)) {
@@ -97,14 +102,15 @@ export function saveSession() {
  * flight (cleared when it fails), so concurrent calls never build two clients or spend two logins. `shell.refused`
  * marks a login Telegram refused with these exact settings: it is not tried again.
  */
-export function connect(c, shell) {
+export function connect(c, shell, { deadline } = {}) {
   const fp = sessionFp(c);
   if (live && live.fp === fp && live.ready) return Promise.resolve(live);
-  if (!connecting) connecting = open(c, shell).finally(() => { connecting = null; });
+  if (!connecting) connecting = open(c, shell, deadline).finally(() => { connecting = null; });
   return connecting;
 }
 
-async function open(c, shell) {
+/** Connect and login, each request inside `deadline` (the first caller's: whoever joins waits on the same one). */
+async function open(c, shell, deadline) {
   const fp = sessionFp(c);
   if (live && live.fp !== fp) await close();
   if (shell.refused && shell.refused.fp === loginFp(c)) throw shellError(shell.refused.kind, "login refused before");
@@ -115,18 +121,18 @@ async function open(c, shell) {
     let saved = null;
     const state = stored && stored.v === 1 && stored.fp === fp && stored.device === device && stored.state && stored.state.dcs ? stored.state : null;
     try {
-      await client.connect(state && state.homeDc ? state.homeDc : FIRST_DC, state || undefined);
+      await client.connect(state && state.homeDc ? state.homeDc : FIRST_DC, state || undefined, { deadline });
       saved = state ? JSON.stringify(state) : null;
     } catch (e) {
       if (!state || e.code !== "invalid_request") throw e;
       kino.log("stored session unusable, starting a new one");
       client = newClient(c);
-      await client.connect(FIRST_DC);
+      await client.connect(FIRST_DC, undefined, { deadline });
     }
     live = { fp, device, client, saved, ready: false, discovery: createDiscovery({ client, store: kinoStore, persistEntries: false, log: (m) => kino.log("discovery: " + m) }) };
   }
   try {
-    await live.client.botLogin({ apiHash: c.apiHash, botToken: c.botToken });
+    await live.client.botLogin({ apiHash: c.apiHash, botToken: c.botToken, deadline });
   } finally {
     saveSession();
   }
@@ -138,8 +144,8 @@ async function open(c, shell) {
  * Runs `fn(live)`; when the session died under it (a 401, SESSION_REVOKED, a dropped AUTH_KEY_DUPLICATED key), logs
  * in again ONCE (inside the login budget) and runs `fn` once more. Never loops: a second failure is the caller's.
  */
-export async function withSession(c, shell, fn) {
-  const l = await connect(c, shell);
+export async function withSession(c, shell, fn, { deadline } = {}) {
+  const l = await connect(c, shell, { deadline });
   try {
     return await fn(l);
   } catch (e) {
@@ -147,7 +153,7 @@ export async function withSession(c, shell, fn) {
     kino.log("session lost (" + (e.rpc && /^[A-Z_]{1,40}$/.test(e.rpc) ? e.rpc : "transport") + "): one new login");
     l.ready = false;
     saveSession();
-    return fn(await connect(c, shell));
+    return fn(await connect(c, shell, { deadline }));
   }
 }
 

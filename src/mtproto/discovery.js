@@ -233,7 +233,8 @@ export function createDiscovery({ client, store, budgetBytes = DEFAULT_BUDGET_BY
       return { persisted: false, truncated, error: { scope: "storage", code: "storage", message: String(e && e.message) } };
     }
   };
-  const call = async (body, expect) => decode(await client.call(body), { expect, skip });
+  // `deadline` (a time of the client's clock) bounds each request: it never starts too late and never waits past it.
+  const call = async (body, expect, deadline) => decode(await client.call(body, { deadline: Number.isFinite(deadline) ? deadline : undefined }), { expect, skip });
 
   /** What one answer teaches: channels (with their access hash) and chat titles. */
   function learn(st, titles, chats, users, index) {
@@ -342,7 +343,8 @@ export function createDiscovery({ client, store, budgetBytes = DEFAULT_BUDGET_BY
       const titles = new Map();
       const errors = [];
       let pages = 0, incomplete = false, floodWait;
-      const spend = () => { if (pages >= maxPages || now() >= deadline) { incomplete = true; return false; } pages++; return true; };
+      // A page is not started with under 1.5 s left before the deadline (it could not finish in time).
+      const spend = () => { if (pages >= maxPages || now() + 1500 >= deadline) { incomplete = true; return false; } pages++; return true; };
       try {
         // 1. the common box
         let req = st.pts > 0 ? { pts: st.pts, date: st.date, qts: st.qts } : { pts: 1, date: 1, qts: -1 };
@@ -350,7 +352,7 @@ export function createDiscovery({ client, store, budgetBytes = DEFAULT_BUDGET_BY
           if (!spend()) break;
           let d;
           try {
-            d = await call(getDifference(req), "updates.Difference");
+            d = await call(getDifference(req), "updates.Difference", deadline);
           } catch (e) {
             if (!ISOLATED.has(e.code)) throw e;
             errors.push({ scope: "common", ...errorOf(e) }); // the common state stays where it was
@@ -365,7 +367,7 @@ export function createDiscovery({ client, store, budgetBytes = DEFAULT_BUDGET_BY
             if (!spend()) break;
             let fresh;
             try {
-              fresh = await call(getState(), "updates.State");
+              fresh = await call(getState(), "updates.State", deadline);
             } catch (e) {
               if (!ISOLATED.has(e.code)) throw e;
               errors.push({ scope: "common", ...errorOf(e) });
@@ -388,7 +390,7 @@ export function createDiscovery({ client, store, budgetBytes = DEFAULT_BUDGET_BY
             if (incomplete) break;
             if (shouldScan && !shouldScan(id)) continue; // left where it is: its pts does not move
             try {
-              await scanChannel(st, index, titles, id, spend);
+              await scanChannel(st, index, titles, id, spend, deadline);
             } catch (e) {
               if (e.code === "channel_invalid") {
                 log("channel " + id + " dropped: " + e.message);
@@ -404,13 +406,14 @@ export function createDiscovery({ client, store, budgetBytes = DEFAULT_BUDGET_BY
           }
         }
       } catch (e) {
-        if (e.code !== "flood_wait") {
+        const outOfTime = e.code === "timeout" && e.deadline === true; // the caller's deadline: stop like maxPages does
+        if (e.code !== "flood_wait" && !outOfTime) {
           if (deferred) mem = null; // nothing of this pass is kept: the next one starts from the saved state
           else save(st, index); // save never throws, so `e` is what surfaces
           throw e;
         }
         incomplete = true;
-        floodWait = e.seconds;
+        if (!outOfTime) floodWait = e.seconds;
       }
       let saved = { persisted: false };
       let pending = null;
@@ -430,12 +433,12 @@ export function createDiscovery({ client, store, budgetBytes = DEFAULT_BUDGET_BY
     });
   }
 
-  async function scanChannel(st, index, titles, id, spend) {
+  async function scanChannel(st, index, titles, id, spend, deadline) {
     const ch = () => st.channels[id];
     while (ch()) {
       const c = ch();
       if (!spend()) return;
-      const d = await call(getChannelDifference({ channelId: id, accessHash: c.accessHash, pts: c.pts, limit: CHANNEL_LIMIT }), "updates.ChannelDifference");
+      const d = await call(getChannelDifference({ channelId: id, accessHash: c.accessHash, pts: c.pts, limit: CHANNEL_LIMIT }), "updates.ChannelDifference", deadline);
       if (d._ === "updates.channelDifferenceEmpty") { c.pts = d.pts; break; }
       learn(st, titles, d.chats, d.users, index);
       if (!ch()) return;
@@ -457,7 +460,7 @@ export function createDiscovery({ client, store, budgetBytes = DEFAULT_BUDGET_BY
       const { next, to } = c.backfill;
       const ids = [];
       for (let i = next; i <= to && ids.length < BATCH; i++) ids.push(i);
-      const res = await call(channelsGetMessages({ channelId: id, accessHash: c.accessHash, ids }), "messages.Messages");
+      const res = await call(channelsGetMessages({ channelId: id, accessHash: c.accessHash, ids }), "messages.Messages", deadline);
       applyFetched(st, index, titles, res, () => channelChatId(id));
       if (next + ids.length > to) delete c.backfill;
       else c.backfill = { next: next + ids.length, to };
@@ -469,10 +472,19 @@ export function createDiscovery({ client, store, budgetBytes = DEFAULT_BUDGET_BY
    * messages.getMessages for a private chat), so its document has a fresh file_reference. null (and the entry is
    * dropped) when the message is gone or is no longer a video. An unknown channel is `channel_invalid`.
    */
-  function refetch(entry) {
-    return serial(async () => {
+  function refetch(entry, { deadline } = {}) {
+    // persistEntries false: refetch saves nothing (the caller keeps the entry), so it runs beside a refresh instead of
+    // waiting behind it in this queue, on a private copy of the saved state. A lost channel is found by the next refresh.
+    if (!persistEntries) return refetchNow(entry, deadline, false);
+    return serial(() => refetchNow(entry, deadline, true));
+  }
+  async function refetchNow(entry, deadline, keep) {
+    await null;
+    {
       if (!entry || typeof entry.chatId !== "string" || !isInt(entry.msgId)) throw mtError("invalid_request", "refetch needs an IndexEntry");
-      const { st, index } = begin();
+      let st, index;
+      if (keep) ({ st, index } = begin());
+      else { let raw = null; try { raw = store.get(STATE_KEY); } catch { raw = null; } st = parseState(raw); index = new Journal(); }
       const titles = new Map();
       const key = entry.chatId + ":" + entry.msgId;
       const chId = channelIdOfChat(entry.chatId);
@@ -481,21 +493,21 @@ export function createDiscovery({ client, store, budgetBytes = DEFAULT_BUDGET_BY
         const c = st.channels[chId];
         if (!c) throw mtError("channel_invalid", "the channel is not known to the discovery");
         try {
-          res = await call(channelsGetMessages({ channelId: chId, accessHash: c.accessHash, ids: [entry.msgId] }), "messages.Messages");
+          res = await call(channelsGetMessages({ channelId: chId, accessHash: c.accessHash, ids: [entry.msgId] }), "messages.Messages", deadline);
         } catch (e) {
-          if (e.code === "channel_invalid") { dropChannel(st, index, chId); save(st, index); }
+          if (e.code === "channel_invalid" && keep) { dropChannel(st, index, chId); save(st, index); }
           throw e;
         }
       } else {
-        res = await call(messagesGetMessages([entry.msgId]), "messages.Messages");
+        res = await call(messagesGetMessages([entry.msgId]), "messages.Messages", deadline);
       }
       applyFetched(st, index, titles, res, () => entry.chatId);
       const msg = (res.messages || []).find((m) => m.id === entry.msgId);
       if (!msg || msg._ !== "message" || chatIdOf(msg.peer_id) !== entry.chatId) index.delete(key);
-      save(st, index);
+      if (keep) save(st, index);
       const e = index.get(key);
       return e ? { ...e } : null;
-    });
+    }
   }
 
   /**

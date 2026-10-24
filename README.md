@@ -30,7 +30,9 @@ Qué esperar:
 - **Canales.** Kino muestra solo los canales que actives en la pestaña del plugin (hasta 8). Los lugares Canal 1 a
   Canal 8 son los canales del bot ordenados por su número de canal de Telegram, así que en todos tus aparatos el
   mismo lugar es el mismo canal (una vez que cada aparato vio los mismos canales). El Canal 1 empieza activo; los
-  demás, desactivados. Si el bot llega a un canal con un número menor, los lugares se corren. Al desactivar uno,
+  demás, desactivados. Si el bot llega a un canal con un número menor, los lugares se corren, y los interruptores se
+  quedan en su lugar: quedan aplicados a otros canales, así que un canal que tenías activo puede quedar desactivado
+  (y otro activarse). Revisa la pestaña del plugin cuando agregues el bot a un canal nuevo. Al desactivar uno,
   sus videos salen del índice; al activarlo de nuevo, se vuelve a leer desde el principio.
 - **Videos nuevos: toca *Actualizar ahora*.** Es la forma segura de traer lo último que publicaste. Kino también
   revisa tus canales al abrir Inicio, como mucho cada 5 minutos, pero Kino guarda las filas de Inicio varias horas.
@@ -60,7 +62,9 @@ What to expect:
 - **Channels.** Kino shows only the channels you turn on in the plugin's tab (up to 8). Places Channel 1 to Channel 8
   are the bot's channels ordered by their Telegram channel number, so the same place is the same channel on all your
   devices (once each device has seen the same channels). Channel 1 starts on; the others start off. When the bot
-  joins a channel with a lower number, the places shift. Turning one off removes its videos from the index; turning
+  joins a channel with a lower number, the places shift and the switches stay where they are: they then apply to
+  other channels, so a channel you had on can turn off (and another one turn on). Check the plugin's tab after you
+  add the bot to a new channel. Turning one off removes its videos from the index; turning
   it on again reads it from the start.
 - **New videos: tap *Refresh now*.** It is the reliable way to bring in what you just posted. Kino also checks your
   channels when Home opens, at most every 5 minutes, but Kino keeps Home rows for hours.

@@ -14,7 +14,6 @@ import { hexToBase64Native } from "./b64.js";
 
 const SHORT_FLOOD_S = 5;     // a FLOOD_WAIT this short is waited out once inside the read (kino.sleep: 5 s at most)
 const READ_BUDGET_MS = 17000; // everything a read does (getFile, refetch, retries) ends before this; Kino gives it 20 s
-const PER_CALL_MS = 9000;     // the longest one request may wait, when the budget still allows it
 const MIN_LEFT_MS = 1500;     // a request is not started with less than this left
 
 /** The getFile requests for [offset, offset + want): each a power of two times 4096, never across a 1 MiB boundary. */
@@ -57,12 +56,8 @@ export async function read(arg) {
   const want = Math.max(0, Math.min(length, size - offset));
   if (want === 0) return { bytes: "" };
   const deadline = started + READ_BUDGET_MS;
-  // Each request waits at most what is left of the read's budget, so getFile + refetch + a retry fit inside it.
-  const budget = (live) => {
-    const left = deadline - Date.now();
-    if (left < MIN_LEFT_MS) throw shellError("network", "read budget spent");
-    live.client.timeoutMs = Math.min(PER_CALL_MS, left - 500);
-  };
+  // Every request carries the read's deadline (the client waits at most what is left of it, never starts one with
+  // under 1.5 s left, and never waits for its turn past it), so connect + getFile + refetch + a retry fit inside it.
   let refetched = false, waited = false;
   let hex = "";
   try {
@@ -70,16 +65,14 @@ export async function read(arg) {
       hex = "";
       for (const piece of pieces(offset, want)) {
         for (;;) {
-          budget(live);
           try {
-            hex += await live.client.getFile(locOf(row.data), piece.offset, piece.limit, { hex: true });
+            hex += await live.client.getFile(locOf(row.data), piece.offset, piece.limit, { hex: true, deadline });
             break;
           } catch (e) {
             const left = deadline - Date.now();
             if (e.code === "file_reference_expired" && !refetched && left > 2 * MIN_LEFT_MS) {
               refetched = true;
-              budget(live);
-              const fresh = await live.discovery.refetch({ chatId: row.data.chatId, msgId: row.data.msgId });
+              const fresh = await live.discovery.refetch({ chatId: row.data.chatId, msgId: row.data.msgId }, { deadline });
               if (!fresh) {
                 await kino.catalog.remove([row.id]);
                 throw shellError("not_found", "the message is gone");
@@ -97,7 +90,7 @@ export async function read(arg) {
           }
         }
       }
-    });
+    }, { deadline });
   } finally {
     saveSession();
   }

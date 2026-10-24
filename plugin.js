@@ -1524,6 +1524,9 @@ const CHUNK = 1048576;
 const BUDGET_KEY = "mtproto.botLogins";
 const BUDGET_MAX = 3;
 const BUDGET_WINDOW_MS = 3600000;
+const MIN_LEFT_MS = 1500;   // a request never starts with less time than this before its caller's deadline
+const MARGIN_MS = 500;      // what a request leaves its caller after its own wait
+const POLL_MS = 250;        // how often a call waiting for its turn checks its deadline
 
 /**
  * At most 3 bot logins per hour per device (Telegram answered FLOOD_WAIT_3121 after about ten in an hour). `store` is
@@ -1605,10 +1608,40 @@ class TelegramClient {
     this.chain = Promise.resolve();
   }
 
-  serial(fn) {
-    const run = this.chain.then(fn, fn);
-    this.chain = run.then(() => {}, () => {});
-    return run;
+  /**
+   * Runs `fn` after the calls already queued (one at a time). With a `deadline` (a time of `now()`), the call is
+   * dropped unsent when its turn comes too late, and a caller queued behind a busy client gets a typed timeout at its
+   * deadline instead of waiting for its turn (`kino.sleep` polls; it is only used while the client is busy).
+   */
+  serial(fn, deadline) {
+    const busy = this.pending > 0;
+    this.pending = (this.pending || 0) + 1;
+    const turn = () => {
+      if (deadline !== undefined && this.now() > deadline - MIN_LEFT_MS) throw mtError("timeout", "no time left before the caller's deadline", { deadline: true });
+      return fn();
+    };
+    const run = this.chain.then(turn, turn);
+    this.chain = run.then(() => { this.pending--; }, () => { this.pending--; });
+    if (!busy || deadline === undefined || typeof kino === "undefined" || typeof kino.sleep !== "function") return run;
+    let settled = false;
+    run.then(() => { settled = true; }, () => { settled = true; });
+    const watch = (async () => {
+      for (;;) {
+        const left = deadline - MIN_LEFT_MS - this.now();
+        if (settled) return new Promise(() => {}); // the call won: this side never answers
+        if (left <= 0) throw mtError("timeout", "the client stayed busy past the caller's deadline", { deadline: true });
+        await kino.sleep(Math.min(POLL_MS, left));
+      }
+    })();
+    return Promise.race([run, watch]);
+  }
+
+  /** The wait of one request: the client's timeout, or less when the caller's `deadline` is closer (typed timeout when too close). */
+  budget(deadline) {
+    if (deadline === undefined || deadline === null || !Number.isFinite(deadline)) return { ms: this.timeoutMs, clamped: false };
+    const left = deadline - this.now() - MARGIN_MS;
+    if (left < MIN_LEFT_MS - MARGIN_MS) throw mtError("timeout", "no time left before the caller's deadline", { deadline: true });
+    return left < this.timeoutMs ? { ms: left, clamped: true } : { ms: this.timeoutMs, clamped: false };
   }
 
   /** Takes a state from exportState() (all DCs) or one DC's entry of it. */
@@ -1630,16 +1663,16 @@ class TelegramClient {
   }
 
   /** Connects to the home DC (`state.homeDc` wins over `dc` when a full state is given), reusing a stored key. */
-  connect(dc, state) {
+  connect(dc, state, { deadline } = {}) {
     return this.serial(async () => {
       this.importState(state);
       if (!(state && state.homeDc)) this.homeDc = Number(dc);
-      await this.conn(this.homeDc);
+      await this.conn(this.homeDc, deadline);
       return this;
-    });
+    }, deadline);
   }
 
-  async conn(dc) {
+  async conn(dc, deadline) {
     let c = this.conns.get(dc);
     if (c && !c.transport.closed) return c;
     if (c) await this.drop(dc);
@@ -1647,7 +1680,7 @@ class TelegramClient {
     let st = this.dcs.get(dc);
     if (!st) {
       try {
-        st = { ...(await createAuthKey(transport, { dc, publicKeys: this.publicKeys, now: this.now, timeoutMs: this.timeoutMs })), loggedIn: false };
+        st = { ...(await createAuthKey(transport, { dc, publicKeys: this.publicKeys, now: this.now, timeoutMs: this.budget(deadline).ms })), loggedIn: false };
       } catch (e) {
         await transport.close();
         throw e;
@@ -1677,19 +1710,21 @@ class TelegramClient {
    * A closed socket is retried once on a new connection unless `retry` is false (the bot login retries by itself, so
    * that every attempt spends the budget). `hex` answers the result as a hex string (Session.call).
    */
-  async invoke(dc, body, { retry = true, hex = false } = {}) {
-    const c = await this.conn(dc);
+  async invoke(dc, body, { retry = true, hex = false, deadline } = {}) {
+    const c = await this.conn(dc, deadline);
     const wrapped = c.inited ? body : invokeWithLayer(LAYER, initConnection({ apiId: this.apiId, ...this.device }, body));
+    const wait = this.budget(deadline);
     try {
-      const res = await c.session.call(wrapped, { timeoutMs: this.timeoutMs, hex });
+      const res = await c.session.call(wrapped, { timeoutMs: wait.ms, hex });
       c.inited = true;
       return res;
     } catch (e) {
       if (e.code === "closed" && retry) {
         await this.drop(dc);
-        return this.invoke(dc, body, { retry: false, hex });
+        return this.invoke(dc, body, { retry: false, hex, deadline });
       }
       if (e.code === "timeout" || e.code === "closed" || e.code === "protocol") await this.drop(dc);
+      if (e.code === "timeout" && wait.clamped) e.deadline = true; // the caller's deadline, not the server's silence alone
       if (e.code === "auth_key_unregistered") {
         // A key the server forgot (-404), refuses (AUTH_KEY_INVALID) or sees on two connections at once
         // (AUTH_KEY_DUPLICATED: e.g. a copy restored on another device) is dead: drop it, the next call makes a new one.
@@ -1706,7 +1741,7 @@ class TelegramClient {
    * { reused: true, userId }. Follows USER_MIGRATE_n (the home DC changes only when the login there succeeds) and
    * retries once after a closed socket. Every attempt sent, migrations and retries included, spends a budget slot.
    */
-  botLogin({ apiId, apiHash, botToken }) {
+  botLogin({ apiId, apiHash, botToken, deadline }) {
     return this.serial(async () => {
       if (apiId !== undefined) this.apiId = Number(apiId);
       if (!this.homeDc) throw mtError("invalid_request", "connect first");
@@ -1718,7 +1753,7 @@ class TelegramClient {
       for (;;) {
         if (this.store) loginBudget(this.store, this.now()).record();
         try {
-          const auth = parseAuthorization(await this.invoke(dc, importBotAuthorization({ apiId: this.apiId, apiHash, botToken }), { retry: false }));
+          const auth = parseAuthorization(await this.invoke(dc, importBotAuthorization({ apiId: this.apiId, apiHash, botToken }), { retry: false, deadline }));
           if (auth.ctor !== CTOR.authAuthorization) throw mtError("protocol", "unexpected answer to the bot login");
           const st = this.dcs.get(dc);
           st.loggedIn = true;
@@ -1731,7 +1766,7 @@ class TelegramClient {
           throw e;
         }
       }
-    });
+    }, deadline);
   }
 
   /**
@@ -1740,7 +1775,7 @@ class TelegramClient {
    * Refused with `invalid_request` before a login, and for any method not on ALLOWED_CALLS (requests.js): auth
    * methods, invoke wrappers, gzip_packed, msg_container and every other method are never sent.
    */
-  call(body) {
+  call(body, { deadline } = {}) {
     try {
       if (!(body instanceof Uint8Array) || body.length < 4) throw mtError("invalid_request", "call needs the serialized method as a Uint8Array");
       const id = (body[0] | (body[1] << 8) | (body[2] << 16) | (body[3] << 24)) >>> 0;
@@ -1752,19 +1787,19 @@ class TelegramClient {
       if (!this.homeDc) throw mtError("invalid_request", "connect first");
       const st = this.dcs.get(this.homeDc);
       if (!st || !st.loggedIn) throw mtError("invalid_request", "log in first");
-      return this.invoke(this.homeDc, body);
-    });
+      return this.invoke(this.homeDc, body, { deadline });
+    }, deadline);
   }
 
   /** Makes DC `dc` act for the logged-in bot: export the authorization from the home DC, import it there. */
-  async authorize(dc) {
+  async authorize(dc, deadline) {
     if (dc === this.homeDc) return;
-    await this.conn(dc);
+    await this.conn(dc, deadline);
     const st = this.dcs.get(dc);
     if (st && st.loggedIn) return;
-    const exp = parseExportedAuthorization(await this.invoke(this.homeDc, exportAuthorization(dc)));
+    const exp = parseExportedAuthorization(await this.invoke(this.homeDc, exportAuthorization(dc), { deadline }));
     if (exp.ctor !== CTOR.exportedAuthorization) throw mtError("protocol", "unexpected answer to auth.exportAuthorization");
-    const auth = parseAuthorization(await this.invoke(dc, importAuthorization(exp)));
+    const auth = parseAuthorization(await this.invoke(dc, importAuthorization(exp), { deadline }));
     if (auth.ctor !== CTOR.authAuthorization) throw mtError("protocol", "unexpected answer to auth.importAuthorization");
     this.dcs.get(dc).loggedIn = true;
   }
@@ -1776,7 +1811,7 @@ class TelegramClient {
    * Follows FILE_MIGRATE_n; FLOOD_WAIT_n, FILE_REFERENCE_EXPIRED... come back as typed errors. With `{ hex: true }`
    * the bytes come back as a hex string, sliced out of the decrypted answer with no JS pass over them.
    */
-  getFile(loc, offset, limit, { hex = false } = {}) {
+  getFile(loc, offset, limit, { hex = false, deadline } = {}) {
     try {
       if (!loc || loc.id === undefined || loc.accessHash === undefined || !(loc.fileReference && typeof loc.fileReference.length === "number")) {
         throw mtError("invalid_request", "a location needs id, accessHash and fileReference");
@@ -1791,8 +1826,8 @@ class TelegramClient {
       let dc = Number(loc.dcId) || this.homeDc;
       for (let attempt = 0; attempt < 4; attempt++) {
         try {
-          await this.authorize(dc);
-          const answer = await this.invoke(dc, body, { hex });
+          await this.authorize(dc, deadline);
+          const answer = await this.invoke(dc, body, { hex, deadline });
           const file = hex ? parseUploadFileHex(answer) : parseUploadFile(answer);
           if (file.ctor === CTOR.uploadFileCdnRedirect) throw mtError("protocol", "CDN redirects are not supported");
           if (file.ctor !== CTOR.uploadFile) throw mtError("protocol", "unexpected answer to upload.getFile");
@@ -1804,7 +1839,7 @@ class TelegramClient {
         }
       }
       throw mtError("protocol", "too many redirects for one chunk");
-    });
+    }, deadline);
   }
 
   async close() {
@@ -2318,7 +2353,8 @@ function createDiscovery({ client, store, budgetBytes = DEFAULT_BUDGET_BYTES, pe
       return { persisted: false, truncated, error: { scope: "storage", code: "storage", message: String(e && e.message) } };
     }
   };
-  const call = async (body, expect) => decode(await client.call(body), { expect, skip });
+  // `deadline` (a time of the client's clock) bounds each request: it never starts too late and never waits past it.
+  const call = async (body, expect, deadline) => decode(await client.call(body, { deadline: Number.isFinite(deadline) ? deadline : undefined }), { expect, skip });
 
   /** What one answer teaches: channels (with their access hash) and chat titles. */
   function learn(st, titles, chats, users, index) {
@@ -2427,7 +2463,8 @@ function createDiscovery({ client, store, budgetBytes = DEFAULT_BUDGET_BYTES, pe
       const titles = new Map();
       const errors = [];
       let pages = 0, incomplete = false, floodWait;
-      const spend = () => { if (pages >= maxPages || now() >= deadline) { incomplete = true; return false; } pages++; return true; };
+      // A page is not started with under 1.5 s left before the deadline (it could not finish in time).
+      const spend = () => { if (pages >= maxPages || now() + 1500 >= deadline) { incomplete = true; return false; } pages++; return true; };
       try {
         // 1. the common box
         let req = st.pts > 0 ? { pts: st.pts, date: st.date, qts: st.qts } : { pts: 1, date: 1, qts: -1 };
@@ -2435,7 +2472,7 @@ function createDiscovery({ client, store, budgetBytes = DEFAULT_BUDGET_BYTES, pe
           if (!spend()) break;
           let d;
           try {
-            d = await call(getDifference(req), "updates.Difference");
+            d = await call(getDifference(req), "updates.Difference", deadline);
           } catch (e) {
             if (!ISOLATED.has(e.code)) throw e;
             errors.push({ scope: "common", ...errorOf(e) }); // the common state stays where it was
@@ -2450,7 +2487,7 @@ function createDiscovery({ client, store, budgetBytes = DEFAULT_BUDGET_BYTES, pe
             if (!spend()) break;
             let fresh;
             try {
-              fresh = await call(getState(), "updates.State");
+              fresh = await call(getState(), "updates.State", deadline);
             } catch (e) {
               if (!ISOLATED.has(e.code)) throw e;
               errors.push({ scope: "common", ...errorOf(e) });
@@ -2473,7 +2510,7 @@ function createDiscovery({ client, store, budgetBytes = DEFAULT_BUDGET_BYTES, pe
             if (incomplete) break;
             if (shouldScan && !shouldScan(id)) continue; // left where it is: its pts does not move
             try {
-              await scanChannel(st, index, titles, id, spend);
+              await scanChannel(st, index, titles, id, spend, deadline);
             } catch (e) {
               if (e.code === "channel_invalid") {
                 log("channel " + id + " dropped: " + e.message);
@@ -2489,13 +2526,14 @@ function createDiscovery({ client, store, budgetBytes = DEFAULT_BUDGET_BYTES, pe
           }
         }
       } catch (e) {
-        if (e.code !== "flood_wait") {
+        const outOfTime = e.code === "timeout" && e.deadline === true; // the caller's deadline: stop like maxPages does
+        if (e.code !== "flood_wait" && !outOfTime) {
           if (deferred) mem = null; // nothing of this pass is kept: the next one starts from the saved state
           else save(st, index); // save never throws, so `e` is what surfaces
           throw e;
         }
         incomplete = true;
-        floodWait = e.seconds;
+        if (!outOfTime) floodWait = e.seconds;
       }
       let saved = { persisted: false };
       let pending = null;
@@ -2515,12 +2553,12 @@ function createDiscovery({ client, store, budgetBytes = DEFAULT_BUDGET_BYTES, pe
     });
   }
 
-  async function scanChannel(st, index, titles, id, spend) {
+  async function scanChannel(st, index, titles, id, spend, deadline) {
     const ch = () => st.channels[id];
     while (ch()) {
       const c = ch();
       if (!spend()) return;
-      const d = await call(getChannelDifference({ channelId: id, accessHash: c.accessHash, pts: c.pts, limit: CHANNEL_LIMIT }), "updates.ChannelDifference");
+      const d = await call(getChannelDifference({ channelId: id, accessHash: c.accessHash, pts: c.pts, limit: CHANNEL_LIMIT }), "updates.ChannelDifference", deadline);
       if (d._ === "updates.channelDifferenceEmpty") { c.pts = d.pts; break; }
       learn(st, titles, d.chats, d.users, index);
       if (!ch()) return;
@@ -2542,7 +2580,7 @@ function createDiscovery({ client, store, budgetBytes = DEFAULT_BUDGET_BYTES, pe
       const { next, to } = c.backfill;
       const ids = [];
       for (let i = next; i <= to && ids.length < BATCH; i++) ids.push(i);
-      const res = await call(channelsGetMessages({ channelId: id, accessHash: c.accessHash, ids }), "messages.Messages");
+      const res = await call(channelsGetMessages({ channelId: id, accessHash: c.accessHash, ids }), "messages.Messages", deadline);
       applyFetched(st, index, titles, res, () => channelChatId(id));
       if (next + ids.length > to) delete c.backfill;
       else c.backfill = { next: next + ids.length, to };
@@ -2554,10 +2592,19 @@ function createDiscovery({ client, store, budgetBytes = DEFAULT_BUDGET_BYTES, pe
    * messages.getMessages for a private chat), so its document has a fresh file_reference. null (and the entry is
    * dropped) when the message is gone or is no longer a video. An unknown channel is `channel_invalid`.
    */
-  function refetch(entry) {
-    return serial(async () => {
+  function refetch(entry, { deadline } = {}) {
+    // persistEntries false: refetch saves nothing (the caller keeps the entry), so it runs beside a refresh instead of
+    // waiting behind it in this queue, on a private copy of the saved state. A lost channel is found by the next refresh.
+    if (!persistEntries) return refetchNow(entry, deadline, false);
+    return serial(() => refetchNow(entry, deadline, true));
+  }
+  async function refetchNow(entry, deadline, keep) {
+    await null;
+    {
       if (!entry || typeof entry.chatId !== "string" || !isInt(entry.msgId)) throw mtError("invalid_request", "refetch needs an IndexEntry");
-      const { st, index } = begin();
+      let st, index;
+      if (keep) ({ st, index } = begin());
+      else { let raw = null; try { raw = store.get(STATE_KEY); } catch { raw = null; } st = parseState(raw); index = new Journal(); }
       const titles = new Map();
       const key = entry.chatId + ":" + entry.msgId;
       const chId = channelIdOfChat(entry.chatId);
@@ -2566,21 +2613,21 @@ function createDiscovery({ client, store, budgetBytes = DEFAULT_BUDGET_BYTES, pe
         const c = st.channels[chId];
         if (!c) throw mtError("channel_invalid", "the channel is not known to the discovery");
         try {
-          res = await call(channelsGetMessages({ channelId: chId, accessHash: c.accessHash, ids: [entry.msgId] }), "messages.Messages");
+          res = await call(channelsGetMessages({ channelId: chId, accessHash: c.accessHash, ids: [entry.msgId] }), "messages.Messages", deadline);
         } catch (e) {
-          if (e.code === "channel_invalid") { dropChannel(st, index, chId); save(st, index); }
+          if (e.code === "channel_invalid" && keep) { dropChannel(st, index, chId); save(st, index); }
           throw e;
         }
       } else {
-        res = await call(messagesGetMessages([entry.msgId]), "messages.Messages");
+        res = await call(messagesGetMessages([entry.msgId]), "messages.Messages", deadline);
       }
       applyFetched(st, index, titles, res, () => entry.chatId);
       const msg = (res.messages || []).find((m) => m.id === entry.msgId);
       if (!msg || msg._ !== "message" || chatIdOf(msg.peer_id) !== entry.chatId) index.delete(key);
-      save(st, index);
+      if (keep) save(st, index);
       const e = index.get(key);
       return e ? { ...e } : null;
-    });
+    }
   }
 
   /**
@@ -2740,7 +2787,12 @@ async function markDevice(id = kino.crypto.randomBytes(16)) {
  * one) is dropped together with what came with it from the same backup, the update state and the shell state, and
  * this device's catalog is rebuilt from scratch under a new mark: the settings stay. Answers this device's mark.
  */
-async function checkDevice() {
+let checking = null; // one check at a time: two at once could each write a different mark
+function checkDevice() {
+  if (!checking) checking = runCheckDevice().finally(() => { checking = null; });
+  return checking;
+}
+async function runCheckDevice() {
   const stored = readJson(KEYS.session);
   let mark = await deviceMark();
   if (stored && (!mark || stored.device !== mark)) {
@@ -2780,14 +2832,15 @@ function saveSession() {
  * flight (cleared when it fails), so concurrent calls never build two clients or spend two logins. `shell.refused`
  * marks a login Telegram refused with these exact settings: it is not tried again.
  */
-function connect(c, shell) {
+function connect(c, shell, { deadline } = {}) {
   const fp = sessionFp(c);
   if (live && live.fp === fp && live.ready) return Promise.resolve(live);
-  if (!connecting) connecting = open(c, shell).finally(() => { connecting = null; });
+  if (!connecting) connecting = open(c, shell, deadline).finally(() => { connecting = null; });
   return connecting;
 }
 
-async function open(c, shell) {
+/** Connect and login, each request inside `deadline` (the first caller's: whoever joins waits on the same one). */
+async function open(c, shell, deadline) {
   const fp = sessionFp(c);
   if (live && live.fp !== fp) await close();
   if (shell.refused && shell.refused.fp === loginFp(c)) throw shellError(shell.refused.kind, "login refused before");
@@ -2798,18 +2851,18 @@ async function open(c, shell) {
     let saved = null;
     const state = stored && stored.v === 1 && stored.fp === fp && stored.device === device && stored.state && stored.state.dcs ? stored.state : null;
     try {
-      await client.connect(state && state.homeDc ? state.homeDc : FIRST_DC, state || undefined);
+      await client.connect(state && state.homeDc ? state.homeDc : FIRST_DC, state || undefined, { deadline });
       saved = state ? JSON.stringify(state) : null;
     } catch (e) {
       if (!state || e.code !== "invalid_request") throw e;
       kino.log("stored session unusable, starting a new one");
       client = newClient(c);
-      await client.connect(FIRST_DC);
+      await client.connect(FIRST_DC, undefined, { deadline });
     }
     live = { fp, device, client, saved, ready: false, discovery: createDiscovery({ client, store: kinoStore, persistEntries: false, log: (m) => kino.log("discovery: " + m) }) };
   }
   try {
-    await live.client.botLogin({ apiHash: c.apiHash, botToken: c.botToken });
+    await live.client.botLogin({ apiHash: c.apiHash, botToken: c.botToken, deadline });
   } finally {
     saveSession();
   }
@@ -2821,8 +2874,8 @@ async function open(c, shell) {
  * Runs `fn(live)`; when the session died under it (a 401, SESSION_REVOKED, a dropped AUTH_KEY_DUPLICATED key), logs
  * in again ONCE (inside the login budget) and runs `fn` once more. Never loops: a second failure is the caller's.
  */
-async function withSession(c, shell, fn) {
-  const l = await connect(c, shell);
+async function withSession(c, shell, fn, { deadline } = {}) {
+  const l = await connect(c, shell, { deadline });
   try {
     return await fn(l);
   } catch (e) {
@@ -2830,7 +2883,7 @@ async function withSession(c, shell, fn) {
     kino.log("session lost (" + (e.rpc && /^[A-Z_]{1,40}$/.test(e.rpc) ? e.rpc : "transport") + "): one new login");
     l.ready = false;
     saveSession();
-    return fn(await connect(c, shell));
+    return fn(await connect(c, shell, { deadline }));
   }
 }
 
@@ -2888,7 +2941,7 @@ const HLS = /mpegurl/i;
 
 // ---- shell state (tg.shell) ----
 
-const freshShell = (fp) => ({ v: 1, fp, slots: [], titles: {}, gone: {}, applied: [], top: {}, purge: [], indexedAt: 0, incomplete: false, count: 0, unslotted: 0, error: null, refused: null, channelErrors: 0 });
+const freshShell = (fp) => ({ v: 1, fp, slots: [], titles: {}, applied: [], top: {}, purge: [], indexedAt: 0, incomplete: false, count: 0, unslotted: 0, error: null, refused: null, channelErrors: 0 });
 
 function loadShell(c) {
   const s = readJson(KEYS.shell);
@@ -2901,7 +2954,7 @@ const saveShell = (s) => writeJson(KEYS.shell, s);
 /** The chats (Bot API ids, "-100...") whose toggle is on. */
 function activeChats(shell) {
   const on = new Set();
-  shell.slots.forEach((chatId, i) => { if (chatId && kino.config.get("ch" + (i + 1)) === true && !shell.gone[chatId]) on.add(chatId); });
+  shell.slots.forEach((chatId, i) => { if (chatId && kino.config.get("ch" + (i + 1)) === true) on.add(chatId); });
   return on;
 }
 
@@ -3018,7 +3071,7 @@ function noticeFor(problem, now = Date.now()) {
 /** Starts over for another bot: the index and the discovery state go (this device keeps its mark). */
 async function resetIndex(shell) {
   remove(KEYS.discovery);
-  shell.slots = []; shell.titles = {}; shell.gone = {}; shell.applied = []; shell.top = {}; shell.purge = [];
+  shell.slots = []; shell.titles = {}; shell.applied = []; shell.top = {}; shell.purge = [];
   shell.indexedAt = 0; shell.incomplete = false; shell.count = 0; shell.unslotted = 0; shell.channelErrors = 0;
   const mark = await deviceMark();
   try { await kino.catalog.clear(); } catch (e) { kino.log("catalog clear failed: " + (e && e.code)); }
@@ -3037,7 +3090,6 @@ function assignSlots(shell, channels) {
   for (const rawId of ids) {
     const chatId = channelChatId(rawId);
     shell.titles[chatId] = clip(channels[rawId].title, 100);
-    delete shell.gone[chatId];
   }
   shell.slots = ids.slice(0, SLOTS).map(channelChatId);
   shell.unslotted = Math.max(0, ids.length - SLOTS);
@@ -3054,7 +3106,6 @@ async function applyChanges(shell, changes, active) {
   await upsertAll(rows);
   await removeAll(changes.removed);
   for (const chatId of changes.droppedChats) {
-    shell.gone[chatId] = true;
     if (shell.top[chatId]) shell.purge.push({ chatId, next: shell.top[chatId] });
     delete shell.top[chatId];
   }
@@ -3081,7 +3132,9 @@ async function applyToggles(shell, live) {
   return changed;
 }
 
-let running = null; // the refresh in flight: a second caller (Home and "Actualizar ahora" at once) shares its result
+let running = null;      // the refresh in flight: a second caller (Home and "Actualizar ahora" at once) shares its result
+let runningForce = false;
+let queuedForce = null;  // a forced refresh that arrived while a plain one ran: it runs after it, once
 
 /**
  * One refresh: toggles, purges, then (unless the index is recent and nothing is pending, or `force`) the discovery.
@@ -3089,7 +3142,17 @@ let running = null; // the refresh in flight: a second caller (Home and "Actuali
  * a time per runtime: a call while another runs gets that one's answer.
  */
 function refresh(opts = {}) {
-  if (!running) running = runRefresh(opts).finally(() => { running = null; });
+  const force = opts.force === true;
+  if (!running) return start(force);
+  if (!force || runningForce) return running;
+  // "Actualizar ahora" during a plain Home: when that Home did read Telegram, its answer is the fresh one; when it
+  // took the early return (a recent index), the forced pass runs right after it.
+  if (!queuedForce) queuedForce = running.then((r) => { queuedForce = null; return r.networked ? r : refresh({ force: true }); });
+  return queuedForce;
+}
+function start(force) {
+  runningForce = force;
+  running = runRefresh({ force }).finally(() => { running = null; runningForce = false; });
   return running;
 }
 
@@ -3100,6 +3163,7 @@ async function runRefresh({ force = false } = {}) {
   const now = started;
   let shell = null;
   let added = 0;
+  let networked = false;
   try {
     await checkDevice(); // first: a restored storage from another device is dropped before anything reads it
     shell = loadShell(c);
@@ -3113,8 +3177,8 @@ async function runRefresh({ force = false } = {}) {
     if (!force && !pending && shell.indexedAt && now - shell.indexedAt < REFRESH_MS) return { shell, added, problem: blocked };
 
     const deadline = started + REFRESH_BUDGET_MS;
+    networked = true;
     await withSession(c, shell, async (live) => {
-      live.client.timeoutMs = 9000;
       await applyToggles(shell, live);
       await purgeStep(shell);
       // A second pass only when the first gave an active slot to a channel it had not scanned (slot 1 starts on).
@@ -3137,18 +3201,24 @@ async function runRefresh({ force = false } = {}) {
         if (!(await applyToggles(shell, live))) return;
       }
       if (Date.now() >= deadline) shell.incomplete = true;
-    });
+    }, { deadline });
     shell.refused = null;
     if (!shell.incomplete) shell.indexedAt = now;
-    return { shell, added, problem: problemOf(shell, now) };
+    return { shell, added, networked, problem: problemOf(shell, now) };
   } catch (e) {
     shell = shell || loadShell(c);
+    if (e && e.code === "timeout" && e.deadline === true) {
+      // Out of the call's time (a slow connect or login): not an error, the next call goes on; the rows stay.
+      kino.log("refresh stopped at its deadline");
+      shell.incomplete = true;
+      return { shell, added, networked, problem: problemOf(shell, now) };
+    }
     const kind = kindOf(e);
     shell.error = { kind, at: now };
     if (kind === "flood" || kind === "budget") shell.error.until = now + (Number(e.seconds) || 60) * 1000;
     if (kind === "token" || kind === "api_id") shell.refused = { fp: loginFp(c), kind };
     kino.log("refresh failed: " + kind + " " + (e && e.code ? e.code : ""));
-    return { shell, added, problem: shell.error };
+    return { shell, added, networked, problem: shell.error };
   } finally {
     if (shell) {
       try { shell.count = await countVideos(); } catch { /* keep the last count */ }
@@ -3320,7 +3390,6 @@ const { hexToBase64Native } = __mod_src_shell_b64;
 
 const SHORT_FLOOD_S = 5;     // a FLOOD_WAIT this short is waited out once inside the read (kino.sleep: 5 s at most)
 const READ_BUDGET_MS = 17000; // everything a read does (getFile, refetch, retries) ends before this; Kino gives it 20 s
-const PER_CALL_MS = 9000;     // the longest one request may wait, when the budget still allows it
 const MIN_LEFT_MS = 1500;     // a request is not started with less than this left
 
 /** The getFile requests for [offset, offset + want): each a power of two times 4096, never across a 1 MiB boundary. */
@@ -3363,12 +3432,8 @@ async function read(arg) {
   const want = Math.max(0, Math.min(length, size - offset));
   if (want === 0) return { bytes: "" };
   const deadline = started + READ_BUDGET_MS;
-  // Each request waits at most what is left of the read's budget, so getFile + refetch + a retry fit inside it.
-  const budget = (live) => {
-    const left = deadline - Date.now();
-    if (left < MIN_LEFT_MS) throw shellError("network", "read budget spent");
-    live.client.timeoutMs = Math.min(PER_CALL_MS, left - 500);
-  };
+  // Every request carries the read's deadline (the client waits at most what is left of it, never starts one with
+  // under 1.5 s left, and never waits for its turn past it), so connect + getFile + refetch + a retry fit inside it.
   let refetched = false, waited = false;
   let hex = "";
   try {
@@ -3376,16 +3441,14 @@ async function read(arg) {
       hex = "";
       for (const piece of pieces(offset, want)) {
         for (;;) {
-          budget(live);
           try {
-            hex += await live.client.getFile(locOf(row.data), piece.offset, piece.limit, { hex: true });
+            hex += await live.client.getFile(locOf(row.data), piece.offset, piece.limit, { hex: true, deadline });
             break;
           } catch (e) {
             const left = deadline - Date.now();
             if (e.code === "file_reference_expired" && !refetched && left > 2 * MIN_LEFT_MS) {
               refetched = true;
-              budget(live);
-              const fresh = await live.discovery.refetch({ chatId: row.data.chatId, msgId: row.data.msgId });
+              const fresh = await live.discovery.refetch({ chatId: row.data.chatId, msgId: row.data.msgId }, { deadline });
               if (!fresh) {
                 await kino.catalog.remove([row.id]);
                 throw shellError("not_found", "the message is gone");
@@ -3403,7 +3466,7 @@ async function read(arg) {
           }
         }
       }
-    });
+    }, { deadline });
   } finally {
     saveSession();
   }

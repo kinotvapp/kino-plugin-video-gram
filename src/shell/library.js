@@ -28,7 +28,7 @@ const HLS = /mpegurl/i;
 
 // ---- shell state (tg.shell) ----
 
-const freshShell = (fp) => ({ v: 1, fp, slots: [], titles: {}, gone: {}, applied: [], top: {}, purge: [], indexedAt: 0, incomplete: false, count: 0, unslotted: 0, error: null, refused: null, channelErrors: 0 });
+const freshShell = (fp) => ({ v: 1, fp, slots: [], titles: {}, applied: [], top: {}, purge: [], indexedAt: 0, incomplete: false, count: 0, unslotted: 0, error: null, refused: null, channelErrors: 0 });
 
 export function loadShell(c) {
   const s = readJson(KEYS.shell);
@@ -41,7 +41,7 @@ const saveShell = (s) => writeJson(KEYS.shell, s);
 /** The chats (Bot API ids, "-100...") whose toggle is on. */
 export function activeChats(shell) {
   const on = new Set();
-  shell.slots.forEach((chatId, i) => { if (chatId && kino.config.get("ch" + (i + 1)) === true && !shell.gone[chatId]) on.add(chatId); });
+  shell.slots.forEach((chatId, i) => { if (chatId && kino.config.get("ch" + (i + 1)) === true) on.add(chatId); });
   return on;
 }
 
@@ -158,7 +158,7 @@ function noticeFor(problem, now = Date.now()) {
 /** Starts over for another bot: the index and the discovery state go (this device keeps its mark). */
 async function resetIndex(shell) {
   remove(KEYS.discovery);
-  shell.slots = []; shell.titles = {}; shell.gone = {}; shell.applied = []; shell.top = {}; shell.purge = [];
+  shell.slots = []; shell.titles = {}; shell.applied = []; shell.top = {}; shell.purge = [];
   shell.indexedAt = 0; shell.incomplete = false; shell.count = 0; shell.unslotted = 0; shell.channelErrors = 0;
   const mark = await deviceMark();
   try { await kino.catalog.clear(); } catch (e) { kino.log("catalog clear failed: " + (e && e.code)); }
@@ -177,7 +177,6 @@ function assignSlots(shell, channels) {
   for (const rawId of ids) {
     const chatId = channelChatId(rawId);
     shell.titles[chatId] = clip(channels[rawId].title, 100);
-    delete shell.gone[chatId];
   }
   shell.slots = ids.slice(0, SLOTS).map(channelChatId);
   shell.unslotted = Math.max(0, ids.length - SLOTS);
@@ -194,7 +193,6 @@ async function applyChanges(shell, changes, active) {
   await upsertAll(rows);
   await removeAll(changes.removed);
   for (const chatId of changes.droppedChats) {
-    shell.gone[chatId] = true;
     if (shell.top[chatId]) shell.purge.push({ chatId, next: shell.top[chatId] });
     delete shell.top[chatId];
   }
@@ -221,7 +219,9 @@ async function applyToggles(shell, live) {
   return changed;
 }
 
-let running = null; // the refresh in flight: a second caller (Home and "Actualizar ahora" at once) shares its result
+let running = null;      // the refresh in flight: a second caller (Home and "Actualizar ahora" at once) shares its result
+let runningForce = false;
+let queuedForce = null;  // a forced refresh that arrived while a plain one ran: it runs after it, once
 
 /**
  * One refresh: toggles, purges, then (unless the index is recent and nothing is pending, or `force`) the discovery.
@@ -229,7 +229,17 @@ let running = null; // the refresh in flight: a second caller (Home and "Actuali
  * a time per runtime: a call while another runs gets that one's answer.
  */
 export function refresh(opts = {}) {
-  if (!running) running = runRefresh(opts).finally(() => { running = null; });
+  const force = opts.force === true;
+  if (!running) return start(force);
+  if (!force || runningForce) return running;
+  // "Actualizar ahora" during a plain Home: when that Home did read Telegram, its answer is the fresh one; when it
+  // took the early return (a recent index), the forced pass runs right after it.
+  if (!queuedForce) queuedForce = running.then((r) => { queuedForce = null; return r.networked ? r : refresh({ force: true }); });
+  return queuedForce;
+}
+function start(force) {
+  runningForce = force;
+  running = runRefresh({ force }).finally(() => { running = null; runningForce = false; });
   return running;
 }
 
@@ -240,6 +250,7 @@ async function runRefresh({ force = false } = {}) {
   const now = started;
   let shell = null;
   let added = 0;
+  let networked = false;
   try {
     await checkDevice(); // first: a restored storage from another device is dropped before anything reads it
     shell = loadShell(c);
@@ -253,8 +264,8 @@ async function runRefresh({ force = false } = {}) {
     if (!force && !pending && shell.indexedAt && now - shell.indexedAt < REFRESH_MS) return { shell, added, problem: blocked };
 
     const deadline = started + REFRESH_BUDGET_MS;
+    networked = true;
     await withSession(c, shell, async (live) => {
-      live.client.timeoutMs = 9000;
       await applyToggles(shell, live);
       await purgeStep(shell);
       // A second pass only when the first gave an active slot to a channel it had not scanned (slot 1 starts on).
@@ -277,18 +288,24 @@ async function runRefresh({ force = false } = {}) {
         if (!(await applyToggles(shell, live))) return;
       }
       if (Date.now() >= deadline) shell.incomplete = true;
-    });
+    }, { deadline });
     shell.refused = null;
     if (!shell.incomplete) shell.indexedAt = now;
-    return { shell, added, problem: problemOf(shell, now) };
+    return { shell, added, networked, problem: problemOf(shell, now) };
   } catch (e) {
     shell = shell || loadShell(c);
+    if (e && e.code === "timeout" && e.deadline === true) {
+      // Out of the call's time (a slow connect or login): not an error, the next call goes on; the rows stay.
+      kino.log("refresh stopped at its deadline");
+      shell.incomplete = true;
+      return { shell, added, networked, problem: problemOf(shell, now) };
+    }
     const kind = kindOf(e);
     shell.error = { kind, at: now };
     if (kind === "flood" || kind === "budget") shell.error.until = now + (Number(e.seconds) || 60) * 1000;
     if (kind === "token" || kind === "api_id") shell.refused = { fp: loginFp(c), kind };
     kino.log("refresh failed: " + kind + " " + (e && e.code ? e.code : ""));
-    return { shell, added, problem: shell.error };
+    return { shell, added, networked, problem: shell.error };
   } finally {
     if (shell) {
       try { shell.count = await countVideos(); } catch { /* keep the last count */ }
