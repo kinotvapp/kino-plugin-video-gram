@@ -1,0 +1,224 @@
+{
+  "id": "telegram-library",
+  "name": "Telegram Library",
+  "version": "0.1.0",
+  "apiVersion": 12,
+  "entry": "plugin.js",
+  "description": "Tu biblioteca personal: los videos de tus canales privados de Telegram, con tu propio bot, en Kino. Your personal library: the videos of your private Telegram channels, with your own bot.",
+  "author": "kinotvapp",
+  "hosts": [
+    "pluto.web.telegram.org",
+    "venus.web.telegram.org",
+    "aurora.web.telegram.org",
+    "vesta.web.telegram.org",
+    "flora.web.telegram.org"
+  ],
+  "capabilities": [
+    "home",
+    "search",
+    "browse",
+    "scopedSearch",
+    "resolve",
+    "socket",
+    "byteSource",
+    "catalog"
+  ],
+  "categories": [
+    "movies"
+  ],
+  "color": "#2AABEE",
+  "section": {
+    "label": "Telegram",
+    "labelEn": "Telegram"
+  },
+  "theme": {
+    "accent": "#2AABEE",
+    "onAccent": "#0B1621",
+    "background": "#0E1621",
+    "surface": "#17212B",
+    "highlight": "#7CC4F5"
+  },
+  "settings": [
+    {
+      "key": "account",
+      "type": "section",
+      "label": "Tu bot de Telegram",
+      "labelEn": "Your Telegram bot",
+      "hint": "Crea una app en my.telegram.org (api_id y api_hash) y un bot con @BotFather. Agrega el bot como administrador de tu canal privado y publica tus videos ahí. Todo queda en este aparato.",
+      "hintEn": "Create an app at my.telegram.org (api_id and api_hash) and a bot with @BotFather. Add the bot as an administrator of your private channel and post your videos there. Everything stays on this device."
+    },
+    {
+      "key": "api_id",
+      "type": "password",
+      "required": true,
+      "label": "api_id",
+      "labelEn": "api_id",
+      "hint": "El número que te da my.telegram.org",
+      "hintEn": "The number my.telegram.org gives you"
+    },
+    {
+      "key": "api_hash",
+      "type": "password",
+      "required": true,
+      "label": "api_hash",
+      "labelEn": "api_hash",
+      "hint": "32 letras y números de my.telegram.org",
+      "hintEn": "32 letters and digits from my.telegram.org"
+    },
+    {
+      "key": "bot_token",
+      "type": "password",
+      "required": true,
+      "label": "Token del bot",
+      "labelEn": "Bot token",
+      "hint": "El que te da @BotFather, como 123456:ABC...",
+      "hintEn": "The one @BotFather gives you, like 123456:ABC..."
+    },
+    {
+      "key": "account_status",
+      "type": "status",
+      "label": "Estado",
+      "labelEn": "Status"
+    },
+    {
+      "key": "channels",
+      "type": "section",
+      "label": "Canales",
+      "labelEn": "Channels",
+      "hint": "Kino muestra solo los canales que actives (hasta 8). El primero que encuentre empieza activo. Los cambios se aplican en la próxima actualización.",
+      "hintEn": "Kino shows only the channels you turn on (up to 8). The first one found starts on. Changes apply at the next refresh."
+    },
+    {
+      "key": "ch1_name",
+      "type": "status",
+      "label": "Canal 1",
+      "labelEn": "Channel 1"
+    },
+    {
+      "key": "ch1",
+      "type": "toggle",
+      "label": "Mostrar el canal 1",
+      "labelEn": "Show channel 1",
+      "default": true
+    },
+    {
+      "key": "ch2_name",
+      "type": "status",
+      "label": "Canal 2",
+      "labelEn": "Channel 2"
+    },
+    {
+      "key": "ch2",
+      "type": "toggle",
+      "label": "Mostrar el canal 2",
+      "labelEn": "Show channel 2",
+      "default": false
+    },
+    {
+      "key": "ch3_name",
+      "type": "status",
+      "label": "Canal 3",
+      "labelEn": "Channel 3"
+    },
+    {
+      "key": "ch3",
+      "type": "toggle",
+      "label": "Mostrar el canal 3",
+      "labelEn": "Show channel 3",
+      "default": false
+    },
+    {
+      "key": "ch4_name",
+      "type": "status",
+      "label": "Canal 4",
+      "labelEn": "Channel 4"
+    },
+    {
+      "key": "ch4",
+      "type": "toggle",
+      "label": "Mostrar el canal 4",
+      "labelEn": "Show channel 4",
+      "default": false
+    },
+    {
+      "key": "ch5_name",
+      "type": "status",
+      "label": "Canal 5",
+      "labelEn": "Channel 5"
+    },
+    {
+      "key": "ch5",
+      "type": "toggle",
+      "label": "Mostrar el canal 5",
+      "labelEn": "Show channel 5",
+      "default": false
+    },
+    {
+      "key": "ch6_name",
+      "type": "status",
+      "label": "Canal 6",
+      "labelEn": "Channel 6"
+    },
+    {
+      "key": "ch6",
+      "type": "toggle",
+      "label": "Mostrar el canal 6",
+      "labelEn": "Show channel 6",
+      "default": false
+    },
+    {
+      "key": "ch7_name",
+      "type": "status",
+      "label": "Canal 7",
+      "labelEn": "Channel 7"
+    },
+    {
+      "key": "ch7",
+      "type": "toggle",
+      "label": "Mostrar el canal 7",
+      "labelEn": "Show channel 7",
+      "default": false
+    },
+    {
+      "key": "ch8_name",
+      "type": "status",
+      "label": "Canal 8",
+      "labelEn": "Channel 8"
+    },
+    {
+      "key": "ch8",
+      "type": "toggle",
+      "label": "Mostrar el canal 8",
+      "labelEn": "Show channel 8",
+      "default": false
+    },
+    {
+      "key": "index",
+      "type": "section",
+      "label": "Índice",
+      "labelEn": "Index",
+      "hint": "Kino lee los canales activos al abrir Inicio, como mucho cada 5 minutos. Los videos se buscan en este aparato, sin internet.",
+      "hintEn": "Kino reads the active channels when Home opens, at most every 5 minutes. Videos are searched on this device, offline."
+    },
+    {
+      "key": "index_status",
+      "type": "status",
+      "label": "Videos",
+      "labelEn": "Videos"
+    },
+    {
+      "key": "refresh",
+      "type": "action",
+      "label": "Actualizar ahora",
+      "labelEn": "Refresh now"
+    },
+    {
+      "key": "forget",
+      "type": "action",
+      "label": "Olvidar este aparato",
+      "labelEn": "Forget this device",
+      "confirm": "¿Borrar la sesión y el índice de este aparato? Tus videos siguen en Telegram.",
+      "confirmEn": "Delete this device's session and index? Your videos stay on Telegram."
+    }
+  ]
+}
