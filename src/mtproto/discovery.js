@@ -7,6 +7,19 @@
 //   - updates.getChannelDifference from pts=1 lists a channel's history from the start, page by page until `final`;
 //   - channels.getMessages / messages.getMessages re-read single messages (a fresh file_reference).
 // The index and the update state are saved together under one storage key, so they can never disagree.
+//
+// Degrading safely (Kino's plugin storage is 256 KB for ALL keys and a write over it throws):
+//   - the saved value never exceeds `budgetBytes` (default 160 000, room for the client's own keys): the oldest
+//     entries are left out of the saved copy first (`truncated`), the in-memory index keeps them all;
+//   - a write the store refuses never throws: the result says `persisted: false`, the progress stays in memory and the
+//     next operation in the same runtime continues from it instead of redoing the same pages;
+//   - one channel that fails (an unparsable answer, an rpc error such as CHAT_ADMIN_REQUIRED) is reported in `errors`
+//     and keeps its pts; the other channels go on. A failed common-box answer keeps the common state, and the known
+//     channels are still scanned. Flood waits stop the scan and keep the progress.
+//
+// Known gap: after updates.differenceTooLong the common box jumps to a fresh getState. What happened in the gap is
+// skipped: a channel the bot joined during it shows up only with its next post (or another update naming it), and
+// private-chat videos sent during it are lost. Known channels are rescanned from pts 1, so their videos are not lost.
 import { mtError } from "./errors.js";
 import { toHex } from "./bytes.js";
 import { decode } from "./schema/reader.js";
@@ -16,6 +29,12 @@ const STATE_KEY = "tg.discovery";
 const VERSION = 1;
 const CHANNEL_LIMIT = 100;
 const BATCH = 100;
+const DEFAULT_BUDGET_BYTES = 160000;
+const MAX_TITLE = 200, MAX_CAPTION = 200, MAX_CHAT_TITLE = 100;
+const cap = (s, n) => { s = String(s || ""); return s.length > n ? s.slice(0, n) : s; };
+// Errors that belong to one answer (one channel, or the common box) and must not stop the others.
+const ISOLATED = new Set(["protocol", "rpc_error", "bot_method_invalid"]);
+const errorOf = (e) => ({ code: e && e.code ? e.code : "error", message: String(e && e.message) });
 const CHANNEL_BASE = 1000000000000n; // Bot API chat ids: channel -> -(1e12 + id), basic group -> -id, user -> id
 
 // The updates the index needs; every other Update is walked without being built.
@@ -48,20 +67,26 @@ function channelIdOfChat(chatId) {
 }
 const channelChatId = (channelId) => String(-(CHANNEL_BASE + BigInt(channelId)));
 
+function firstLine(text) {
+  for (const line of String(text || "").split("\n")) {
+    const t = line.trim();
+    if (t) return t;
+  }
+  return "";
+}
 function titleFrom(fileName, caption, msgId) {
   if (fileName) {
     const dot = fileName.lastIndexOf(".");
     const base = (dot > 0 ? fileName.slice(0, dot) : fileName).trim();
-    if (base) return base;
+    if (base) return cap(base, MAX_TITLE);
   }
-  for (const line of String(caption || "").split("\n")) {
-    const t = line.trim();
-    if (t) return t;
-  }
-  return "Video " + msgId;
+  return cap(firstLine(caption) || "Video " + msgId, MAX_TITLE);
 }
 
-/** A Message as an IndexEntry when it carries a video document, else null. */
+/**
+ * A Message as an IndexEntry when it carries a video document, else null. Text is capped to keep the saved index
+ * small: title and caption (its first non-empty line) at most 200 characters, chatTitle at most 100.
+ */
 export function videoEntry(msg, chatTitle = "") {
   if (!msg || msg._ !== "message" || !msg.media || msg.media._ !== "messageMediaDocument") return null;
   const doc = msg.media.document;
@@ -83,9 +108,9 @@ export function videoEntry(msg, chatTitle = "") {
     key: chatId + ":" + msg.id,
     chatId,
     msgId: msg.id,
-    chatTitle,
+    chatTitle: cap(chatTitle, MAX_CHAT_TITLE),
     title: titleFrom(fileName, caption, msg.id),
-    caption,
+    caption: cap(firstLine(caption), MAX_CAPTION),
     size,
     mime: doc.mime_type,
     duration: video ? video.duration : null,
@@ -125,23 +150,69 @@ function parseState(raw) {
 const publicState = (st) => ({ version: st.version, pts: st.pts, qts: st.qts, date: st.date, seq: st.seq, channels: JSON.parse(JSON.stringify(st.channels)) });
 const sorted = (index) => [...index.values()].sort((a, b) => (b.date - a.date) || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
 
+/** UTF-8 length of a string (what a byte limit counts). */
+function utf8Length(s) {
+  let n = s.length;
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    if (c < 0x80) continue;
+    n += c < 0x800 || (c >= 0xd800 && c <= 0xdfff) ? 1 : 2; // 2 bytes; a surrogate half (2 of a 4-byte pair); 3 bytes
+  }
+  return n;
+}
+// The stored value is a string inside the storage map's own JSON, so it is measured escaped, as JSON.stringify(value).
+const storedCost = (s) => utf8Length(JSON.stringify(s));
+
 /**
- * createDiscovery({ client, store }): `client` a logged-in TelegramClient (its `call`), `store` the same get/set
- * storage the client uses. Operations run one at a time and each reads and writes the saved state.
+ * createDiscovery({ client, store, budgetBytes = 160000 }): `client` a logged-in TelegramClient (its `call`), `store`
+ * the same get/set storage the client uses, `budgetBytes` the most the saved value may take (pass more when the
+ * plugin has a larger storage quota). Operations run one at a time; each starts from the in-memory state when this
+ * runtime has one that is newer than (or equal to) the saved copy, else from the saved state.
  */
-export function createDiscovery({ client, store, log = () => {} }) {
+export function createDiscovery({ client, store, budgetBytes = DEFAULT_BUDGET_BYTES, log = () => {} }) {
   if (!client || typeof client.call !== "function") throw mtError("invalid_request", "createDiscovery needs a TelegramClient");
   if (!store || typeof store.get !== "function" || typeof store.set !== "function") throw mtError("invalid_request", "createDiscovery needs a get/set store");
   let chain = Promise.resolve();
   const serial = (fn) => { const run = chain.then(fn, fn); chain = run.then(() => {}, () => {}); return run; };
 
+  if (!Number.isFinite(budgetBytes) || budgetBytes < 1000) throw mtError("invalid_request", "budgetBytes must be at least 1000");
+  // This runtime's state: `raw` is the value it last wrote (or read); `unsaved` when the last write failed.
+  let mem = null;
   const load = () => {
     let raw = null;
     try { raw = store.get(STATE_KEY); } catch { raw = null; }
+    if (mem && (mem.unsaved || raw === mem.raw)) return mem;
     const st = parseState(raw);
-    return { st, index: new Map(st.entries.map((e) => [e.key, e])) };
+    mem = { raw, unsaved: false, st, index: new Map(st.entries.map((e) => [e.key, e])) };
+    return mem;
   };
-  const save = (st, index) => store.set(STATE_KEY, JSON.stringify({ ...publicState(st), entries: sorted(index) }));
+  /**
+   * Writes state + index within budgetBytes (newest entries first, the oldest left out); never throws.
+   * -> { persisted, truncated, error? }
+   */
+  const save = (st, index) => {
+    const head = JSON.stringify(publicState(st));
+    const all = sorted(index);
+    let room = budgetBytes - storedCost(head.slice(0, -1) + ',"entries":[]}');
+    let n = 0;
+    for (; n < all.length; n++) {
+      const cost = storedCost(JSON.stringify(all[n])) - 2 + 1; // without the outer quotes, plus a comma
+      if (cost > room) break;
+      room -= cost;
+    }
+    const text = head.slice(0, -1) + ',"entries":[' + all.slice(0, n).map((e) => JSON.stringify(e)).join(",") + "]}";
+    const truncated = n < all.length;
+    try {
+      store.set(STATE_KEY, text);
+      mem.raw = text;
+      mem.unsaved = false;
+      return { persisted: true, truncated };
+    } catch (e) {
+      mem.unsaved = true;
+      log("discovery state not saved: " + (e && e.message));
+      return { persisted: false, truncated, error: { scope: "storage", code: "storage", message: String(e && e.message) } };
+    }
+  };
   const call = async (body, expect) => decode(await client.call(body), { expect, skip });
 
   /** What one answer teaches: channels (with their access hash) and chat titles. */
@@ -150,10 +221,11 @@ export function createDiscovery({ client, store, log = () => {} }) {
       if (c._ === "channel") {
         const id = String(c.id);
         const known = st.channels[id];
-        titles.set(channelChatId(id), c.title);
-        if (c.min || c.access_hash === undefined) { if (known) known.title = c.title; continue; } // a min hash is not usable
-        if (known) { known.accessHash = String(c.access_hash); known.title = c.title; }
-        else st.channels[id] = { accessHash: String(c.access_hash), title: c.title, pts: 1 };
+        const title = cap(c.title, MAX_CHAT_TITLE);
+        titles.set(channelChatId(id), title);
+        if (c.min || c.access_hash === undefined) { if (known) known.title = title; continue; } // a min hash is not usable
+        if (known) { known.accessHash = String(c.access_hash); known.title = title; }
+        else st.channels[id] = { accessHash: String(c.access_hash), title, pts: 1 };
       } else if (c._ === "channelForbidden") {
         dropChannel(st, index, String(c.id));
       } else if (c._ === "chat" || c._ === "chatForbidden") {
@@ -230,12 +302,15 @@ export function createDiscovery({ client, store, log = () => {} }) {
    * pts 1 on the first run, else from the saved state), then every known channel from its saved pts, at most
    * `maxPages` calls in all. `entries` is the whole index (newest first), `newCount` how many keys it gained.
    * FLOOD_WAIT stops the scan with `floodWait` (seconds) and keeps the progress; `incomplete` means call again.
+   * Also: `persisted` (false when the store refused the write), `truncated` (the saved copy left the oldest entries
+   * out), `errors` [{ scope: "common" | "channel" | "storage", channelId?, code, message }] for what was isolated.
    */
   function refresh({ maxPages = 20 } = {}) {
     return serial(async () => {
       const { st, index } = load();
       const before = new Set(index.keys());
       const titles = new Map();
+      const errors = [];
       let pages = 0, incomplete = false, floodWait;
       const spend = () => { if (pages >= maxPages) { incomplete = true; return false; } pages++; return true; };
       try {
@@ -243,7 +318,14 @@ export function createDiscovery({ client, store, log = () => {} }) {
         let req = st.pts > 0 ? { pts: st.pts, date: st.date, qts: st.qts } : { pts: 1, date: 1, qts: -1 };
         for (;;) {
           if (!spend()) break;
-          const d = await call(getDifference(req), "updates.Difference");
+          let d;
+          try {
+            d = await call(getDifference(req), "updates.Difference");
+          } catch (e) {
+            if (!ISOLATED.has(e.code)) throw e;
+            errors.push({ scope: "common", ...errorOf(e) }); // the common state stays where it was
+            break;
+          }
           if (d._ === "updates.differenceEmpty") {
             if (st.pts === 0) { st.pts = req.pts; st.qts = Math.max(0, req.qts); }
             st.date = d.date; st.seq = d.seq;
@@ -251,7 +333,15 @@ export function createDiscovery({ client, store, log = () => {} }) {
           }
           if (d._ === "updates.differenceTooLong") {
             if (!spend()) break;
-            setState(st, await call(getState(), "updates.State"));
+            let fresh;
+            try {
+              fresh = await call(getState(), "updates.State");
+            } catch (e) {
+              if (!ISOLATED.has(e.code)) throw e;
+              errors.push({ scope: "common", ...errorOf(e) });
+              break;
+            }
+            setState(st, fresh);
             for (const c of Object.values(st.channels)) { c.pts = 1; delete c.backfill; }
             break;
           }
@@ -269,21 +359,30 @@ export function createDiscovery({ client, store, log = () => {} }) {
             try {
               await scanChannel(st, index, titles, id, spend);
             } catch (e) {
-              if (e.code !== "channel_invalid") throw e;
-              log("channel " + id + " dropped: " + e.message);
-              dropChannel(st, index, id);
+              if (e.code === "channel_invalid") {
+                log("channel " + id + " dropped: " + e.message);
+                dropChannel(st, index, id);
+              } else if (ISOLATED.has(e.code)) {
+                // The failed page was not applied, so the channel's pts is still the last one fully read.
+                log("channel " + id + " skipped: " + e.message);
+                errors.push({ scope: "channel", channelId: id, ...errorOf(e) });
+              } else {
+                throw e;
+              }
             }
           }
         }
       } catch (e) {
-        if (e.code !== "flood_wait") { save(st, index); throw e; }
+        if (e.code !== "flood_wait") { save(st, index); throw e; } // save never throws, so `e` is what surfaces
         incomplete = true;
         floodWait = e.seconds;
       }
-      save(st, index);
+      const saved = save(st, index);
+      if (saved.error) errors.push(saved.error);
       let newCount = 0;
       for (const k of index.keys()) if (!before.has(k)) newCount++;
-      const out = { entries: sorted(index), newCount, state: publicState(st) };
+      const out = { entries: sorted(index), newCount, state: publicState(st), persisted: saved.persisted, errors };
+      if (saved.truncated) out.truncated = true;
       if (incomplete) out.incomplete = true;
       if (floodWait !== undefined) out.floodWait = floodWait;
       return out;
@@ -373,6 +472,7 @@ export function createDiscovery({ client, store, log = () => {} }) {
       if (!c) throw mtError("channel_invalid", "the channel is not known to the discovery");
       const titles = new Map();
       const found = [];
+      let saved = null;
       try {
         for (let start = fromId; start < fromId + count; start += BATCH) {
           const ids = [];
@@ -381,9 +481,9 @@ export function createDiscovery({ client, store, log = () => {} }) {
           for (const e of applyFetched(st, index, titles, res, () => channelChatId(id))) found.push({ ...e });
         }
       } finally {
-        save(st, index);
+        saved = save(st, index);
       }
-      return { entries: found, nextId: fromId + count };
+      return { entries: found, nextId: fromId + count, persisted: saved.persisted };
     });
   }
 

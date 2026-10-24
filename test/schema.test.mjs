@@ -292,3 +292,28 @@ test("captured channels.getMessages(1..10) decodes", (t) => {
   assert.ok(o.messages.some((m) => m._ === "messageEmpty"));
   assert.ok(o.messages.some((m) => m._ === "message" && m.media && m.media.document && m.media.document.mime_type === "video/mp4"));
 });
+
+test("nesting depth is bounded: 64 levels decode, a deeper answer is `protocol` (no stack blow-up)", () => {
+  const dec = createDecoder({ types: ["Node"], ctors: "a1 node 0 flags:# next:flags.0?0" });
+  const nested = (n) => {
+    const parts = [];
+    for (let i = 0; i < n; i++) parts.push(S.raw.u32(0xa1), S.raw.u32(i < n - 1 ? 1 : 0));
+    return u8(Buffer.concat(parts));
+  };
+  let o = dec.decode(nested(64));
+  let depth = 1;
+  while (o.next) { o = o.next; depth++; }
+  assert.equal(depth, 64);
+  assert.throws(() => dec.decode(nested(65)), (e) => e.code === "protocol" && /deep/.test(e.message));
+  assert.throws(() => dec.decode(nested(100000)), (e) => e.code === "protocol" && /deep/.test(e.message));
+  // The same bound in skip (walk) mode, and the decoder is usable afterwards.
+  assert.throws(() => dec.decode(nested(65), { skip: () => true }), (e) => e.code === "protocol" && /deep/.test(e.message));
+  assert.equal(dec.decode(nested(3))._, "node");
+});
+
+test("with `expect`, a top-level rpc_error is thrown as its typed error", () => {
+  const err = u8(S.rpcError(400, "CHANNEL_INVALID"));
+  assert.throws(() => decode(err, { expect: "updates.State" }), (e) => e.code === "channel_invalid" && e.rpc === "CHANNEL_INVALID");
+  assert.throws(() => decode(u8(S.rpcError(420, "FLOOD_WAIT_3")), { expect: "updates.Difference" }), (e) => e.code === "flood_wait" && e.seconds === 3);
+  assert.equal(decode(err)._, "rpc_error");
+});

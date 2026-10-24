@@ -10,6 +10,7 @@ import { FakeBotWorld } from "../testkit/fake-world.mjs";
 import * as S from "../testkit/tl-serializer.mjs";
 import { TelegramClient } from "../src/mtproto/client.js";
 import { createDiscovery, chatIdOf } from "../src/mtproto/discovery.js";
+import { mtError } from "../src/mtproto/errors.js";
 
 installKino();
 
@@ -19,14 +20,32 @@ const CH2 = 2000000001n, CH2_HASH = 77n;
 const FIXTURES = "/Users/cristian/telegram-mtproto-spike/fixtures";
 
 let tg, world, store, client;
-async function setup(worldOptions) {
+async function setup(worldOptions, { storeLimit, budgetBytes } = {}) {
   world = new FakeBotWorld(worldOptions);
   tg.api = world;
-  store = memoryStore();
+  store = storeLimit ? limitedStore(storeLimit) : memoryStore();
   client = new TelegramClient({ apiId: CREDS.apiId, publicKeys: fakeRsa().publicKeys, timeoutMs: 3000, store });
   await client.connect(2);
   await client.botLogin(CREDS);
-  return createDiscovery({ client, store });
+  return createDiscovery({ client, store, budgetBytes });
+}
+/** Like Kino's PluginStorage: refuses a write when the JSON of the whole map would be over `limit` bytes. */
+function limitedStore(limit) {
+  const m = new Map();
+  return {
+    get: (k) => (m.has(k) ? m.get(k) : null),
+    set: (k, v) => {
+      const next = new Map(m).set(k, String(v));
+      if (Buffer.byteLength(JSON.stringify(Object.fromEntries(next))) > limit) throw new Error("plugin storage full");
+      m.set(k, String(v));
+    },
+    remove: (k) => { m.delete(k); },
+    keys: () => [...m.keys()],
+  };
+}
+function manyVideos(n) {
+  world.addChannel({ id: CH, accessHash: CH_HASH, title: "Películas" });
+  for (let i = 0; i < n; i++) world.post(CH, { text: "Film " + i, doc: world.doc({ mime: "video/mp4", size: 100 + i, fileName: "film-" + i + ".mp4" }) });
 }
 beforeEach(() => { tg = new FakeTelegram().install(); });
 afterEach(async () => { if (client) await client.close(); client = null; tg.restore(); });
@@ -79,7 +98,7 @@ test("first refresh: getDifference(pts=1, date=1, qts=-1), every channel from pt
   assert.equal(m.chatId, chatId);
   assert.equal(m.msgId, ids.movie);
   assert.equal(m.chatTitle, "Películas");
-  assert.equal(m.caption, "Great movie\nwith a second line");
+  assert.equal(m.caption, "Great movie", "the first line of the caption");
   assert.equal(m.size, 734003200);
   assert.equal(m.mime, "video/mp4");
   assert.equal(m.duration, 5025.5);
@@ -303,4 +322,159 @@ test("captured live answers replayed: refresh finds exactly one video (video/mp4
   // refetch through the captured channels.getMessages answer.
   const again = await d.refetch(e);
   assert.equal(again.key, e.key);
+});
+
+// ---- fix round 1: storage limits, failing channels, untested paths ----
+
+test("budgetBytes: the saved index never exceeds it, the oldest entries go first, the result keeps them all", async () => {
+  const d = await setup({ diffPage: 50, channelPage: 50 }, { budgetBytes: 4000 });
+  manyVideos(30);
+  const res = await d.refresh();
+  assert.equal(res.truncated, true);
+  assert.equal(res.persisted, true);
+  assert.equal(res.entries.length, 30, "the in-memory result keeps every entry");
+  const raw = store.get("tg.discovery");
+  assert.ok(Buffer.byteLength(JSON.stringify(raw)) <= 4000, String(raw.length));
+  const kept = saved().entries;
+  assert.ok(kept.length > 0 && kept.length < 30, String(kept.length));
+  const newest = res.entries.slice(0, kept.length).map((e) => e.key);
+  assert.deepEqual(kept.map((e) => e.key), newest, "the newest entries are the ones saved");
+  assert.equal(saved().pts, world.pts, "the update state is saved in full");
+  // Same runtime: the full index is still there.
+  assert.equal((await d.refresh()).entries.length, 30);
+  // A new runtime only has what fitted.
+  const again = await createDiscovery({ client, store, budgetBytes: 4000 }).entries();
+  assert.equal(again.length, kept.length);
+});
+
+test("a store that refuses the write: no throw, persisted false, the progress stays in memory, other keys untouched", async () => {
+  const d = await setup({ diffPage: 50, channelPage: 50 }, { storeLimit: 3000 });
+  manyVideos(30);
+  const budgetBefore = store.get("mtproto.botLogins");
+  assert.ok(budgetBefore);
+  const res = await d.refresh();
+  assert.equal(res.persisted, false);
+  assert.equal(res.entries.length, 30);
+  assert.ok(res.errors.some((e) => e.scope === "storage" && /full/.test(e.message)));
+  assert.equal(store.get("tg.discovery"), null);
+  assert.equal(store.get("mtproto.botLogins"), budgetBefore, "the client's key is untouched");
+  // The next refresh in this runtime continues from the in-memory state instead of redoing pts 1.
+  tg.requests.length = 0;
+  world.post(CH, { doc: world.doc({ mime: "video/mp4", size: 5, fileName: "late.mp4" }) });
+  const res2 = await d.refresh();
+  const g = calls("getDifference")[0];
+  assert.notEqual(g.pts, 1);
+  assert.equal(res2.newCount, 1);
+  assert.equal(res2.entries.length, 31);
+  assert.equal(res2.persisted, false);
+});
+
+test("entry text is capped: title and caption 200, chatTitle 100", async () => {
+  const d = await setup();
+  world.addChannel({ id: CH, accessHash: CH_HASH, title: "T".repeat(300) });
+  world.post(CH, { text: "c".repeat(500) + "\nsecond", doc: world.doc({ mime: "video/mp4", size: 5, fileName: "f".repeat(500) + ".mp4" }) });
+  const [e] = (await d.refresh()).entries;
+  assert.equal(e.title.length, 200);
+  assert.equal(e.caption.length, 200);
+  assert.equal(e.chatTitle.length, 100);
+});
+
+test("an error while saving after a failure never hides the original error", async () => {
+  const failing = { get: () => null, set: () => { throw new Error("plugin storage full"); } };
+  const fakeClient = { call: async () => { throw mtError("closed", "socket closed"); } };
+  const d = createDiscovery({ client: fakeClient, store: failing });
+  await assert.rejects(d.refresh(), (e) => e.code === "closed");
+});
+
+test("a channel whose answer cannot be parsed is isolated: the others go on, its pts stays, it retries next time", async () => {
+  const d = await setup();
+  seedChannel();
+  world.addChannel({ id: CH2, accessHash: CH2_HASH, title: "Series" });
+  world.post(CH2, { doc: world.doc({ mime: "video/mp4", size: 5, fileName: "ep1.mp4" }) });
+  const real = world.getChannelDifference.bind(world);
+  const bogus = Buffer.concat([S.raw.u32(0xdeadbeef), S.raw.i32(1)]);
+  world.getChannelDifference = (req) => (req.channelId === CH ? S.channelDifference({ pts: 9, otherUpdates: [bogus] }) : real(req));
+  const res = await d.refresh();
+  // CH's posts still arrive through the common box; what matters is that CH2 was scanned after CH failed.
+  assert.ok(res.entries.some((e) => e.title === "ep1"));
+  assert.ok(calls("getChannelDifference").some((r) => r.channelId === CH2));
+  assert.deepEqual(res.errors.map(({ channelId, code }) => ({ channelId, code })), [{ channelId: String(CH), code: "protocol" }]);
+  assert.equal(saved().channels[String(CH)].pts, 1, "never past data that could not be parsed");
+  // An rpc error (CHAT_ADMIN_REQUIRED) is isolated the same way.
+  world.getChannelDifference = (req) => { if (req.channelId === CH) throw { rpc: [400, "CHAT_ADMIN_REQUIRED"] }; return real(req); };
+  const res2 = await d.refresh();
+  assert.deepEqual(res2.errors.map((e) => e.code), ["rpc_error"]);
+  // Fixed: the channel is read again from its old pts.
+  world.getChannelDifference = real;
+  tg.requests.length = 0;
+  const res3 = await d.refresh();
+  assert.equal(calls("getChannelDifference").find((r) => r.channelId === CH).pts, 1);
+  assert.deepEqual(res3.errors, []);
+  assert.equal(res3.entries.length, 4);
+});
+
+test("an unparsable common-box answer keeps the common state and the channels are still scanned", async () => {
+  const d = await setup();
+  seedChannel();
+  await d.refresh();
+  const ptsBefore = saved().pts;
+  const real = world.getDifference.bind(world);
+  world.getDifference = () => S.difference({ otherUpdates: [Buffer.concat([S.raw.u32(0xdeadbeef)])], state: world.stateBytes() });
+  world.post(CH, { doc: world.doc({ mime: "video/mp4", size: 5, fileName: "new.mp4" }) });
+  const res = await d.refresh();
+  assert.ok(res.errors.some((e) => e.scope === "common" && e.code === "protocol"));
+  assert.equal(saved().pts, ptsBefore);
+  assert.ok(res.entries.some((e) => e.title === "new"), "found through the channel difference");
+  world.getDifference = real;
+});
+
+test("private chats through other_updates: updateNewMessage adds, updateEditMessage updates and removes", async () => {
+  const d = await setup();
+  world.users.set("555", { id: 555n, firstName: "Ana" });
+  const pm = (text, doc) => (doc ? S.messageWithDocument({ id: 7, peer: S.peerUser(555n), date: 100, text, doc, post: false }) : S.message({ id: 7, peer: S.peerUser(555n), date: 100, text }));
+  const doc = world.doc({ mime: "video/mp4", size: 50, video: { duration: 1, w: 2, h: 3 } });
+  const users = [S.user({ id: 555n, firstName: "Ana" })];
+  let step = 0;
+  world.getDifference = () => {
+    step++;
+    if (step === 1) return S.difference({ otherUpdates: [S.updateNewMessage(pm("Home video", doc), 2)], users, state: S.state({ pts: 2, date: 100 }) });
+    if (step === 2) return S.difference({ otherUpdates: [S.updateEditMessage(pm("Renamed", doc), 3)], users, state: S.state({ pts: 3, date: 101 }) });
+    return S.difference({ otherUpdates: [S.updateEditMessage(pm("no more video"), 4)], users, state: S.state({ pts: 4, date: 102 }) });
+  };
+  const r1 = await d.refresh();
+  assert.deepEqual(r1.entries.map((e) => [e.key, e.title, e.chatTitle]), [["555:7", "Home video", "Ana"]]);
+  const r2 = await d.refresh();
+  assert.equal(r2.entries[0].caption, "Renamed");
+  assert.equal(r2.newCount, 0);
+  const r3 = await d.refresh();
+  assert.deepEqual(r3.entries, []);
+});
+
+test("channelDifferenceTooLong that is not final: paging goes on from the dialog's pts", async () => {
+  const d = await setup({ channelPage: 50 });
+  seedChannel();
+  const ch = world.channels.get(String(CH));
+  ch.tooLongOnce = { final: false, ptsBack: 2 };
+  await d.refresh();
+  const chCalls = calls("getChannelDifference");
+  assert.equal(chCalls[1].pts, ch.pts - 2);
+  assert.equal(saved().channels[String(CH)].pts, ch.pts);
+  assert.equal((await d.entries()).length, 3);
+});
+
+test("a differenceTooLong while a backfill cursor is stored clears it and rescans the channel from pts 1", async () => {
+  const d = await setup();
+  seedChannel();
+  world.channels.get(String(CH)).tooLongOnce = true;
+  const first = await d.refresh({ maxPages: 4 }); // 3 common pages + the channel's tooLong: no page left for the backfill
+  assert.equal(first.incomplete, true);
+  assert.deepEqual(saved().channels[String(CH)].backfill, { next: 1, to: 8 });
+  world.tooLongOnce = true;
+  tg.requests.length = 0;
+  const res = await d.refresh();
+  assert.equal(calls("getState").length, 1);
+  assert.equal(calls("getChannelDifference")[0].pts, 1);
+  assert.equal(calls("channelsGetMessages").length, 0);
+  assert.equal(saved().channels[String(CH)].backfill, undefined);
+  assert.equal(res.entries.length, 3);
 });

@@ -1,6 +1,6 @@
 // TelegramClient.call(body): one raw API call on the home DC for the discovery (updates.*, channels.getMessages,
 // messages.getMessages), against the fake DC. It must not open a way around the 7a guarantees: no call before a login,
-// no auth.* method (the login budget lives in botLogin), no hand-made invokeWithLayer/initConnection wrapping.
+// and only the methods on the frozen allowlist in requests.js (no auth.*, no wrappers, no gzip_packed or container).
 import { test, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { installKino, memoryStore } from "../testkit/kino.mjs";
@@ -9,6 +9,9 @@ import * as S from "../testkit/tl-serializer.mjs";
 import { TelegramClient } from "../src/mtproto/client.js";
 import { Writer, CTOR } from "../src/mtproto/tl.js";
 import { fromRpcError, CODES } from "../src/mtproto/errors.js";
+import * as R from "../src/mtproto/requests.js";
+import { ALLOWED_CALLS } from "../src/mtproto/requests.js";
+import { gzipSync } from "node:zlib";
 
 installKino();
 
@@ -43,15 +46,45 @@ test("call refuses before connect and before a login, and refuses non-bytes, wit
   await c.close();
 });
 
-test("call refuses auth.* methods and hand-made invokeWithLayer/initConnection wrapping", async () => {
+test("call is an allowlist: only the five discovery methods go out; everything else is refused before sending", async () => {
+  tg.api = {
+    getState: () => S.state({ pts: 1, date: 1 }),
+    getDifference: () => S.differenceEmpty({ date: 1 }),
+    getChannelDifference: () => S.channelDifferenceEmpty({ pts: 1 }),
+    channelsGetMessages: () => S.channelMessages({ pts: 1, count: 0 }),
+    messagesGetMessages: () => S.messagesMessages({}),
+  };
   const c = await newClient().connect(2);
   await c.botLogin(CREDS);
-  const before = tg.dc(2).stats.botLogins;
-  for (const id of [CTOR.importBotAuthorization, CTOR.exportAuthorization, CTOR.importAuthorization, CTOR.invokeWithLayer, CTOR.initConnection, 0x3e72ba19 /* auth.logOut */, 0xbf9459b7 /* invokeWithoutUpdates */]) {
-    await assert.rejects(c.call(new Writer().int(id).int(0).done()), (e) => e.code === "invalid_request", id.toString(16));
+  assert.deepEqual([...ALLOWED_CALLS].sort(), [0xedd4882a, 0x19c2f763, 0x03173d78, 0xad8c9a23, 0x63c66506].sort());
+  assert.ok(Object.isFrozen(ALLOWED_CALLS));
+  await c.call(R.getState());
+  await c.call(R.getDifference({ pts: 1, date: 1, qts: -1 }));
+  await c.call(R.getChannelDifference({ channelId: 1n, accessHash: 2n, pts: 1 }));
+  await c.call(R.channelsGetMessages({ channelId: 1n, accessHash: 2n, ids: [1] }));
+  await c.call(R.messagesGetMessages([1]));
+  assert.deepEqual(tg.requests.map((r) => r.method), ["getState", "getDifference", "getChannelDifference", "channelsGetMessages", "messagesGetMessages"]);
+  const before = { ...tg.dc(2).stats, layers: undefined };
+  const gzipOf = (body) => Buffer.concat([S.raw.u32(0x3072cfa1), S.raw.tlBytes(gzipSync(Buffer.from(body)))]);
+  const refused = {
+    "auth.logOut": new Writer().int(0x3e72ba19).done(),
+    invokeWithLayer: new Writer().int(CTOR.invokeWithLayer).int(198).raw(R.getState()).done(),
+    initConnection: new Writer().int(CTOR.initConnection).int(0).done(),
+    invokeAfterMsg: new Writer().int(0xcb9f372d).long(1n).raw(R.getState()).done(),
+    invokeWithoutUpdates: new Writer().int(0xbf9459b7).raw(R.getState()).done(),
+    "gzip_packed(auth.logOut)": new Uint8Array(gzipOf(new Writer().int(0x3e72ba19).done())),
+    "gzip_packed(getState)": new Uint8Array(gzipOf(R.getState())),
+    msg_container: new Writer().int(0x73f1f8dc).int(1).long(1n).int(1).int(4).raw(R.getState()).done(),
+    "messages.deleteMessages": new Writer().int(0xe58e95d2).int(1).vectorInt([1]).done(),
+    "channels.leaveChannel": new Writer().int(0xf836aa95).int(0xf35aec28).long(1n).long(2n).done(),
+    importBotAuthorization: new Writer().int(CTOR.importBotAuthorization).int(0).done(),
+    "messages.getHistory": new Writer().int(0x4423e6c5).done(),
+  };
+  for (const [name, body] of Object.entries(refused)) {
+    await assert.rejects(c.call(body), (e) => e.code === "invalid_request" && /not allowed/.test(e.message), name);
   }
-  assert.equal(tg.dc(2).stats.botLogins, before);
-  assert.equal(tg.dc(2).stats.exportAuth, 0);
+  assert.equal(tg.requests.length, 5, "nothing else reached the server");
+  assert.equal(tg.dc(2).stats.botLogins, before.botLogins);
   await c.close();
 });
 
@@ -62,7 +95,8 @@ test("server errors come back typed: flood_wait, channel_invalid, bot_method_inv
   await assert.rejects(c.call(GET_STATE), (e) => e.code === "channel_invalid" && e.rpc === "CHANNEL_INVALID");
   tg.dc(2).once("getState", () => ({ error: [420, "FLOOD_WAIT_9"] }));
   await assert.rejects(c.call(GET_STATE), (e) => e.code === "flood_wait" && e.seconds === 9);
-  await assert.rejects(c.call(new Writer().int(0x4423e6c5).done()), (e) => e.code === "bot_method_invalid");
+  tg.api.getState = () => { throw { rpc: [400, "BOT_METHOD_INVALID"] }; };
+  await assert.rejects(c.call(GET_STATE), (e) => e.code === "bot_method_invalid");
   await c.close();
 });
 

@@ -5,6 +5,6 @@
   "description": "Kino plugin: a personal Telegram video library over MTProto (bot login, chunked downloads).",
   "scripts": {
     "build": "node scripts/build.mjs",
-    "test": "node scripts/build.mjs && node --test test/"
+    "test": "node scripts/build.mjs && node --test"
   }
 }

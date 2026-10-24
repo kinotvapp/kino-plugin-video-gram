@@ -143,11 +143,14 @@ export class FakeBotWorld {
   getChannelDifference(req) {
     const ch = this.checkChannel(req);
     if (ch.tooLongOnce) {
+      // true, or { final: false, ptsBack: n }: a dialog pts n events behind, so the client must page on from it.
+      const opt = typeof ch.tooLongOnce === "object" ? ch.tooLongOnce : {};
       ch.tooLongOnce = false;
       const alive = [...ch.messages.values()];
       const top = alive.length ? alive[alive.length - 1].id : 0;
       return S.channelDifferenceTooLong({
-        dialog: S.dialog({ peer: S.peerChannel(ch.id), topMessage: top, pts: ch.pts }),
+        final: opt.final !== false,
+        dialog: S.dialog({ peer: S.peerChannel(ch.id), topMessage: top, pts: ch.pts - (opt.ptsBack || 0) }),
         messages: alive.slice(-2).reverse().map((m) => this.renderChannelMessage(ch, m)),
         chats: [this.chatOf(ch)],
       });

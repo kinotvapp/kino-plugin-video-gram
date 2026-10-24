@@ -7,6 +7,19 @@
 // inputChannel#f35aec28 channel_id:long access_hash:long   inputMessageID#a676a322 id:int   channelMessagesFilterEmpty#94d42ee7
 import { Writer, CTOR } from "./tl.js";
 
+/**
+ * The ONLY methods TelegramClient.call sends: the five the discovery needs. A new method for the plugin shell is added
+ * here, in this one list, never per call site. Anything else (auth methods, the invoke and initConnection wrappers, gzip_packed,
+ * msg_container, destructive methods) is refused by the client before a byte goes out.
+ */
+export const ALLOWED_CALLS = Object.freeze([
+  0xedd4882a, // updates.getState
+  0x19c2f763, // updates.getDifference
+  0x03173d78, // updates.getChannelDifference
+  0xad8c9a23, // channels.getMessages
+  0x63c66506, // messages.getMessages
+]);
+
 const big = (v) => (typeof v === "bigint" ? v : BigInt(v));
 const inputChannel = (w, channelId, accessHash) => w.int(0xf35aec28).long(big(channelId)).long(big(accessHash));
 const inputMessageIds = (w, ids) => { w.int(CTOR.vector).int(ids.length); for (const id of ids) w.int(0xa676a322).int(id); return w; };
