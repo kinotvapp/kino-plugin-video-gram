@@ -14,6 +14,8 @@ export const CODES = Object.freeze([
   "rpc_error",              // { status, rpc } any other server error
   "invalid_request",        // bad arguments from the caller (offset/limit rules, missing fields)
   "login_budget",           // { seconds } too many bot logins on this device in the last hour
+  "channel_invalid",        // the channel is unknown, its access hash is wrong, or the bot lost access (CHANNEL_INVALID/PRIVATE)
+  "bot_method_invalid",     // a method bots may not call (BOT_METHOD_INVALID)
 ]);
 
 export function mtError(code, message, extra) {
@@ -33,6 +35,8 @@ export function fromRpcError({ code, message }) {
   if ((n = tail(/^FILE_MIGRATE_(\d+)$/)) !== null) return mtError("file_migrate", m, { dc: n, status: code, rpc: m });
   if ((n = tail(/^(?:USER|PHONE|NETWORK)_MIGRATE_(\d+)$/)) !== null) return mtError("user_migrate", m, { dc: n, status: code, rpc: m });
   if (/^FILE_REFERENCE_/.test(m)) return mtError("file_reference_expired", m, { status: code, rpc: m });
+  if (m === "CHANNEL_INVALID" || m === "CHANNEL_PRIVATE") return mtError("channel_invalid", m, { status: code, rpc: m });
+  if (m === "BOT_METHOD_INVALID") return mtError("bot_method_invalid", m, { status: code, rpc: m });
   if (code === 401 || /^AUTH_KEY_(UNREGISTERED|INVALID|DUPLICATED)$/.test(m) || m === "SESSION_REVOKED") return mtError("auth_key_unregistered", m, { status: code, rpc: m });
   return mtError("rpc_error", code + " " + m, { status: code, rpc: m });
 }

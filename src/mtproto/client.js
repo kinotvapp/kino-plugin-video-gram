@@ -58,6 +58,15 @@ function decodeState(v) {
   return s;
 }
 
+// Constructor ids `call` refuses: every auth.* method (logins go through botLogin and its budget; authorizations
+// through getFile's DC hops), plus the invokeWith*/initConnection wrappers the client adds itself.
+const DENIED_CALLS = new Set([
+  0xa677244f, 0xaac7b717, 0x8d52a951, 0x3e72ba19, 0x9fab0d1a, 0xe5bfffcd, 0xa57a7dad, 0xcdd42a05, 0x67a3ff2c, 0xd18b4d16,
+  0xd897bc66, 0x37096c70, 0xcae47523, 0x1f040578, 0x8e48a188, 0xb7e085fe, 0x95ac5ce4, 0xe894ad4d, 0x0d36bf79, 0x2db873a9,
+  0x8e39261e, 0x7e960193, 0xcb9deff6, // auth.*
+  0xcb9f372d, 0x3dc4b4f0, 0xc1cd5ea9, 0xda9b0d0d, 0xbf9459b7, 0x365275f2, 0xaca9fd2e, 0xdd289f8e, 0x1df92984, 0x0dae54f8, // invoke*, initConnection
+]);
+
 const DEFAULT_DEVICE = Object.freeze({ deviceModel: "Kino", systemVersion: "Android", appVersion: "1.0", systemLangCode: "en", langPack: "", langCode: "en" });
 
 function checkRange(offset, limit) {
@@ -217,6 +226,27 @@ export class TelegramClient {
           throw e;
         }
       }
+    });
+  }
+
+  /**
+   * One raw API call on the home DC for the logged-in bot: `body` is the serialized method (a Uint8Array), the answer
+   * is the result's bytes (unzipped; decode them with schema/reader.js). Server errors come back typed (errors.js).
+   * Refused with `invalid_request` before a login, and for auth methods or the invokeWith... and initConnection wrappers.
+   */
+  call(body) {
+    try {
+      if (!(body instanceof Uint8Array) || body.length < 4) throw mtError("invalid_request", "call needs the serialized method as a Uint8Array");
+      const id = (body[0] | (body[1] << 8) | (body[2] << 16) | (body[3] << 24)) >>> 0;
+      if (DENIED_CALLS.has(id)) throw mtError("invalid_request", "call does not send auth.* methods or invoke wrappers");
+    } catch (e) {
+      return Promise.reject(e);
+    }
+    return this.serial(async () => {
+      if (!this.homeDc) throw mtError("invalid_request", "connect first");
+      const st = this.dcs.get(this.homeDc);
+      if (!st || !st.loggedIn) throw mtError("invalid_request", "log in first");
+      return this.invoke(this.homeDc, body);
     });
   }
 

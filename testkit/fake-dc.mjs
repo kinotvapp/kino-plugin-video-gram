@@ -65,6 +65,10 @@ export class FakeTelegram {
     this.dcs = new Map();
     this.exported = new Map();
     this.files = new Map();
+    // `api`: handlers for the update/message methods (testkit/fake-world.mjs or a replay), each (args) -> Buffer, or
+    // throwing { rpc: [code, message] }. `requests` records every such call: { method, ...args }.
+    this.api = null;
+    this.requests = [];
     this.fake = null;
   }
   dc(id) {
@@ -349,7 +353,65 @@ class DcConnection {
       if (offset % 4096 || limit % 4096 || 1048576 % limit || Math.floor(offset / 1048576) !== Math.floor((offset + limit - 1) / 1048576)) throw { rpc: [400, "LIMIT_INVALID"] };
       return new Writer().int(CTOR.uploadFile).int(0xb3cea0e4).int(dc.now()).bytes(f.data.subarray(offset, offset + limit)).done();
     }
+    const call = readApiCall(ctor, r);
+    if (call) {
+      if (!entry.authorized) throw { rpc: [401, "AUTH_KEY_UNREGISTERED"] };
+      dc.cluster.requests.push(call);
+      if (call.method === "messagesGetHistory") throw { rpc: [400, "BOT_METHOD_INVALID"] };
+      const api = dc.cluster.api;
+      if (!api || typeof api[call.method] !== "function") throw { rpc: [400, "METHOD_NOT_IN_FAKE_DC"] };
+      return new Uint8Array(api[call.method](call));
+    }
     throw { rpc: [400, "METHOD_NOT_IN_FAKE_DC"] };
+  }
+}
+
+// The update/message methods the discovery sends, read field by field from their layer-198 TL lines:
+// updates.getState#edd4882a = updates.State
+// updates.getDifference#19c2f763 flags:# pts:int pts_limit:flags.1?int pts_total_limit:flags.0?int date:int qts:int qts_limit:flags.2?int
+// updates.getChannelDifference#3173d78 flags:# force:flags.0?true channel:InputChannel filter:ChannelMessagesFilter pts:int limit:int
+// channels.getMessages#ad8c9a23 channel:InputChannel id:Vector<InputMessage>
+// messages.getMessages#63c66506 id:Vector<InputMessage>
+// messages.getHistory#4423e6c5 (bots: BOT_METHOD_INVALID)
+// inputChannel#f35aec28 channel_id:long access_hash:long   inputMessageID#a676a322 id:int   channelMessagesFilterEmpty#94d42ee7
+const API = { getState: 0xedd4882a, getDifference: 0x19c2f763, getChannelDifference: 0x03173d78, channelsGetMessages: 0xad8c9a23, messagesGetMessages: 0x63c66506, messagesGetHistory: 0x4423e6c5 };
+function readInputChannel(r) {
+  const c = r.int();
+  if (c !== 0xf35aec28) throw { rpc: [400, "CHANNEL_INVALID"] };
+  return { channelId: r.long(), accessHash: r.long() };
+}
+function readInputMessageIds(r) {
+  const n = r.vectorHeader();
+  const ids = [];
+  for (let i = 0; i < n; i++) {
+    if (r.int() !== 0xa676a322) throw { rpc: [400, "MESSAGE_IDS_EMPTY"] };
+    ids.push(r.int32());
+  }
+  return ids;
+}
+function readApiCall(ctor, r) {
+  switch (ctor) {
+    case API.getState: return { method: "getState" };
+    case API.getDifference: {
+      const flags = r.int();
+      const pts = r.int32();
+      if (flags & 2) r.int();
+      if (flags & 1) r.int();
+      const date = r.int32(), qts = r.int32();
+      if (flags & 4) r.int();
+      return { method: "getDifference", pts, date, qts };
+    }
+    case API.getChannelDifference: {
+      const flags = r.int();
+      const ch = readInputChannel(r);
+      const filter = r.int();
+      if (filter !== 0x94d42ee7) throw { rpc: [400, "FILTER_NOT_SUPPORTED"] };
+      return { method: "getChannelDifference", force: (flags & 1) !== 0, ...ch, pts: r.int32(), limit: r.int32() };
+    }
+    case API.channelsGetMessages: { const ch = readInputChannel(r); return { method: "channelsGetMessages", ...ch, ids: readInputMessageIds(r) }; }
+    case API.messagesGetMessages: return { method: "messagesGetMessages", ids: readInputMessageIds(r) };
+    case API.messagesGetHistory: return { method: "messagesGetHistory" };
+    default: return null;
   }
 }
 
@@ -363,6 +425,7 @@ function methodName(body) {
     if (c === CTOR.uploadGetFile) return "getFile";
     if (c === CTOR.exportAuthorization) return "exportAuth";
     if (c === CTOR.importAuthorization) return "importAuth";
+    for (const [name, id] of Object.entries(API)) if (c === id) return name;
     return "other";
   }
 }
