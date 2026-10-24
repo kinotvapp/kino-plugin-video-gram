@@ -312,7 +312,7 @@ test("USER_MIGRATE then a failed login there leaves the home DC where it was", a
   tg.dc(2).userMigrateTo = 4;
   tg.dc(4).once("login", () => ({ error: [400, "ACCESS_TOKEN_INVALID"] }));
   const c = await newClient().connect(2);
-  await assert.rejects(c.botLogin(CREDS), (e) => e.code === "rpc_error" && e.rpc === "ACCESS_TOKEN_INVALID");
+  await assert.rejects(c.botLogin(CREDS), (e) => e.code === "token_invalid" && e.rpc === "ACCESS_TOKEN_INVALID");
   assert.equal(c.exportState().homeDc, 2);
   await c.close();
 });

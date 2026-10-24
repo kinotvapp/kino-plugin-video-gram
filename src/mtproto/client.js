@@ -7,7 +7,7 @@ import { createAuthKey } from "./authkey.js";
 import { Session } from "./session.js";
 import {
   CTOR, LAYER, invokeWithLayer, initConnection, importBotAuthorization, exportAuthorization, importAuthorization,
-  inputDocumentFileLocation, uploadGetFile, parseUploadFile, parseAuthorization, parseExportedAuthorization,
+  inputDocumentFileLocation, uploadGetFile, parseUploadFile, parseUploadFileHex, parseAuthorization, parseExportedAuthorization,
 } from "./tl.js";
 import { mtError } from "./errors.js";
 import { ALLOWED_CALLS } from "./requests.js";
@@ -168,19 +168,19 @@ export class TelegramClient {
   /**
    * One API call on DC `dc`; the first call of each connection goes inside invokeWithLayer(initConnection(...)).
    * A closed socket is retried once on a new connection unless `retry` is false (the bot login retries by itself, so
-   * that every attempt spends the budget).
+   * that every attempt spends the budget). `hex` answers the result as a hex string (Session.call).
    */
-  async invoke(dc, body, { retry = true } = {}) {
+  async invoke(dc, body, { retry = true, hex = false } = {}) {
     const c = await this.conn(dc);
     const wrapped = c.inited ? body : invokeWithLayer(LAYER, initConnection({ apiId: this.apiId, ...this.device }, body));
     try {
-      const res = await c.session.call(wrapped, { timeoutMs: this.timeoutMs });
+      const res = await c.session.call(wrapped, { timeoutMs: this.timeoutMs, hex });
       c.inited = true;
       return res;
     } catch (e) {
       if (e.code === "closed" && retry) {
         await this.drop(dc);
-        return this.invoke(dc, body, { retry: false });
+        return this.invoke(dc, body, { retry: false, hex });
       }
       if (e.code === "timeout" || e.code === "closed" || e.code === "protocol") await this.drop(dc);
       if (e.code === "auth_key_unregistered") {
@@ -263,9 +263,10 @@ export class TelegramClient {
    * `limit` bytes of a document from `offset` (fewer at the end of the file), via upload.getFile with an
    * InputDocumentFileLocation. `loc` is { id, accessHash, fileReference (Uint8Array), dcId? }. Offset a multiple of
    * 4096, limit a multiple of 4096 dividing 1 MiB, never across a 1 MiB boundary (Telegram's rules, checked here first).
-   * Follows FILE_MIGRATE_n; FLOOD_WAIT_n, FILE_REFERENCE_EXPIRED... come back as typed errors.
+   * Follows FILE_MIGRATE_n; FLOOD_WAIT_n, FILE_REFERENCE_EXPIRED... come back as typed errors. With `{ hex: true }`
+   * the bytes come back as a hex string, sliced out of the decrypted answer with no JS pass over them.
    */
-  getFile(loc, offset, limit) {
+  getFile(loc, offset, limit, { hex = false } = {}) {
     try {
       if (!loc || loc.id === undefined || loc.accessHash === undefined || !(loc.fileReference && typeof loc.fileReference.length === "number")) {
         throw mtError("invalid_request", "a location needs id, accessHash and fileReference");
@@ -281,10 +282,11 @@ export class TelegramClient {
       for (let attempt = 0; attempt < 4; attempt++) {
         try {
           await this.authorize(dc);
-          const file = parseUploadFile(await this.invoke(dc, body));
+          const answer = await this.invoke(dc, body, { hex });
+          const file = hex ? parseUploadFileHex(answer) : parseUploadFile(answer);
           if (file.ctor === CTOR.uploadFileCdnRedirect) throw mtError("protocol", "CDN redirects are not supported");
           if (file.ctor !== CTOR.uploadFile) throw mtError("protocol", "unexpected answer to upload.getFile");
-          return file.bytes;
+          return hex ? file.bytesHex : file.bytes;
         } catch (e) {
           if (e.code === "file_migrate" && e.dc !== dc) { dc = e.dc; continue; }
           if (e.code === "auth_key_unregistered" && dc !== this.homeDc) continue; // authorize() again (a new key if it was dropped)

@@ -1,7 +1,7 @@
 // TL serialization for the constructors this plugin uses (MTProto layer 198), ported from the spike's W/R
 // (telegram-mtproto-spike/mtproto.mjs) to Uint8Array. Readers of server answers never crash on a constructor they do
 // not know: they answer { ctor, raw } (or mark what they read as `incomplete`) and leave the decision to the caller.
-import { concat, utf8, fromUtf8, readU32LE, readI32LE, writeU32LE, writeI64LE, readI64LE } from "./bytes.js";
+import { concat, utf8, fromUtf8, fromHex, readU32LE, readI32LE, writeU32LE, writeI64LE, readI64LE } from "./bytes.js";
 
 export const LAYER = 198;
 
@@ -192,6 +192,37 @@ export function parseUploadFile(u8) {
   const fileType = r.int();
   const mtime = r.int();
   return { ctor, fileType, mtime, bytes: r.bytes() };
+}
+
+// ---- the same reads on hex (the download path: only the few header bytes are decoded, the data is a native slice) ----
+
+/** The uint32 (little endian) at byte `o` of a hex string. */
+export function hexU32(hex, o) {
+  if (hex.length < (o + 4) * 2) throw TYPED_ERROR("TL read past the end");
+  return readU32LE(fromHex(hex.slice(o * 2, o * 2 + 8)), 0);
+}
+
+/** The TL `bytes` at byte `o` of a hex string: { hex, end } (`end` = the byte offset after its padding). */
+export function hexBytesAt(hex, o) {
+  const size = hex.length / 2;
+  if (o + 1 > size) throw TYPED_ERROR("TL read past the end");
+  let len = parseInt(hex.slice(o * 2, o * 2 + 2), 16), head = 1;
+  if (len === 254) {
+    if (o + 4 > size) throw TYPED_ERROR("TL read past the end");
+    const h = fromHex(hex.slice(o * 2 + 2, o * 2 + 8));
+    len = h[0] | (h[1] << 8) | (h[2] << 16);
+    head = 4;
+  } else if (len === 255) throw TYPED_ERROR("bad TL bytes length");
+  const pad = (4 - ((head + len) % 4)) % 4;
+  if (o + head + len + pad > size) throw TYPED_ERROR("TL read past the end");
+  return { hex: hex.slice((o + head) * 2, (o + head + len) * 2), end: o + head + len + pad };
+}
+
+/** parseUploadFile over hex: { ctor, fileType, mtime, bytesHex } for upload.file, else { ctor }. */
+export function parseUploadFileHex(hex) {
+  const ctor = hexU32(hex, 0);
+  if (ctor !== CTOR.uploadFile) return { ctor };
+  return { ctor, fileType: hexU32(hex, 4), mtime: hexU32(hex, 8), bytesHex: hexBytesAt(hex, 12).hex };
 }
 
 export function parseExportedAuthorization(u8) {

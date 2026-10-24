@@ -16,6 +16,8 @@ export const CODES = Object.freeze([
   "login_budget",           // { seconds } too many bot logins on this device in the last hour
   "channel_invalid",        // the channel is unknown, its access hash is wrong, or the bot lost access (CHANNEL_INVALID/PRIVATE)
   "bot_method_invalid",     // a method bots may not call (BOT_METHOD_INVALID)
+  "token_invalid",          // the bot token was refused at login (ACCESS_TOKEN_INVALID / ACCESS_TOKEN_EXPIRED)
+  "api_id_invalid",         // the api_id/api_hash pair was refused (API_ID_INVALID, API_ID_PUBLISHED_FLOOD)
 ]);
 
 export function mtError(code, message, extra) {
@@ -36,6 +38,8 @@ export function fromRpcError({ code, message }) {
   if ((n = tail(/^(?:USER|PHONE|NETWORK)_MIGRATE_(\d+)$/)) !== null) return mtError("user_migrate", m, { dc: n, status: code, rpc: m });
   if (/^FILE_REFERENCE_/.test(m)) return mtError("file_reference_expired", m, { status: code, rpc: m });
   if (m === "CHANNEL_INVALID" || m === "CHANNEL_PRIVATE") return mtError("channel_invalid", m, { status: code, rpc: m });
+  if (/^ACCESS_TOKEN_(INVALID|EXPIRED)$/.test(m)) return mtError("token_invalid", m, { status: code, rpc: m });
+  if (/^API_ID_(INVALID|PUBLISHED_FLOOD)$/.test(m)) return mtError("api_id_invalid", m, { status: code, rpc: m });
   if (m === "BOT_METHOD_INVALID") return mtError("bot_method_invalid", m, { status: code, rpc: m });
   if (code === 401 || /^AUTH_KEY_(UNREGISTERED|INVALID|DUPLICATED)$/.test(m) || m === "SESSION_REVOKED") return mtError("auth_key_unregistered", m, { status: code, rpc: m });
   return mtError("rpc_error", code + " " + m, { status: code, rpc: m });

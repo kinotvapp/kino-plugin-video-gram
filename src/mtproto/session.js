@@ -4,11 +4,13 @@
 // and a deadline per call.
 //
 // Bytes stay hex from the socket to the decrypted plaintext: kino.ws hands a Uint8Array, the transport turns it into
-// hex once (one JS pass), CTR, IGE and the msg_key hash run natively on hex strings, and only the message body is
-// turned back into a Uint8Array (a second JS pass) for the TL reader.
+// hex once (one JS pass), CTR, IGE and the msg_key hash run natively on hex strings. Messages stay hex too: containers
+// and gzip_packed are walked by decoding only their few header bytes, and an rpc result is turned into a Uint8Array
+// (a second JS pass) only when the caller wants bytes; `call(body, { hex: true })` hands the result's hex as it is
+// (the download path: no JS pass over a file chunk here).
 import { toHex, fromHex, random, readI32LE } from "./bytes.js";
 import { sha256Hex, igeEncryptHex, igeDecryptHex, gunzipHex } from "./crypto.js";
-import { Writer, Reader, CTOR, msgsAck, parseRpcError } from "./tl.js";
+import { Writer, Reader, CTOR, msgsAck, parseRpcError, hexU32, hexBytesAt } from "./tl.js";
 import { MsgIds } from "./msgid.js";
 import { mtError, fromRpcError, fromTransportError } from "./errors.js";
 
@@ -70,7 +72,7 @@ export class Session {
     }
   }
 
-  /** One transport packet -> its message [{ id, seqno, body }] (empty when it belongs to one of our older sessions). */
+  /** One transport packet -> its message [{ id, seqno, hex }] (empty when it belongs to one of our older sessions). */
   async recvMessages(deadline) {
     const hex = await this.t.recvHex(Math.max(1, deadline - this.now()), this.now);
     if (hex.length === 8) throw fromTransportError(readI32LE(fromHex(hex), 0));
@@ -92,14 +94,15 @@ export class Session {
     const total = plainHex.length / 2;
     const padding = total - 32 - len;
     if (len % 4 !== 0 || padding < 12 || padding > 1024) throw protocol("bad message length");
-    return [{ id, seqno, body: fromHex(plainHex.slice(64, 64 + len * 2)) }];
+    return [{ id, seqno, hex: plainHex.slice(64, 64 + len * 2) }];
   }
 
   /**
    * Sends `body` and waits for its rpc_result: answers the result's bytes (unzipped), throws the rpc_error as a typed
-   * error (errors.js), `timeout` past the deadline, `bad_msg` when the server keeps refusing the message.
+   * error (errors.js), `timeout` past the deadline, `bad_msg` when the server keeps refusing the message. With
+   * `hex: true` the result comes back as a hex string instead of a Uint8Array.
    */
-  async call(body, { timeoutMs = this.timeoutMs } = {}) {
+  async call(body, { timeoutMs = this.timeoutMs, hex: wantHex = false } = {}) {
     await this.flushAcks();
     const deadline = this.now() + timeoutMs;
     let reqId = await this.send(body);
@@ -114,20 +117,38 @@ export class Session {
       while (queue.length) {
         const m = queue.shift();
         if (m.seqno & 1) this.pendingAcks.push(m.id);
-        const r = new Reader(m.body);
-        const ctor = r.int();
-        switch (ctor) {
-          case CTOR.msgContainer: {
-            const n = r.int();
-            for (let i = 0; i < n; i++) {
-              const id = r.long(), seqno = r.int(), len = r.int();
-              queue.push({ id, seqno, body: r.raw(len) });
-            }
-            break;
+        const ctor = hexU32(m.hex, 0);
+        if (ctor === CTOR.msgContainer) {
+          const size = m.hex.length / 2;
+          const n = hexU32(m.hex, 4);
+          let o = 8;
+          for (let i = 0; i < n; i++) {
+            if (o + 16 > size) throw protocol("container past its end");
+            const h = new Reader(fromHex(m.hex.slice(o * 2, (o + 16) * 2)));
+            const id = h.long(), seqno = h.int(), len = h.int();
+            if (o + 16 + len > size) throw protocol("container past its end");
+            queue.push({ id, seqno, hex: m.hex.slice((o + 16) * 2, (o + 16 + len) * 2) });
+            o += 16 + len;
           }
-          case CTOR.gzipPacked:
-            queue.unshift({ id: m.id, seqno: 0, body: fromHex(gunzipHex(toHex(r.bytes()))) });
-            break;
+          continue;
+        }
+        if (ctor === CTOR.gzipPacked) {
+          queue.unshift({ id: m.id, seqno: 0, hex: gunzipHex(hexBytesAt(m.hex, 4).hex) });
+          continue;
+        }
+        if (ctor === CTOR.rpcResult) {
+          const to = new Reader(fromHex(m.hex.slice(8, 24))).long();
+          if (to !== reqId) continue; // a late answer to an earlier call
+          let result = m.hex.slice(24);
+          if (result.length >= 8 && hexU32(result, 0) === CTOR.gzipPacked) result = gunzipHex(hexBytesAt(result, 4).hex);
+          if (result.length >= 8 && hexU32(result, 0) === CTOR.rpcError) throw fromRpcError(parseRpcError(new Reader(fromHex(result))));
+          return wantHex ? result : fromHex(result);
+        }
+        // Everything else is small: read it as bytes.
+        const mBody = fromHex(m.hex);
+        const r = new Reader(mBody);
+        r.int();
+        switch (ctor) {
           case CTOR.newSessionCreated:
             r.long(); r.long();
             this.state.serverSalt = r.raw(8).slice();
@@ -157,14 +178,6 @@ export class Session {
             }
             break;
           }
-          case CTOR.rpcResult: {
-            const to = r.long();
-            if (to !== reqId) break; // a late answer to an earlier call
-            let result = r.rest();
-            if (result.length >= 4 && new Reader(result).int() === CTOR.gzipPacked) result = fromHex(gunzipHex(toHex(new Reader(result, 4).bytes())));
-            if (result.length >= 4 && new Reader(result).int() === CTOR.rpcError) throw fromRpcError(parseRpcError(new Reader(result)));
-            return result;
-          }
           case CTOR.msgsAck:
           case CTOR.pong:
           case CTOR.msgDetailedInfo:
@@ -172,7 +185,7 @@ export class Session {
           case CTOR.futureSalts:
             break;
           default:
-            if (this.onUpdate) { try { this.onUpdate(m.body); } catch (e) { this.log("onUpdate failed: " + (e && e.message)); } }
+            if (this.onUpdate) { try { this.onUpdate(mBody); } catch (e) { this.log("onUpdate failed: " + (e && e.message)); } }
         }
       }
     }
