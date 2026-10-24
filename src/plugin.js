@@ -39,8 +39,10 @@ export async function browse(ref, cursor) {
 export async function resolve(ref) {
   return guard(async () => {
     if (typeof ref === "string" && ref.startsWith("setup:")) {
-      const kind = ref.slice(6);
-      throw shellError(["config", "token", "api_id", "flood", "budget"].includes(kind) ? kind : "unavailable", "setup notice", { seconds: secondsLeft(kind) });
+      let kind = ref.slice(6);
+      const seconds = secondsLeft(kind);
+      if ((kind === "flood" || kind === "budget") && seconds === undefined) kind = "unavailable"; // the wait is over
+      throw shellError(["config", "token", "api_id", "flood", "budget"].includes(kind) ? kind : "unavailable", "setup notice", { seconds });
     }
     if (!credentials().complete) throw shellError("config");
     const row = await rowFor(ref);
@@ -58,7 +60,7 @@ export async function resolve(ref) {
 
 function secondsLeft(kind) {
   const e = loadShell(credentials()).error;
-  return e && e.kind === kind && e.until ? Math.max(1, Math.ceil((e.until - Date.now()) / 1000)) : undefined;
+  return e && e.kind === kind && e.until && e.until > Date.now() ? Math.max(1, Math.ceil((e.until - Date.now()) / 1000)) : undefined;
 }
 
 export async function read(arg) {

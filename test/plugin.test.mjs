@@ -41,6 +41,8 @@ function seed() {
   return { big, small, trip };
 }
 const decode = (r) => Buffer.from(r.bytes, "base64");
+/** Videos in the catalog: every row but the device mark ("~device"). */
+const videos = async () => (await dev.base.catalog.count()) - (await dev.base.catalog.get(["~device"])).length;
 const flat = (rows) => rows.flatMap((r) => r.items);
 const stats = () => ({ ...tg.dc(2).stats, layers: undefined });
 const apiCalls = () => tg.requests.length;
@@ -91,7 +93,7 @@ test("home indexes the channel once, a second home within 5 minutes does not tou
   assert.match(movie.id, /^[A-Za-z0-9._~-]{1,128}$/);
   assert.equal(movie.kind, "movie");
   assert.ok(movie.badges.includes("1:23:45") && movie.badges.some((b) => /2\.5 MB/.test(b)), JSON.stringify(movie.badges));
-  assert.equal(await dev.base.catalog.count(), 2);
+  assert.equal(await videos(), 2);
 
   const before = { calls: apiCalls(), connections: stats().connections, getFile: stats().getFile };
   const again = await p.home();
@@ -105,7 +107,7 @@ test("home indexes the channel once, a second home within 5 minutes does not tou
   assert.deepEqual(checkOutput("search", found, MANIFEST).drops, []);
   assert.deepEqual(found.items.map((i) => i.ref), [ids.big]);
   assert.deepEqual((await p2.search({ q: "PELÍCULA", type: "any", cursor: null })).items.map((i) => i.ref), [ids.big]);
-  assert.deepEqual((await p2.search({ q: "", type: "any", cursor: null })), []);
+  assert.deepEqual((await p2.search({ q: "", type: "any", cursor: null })), { items: [] });
   assert.deepEqual((await p2.search({ q: "playa", type: "any", cursor: null })).items, [], "a deactivated channel is not searched");
   assert.equal(apiCalls(), before.calls, "search never reaches Telegram");
 
@@ -314,10 +316,10 @@ test("refresh and forget actions; validateSettings refuses malformed values with
   const p = await dev.runtime(SETTINGS);
   const r = await p.action("refresh");
   assert.match(r.message, /2/);
-  assert.equal(await dev.base.catalog.count(), 2);
+  assert.equal(await videos(), 2);
   const f = await p.action("forget");
   assert.ok(f.message);
-  assert.equal(await dev.base.catalog.count(), 0);
+  assert.equal(await videos(), 0);
   assert.equal(dev.base.storage.get("tg.session"), null);
   assert.notEqual(dev.base.storage.get("mtproto.botLogins"), null, "the login budget survives a forget");
   const bad = await p.validateSettings({ api_id: "12a", api_hash: "xyz", bot_token: "nope" });
@@ -365,7 +367,7 @@ test("after 5 minutes Home reads Telegram again and picks up a new video; an emp
   const keyExchanges = stats().keyExchanges;
   const rows = await (await dev.runtime(SETTINGS)).home();
   assert.ok(flat(rows).some((i) => i.ref === ids.big), "an emptied catalog is indexed again from the start");
-  assert.equal(await dev.base.catalog.count(), 3);
+  assert.equal(await videos(), 3);
   assert.equal(stats().keyExchanges, keyExchanges + 1, "a restored storage does not reuse the other device's auth key");
 });
 
@@ -375,7 +377,7 @@ test("search and Ver más page through a big channel; scopedSearch keeps a chann
   for (let i = 0; i < 130; i++) refs.push(postVideo(CH1, { name: "Episodio " + i + ".mp4", size: 100 }));
   const p = await dev.runtime(SETTINGS);
   await p.home();
-  assert.equal(await dev.base.catalog.count(), 130);
+  assert.equal(await videos(), 130);
   const first = await p.search({ q: "episodio", type: "any", cursor: null });
   assert.equal(first.items.length, 50);
   assert.equal(first.next, "50");

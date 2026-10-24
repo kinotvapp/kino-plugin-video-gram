@@ -184,7 +184,10 @@ export class TelegramClient {
       }
       if (e.code === "timeout" || e.code === "closed" || e.code === "protocol") await this.drop(dc);
       if (e.code === "auth_key_unregistered") {
-        if (e.transport) { await this.drop(dc); this.dcs.delete(dc); }
+        // A key the server forgot (-404), refuses (AUTH_KEY_INVALID) or sees on two connections at once
+        // (AUTH_KEY_DUPLICATED: e.g. a copy restored on another device) is dead: drop it, the next call makes a new one.
+        // Any other 401 (AUTH_KEY_UNREGISTERED, SESSION_REVOKED...) keeps the key and only needs a new login.
+        if (e.transport || /^AUTH_KEY_(INVALID|DUPLICATED)$/.test(String(e.rpc || ""))) { await this.drop(dc); this.dcs.delete(dc); }
         else { const st = this.dcs.get(dc); if (st) st.loggedIn = false; }
       }
       throw e;

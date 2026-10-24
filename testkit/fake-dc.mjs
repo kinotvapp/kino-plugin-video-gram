@@ -254,6 +254,19 @@ class DcConnection {
     if (hookIndex >= 0) {
       const [hook] = this.dc.hooks.splice(hookIndex, 1);
       const reply = hook.fn({ msgId, body, conn: this });
+      this.answer(reply, out, msgId, seqno, body, entry);
+      return;
+    }
+    this.answer(null, out, msgId, seqno, body, entry);
+  }
+  /** The answer to one request, after a hook's `reply` (`delayMs` answers that much later, then as `reply` says). */
+  answer(reply, out, msgId, seqno, body, entry) {
+    if (reply && reply.delayMs) {
+      const rest = { ...reply, delayMs: 0 };
+      setTimeout(() => { if (this.socket.readyState === 1) this.answer(rest, out, msgId, seqno, body, entry); }, reply.delayMs);
+      return;
+    }
+    {
       if (reply && reply.badMsg) {
         out.pending.push(new Writer().int(CTOR.badMsgNotification).long(msgId).int(seqno).int(reply.badMsg).done());
         return this.flush(out);

@@ -1,14 +1,16 @@
 // The video library: Telegram's channels through the discovery, kept in kino.catalog (one row per video), and the
 // rows, pages and searches Kino shows, read from the catalog only.
 //
-// Channels: the bot learns every channel it administers; each gets a slot (1 to 8, in the order the discovery lists
-// them, ascending id) and the slot's toggle in the settings says whether it is shown and indexed. A channel that is
+// Channels: the bot learns every channel it administers; the slots are the first 8 of them by ascending channel id,
+// recomputed from the whole set at every refresh (a channel the bot lost frees its slot), so the same bot gives the same
+// slot -> channel mapping on every device once they have seen the same channels. The slot's toggle in the settings
+// (which syncs) says whether that channel is shown and indexed. A channel that is
 // off is never scanned and has no rows: turning it off removes its rows from the catalog (by id, in steps); turning
 // it on reads it again from its start. Slot 1's toggle starts on, the others off (the manifest's defaults).
 //
 // Refresh: from Home (at most every 5 minutes, sooner while a pass is unfinished or a toggle changed) and from the
 // "Actualizar ahora" action. Never from search. A refresh that fails keeps the old rows and stores the error.
-import { connect, credentials, saveSession, loginFp, sessionFp, forgetSession, hasStoredLogin as hasLogin } from "./live.js";
+import { withSession, credentials, saveSession, loginFp, sessionFp, forgetSession, hasStoredLogin as hasLogin, checkDevice, deviceMark, markDevice, DEVICE_ROW } from "./live.js";
 import { KEYS, readJson, writeJson, remove } from "./store.js";
 import { shellError, kindOf } from "./errors.js";
 import { t, minutes, videoCount } from "./text.js";
@@ -17,6 +19,7 @@ export const SLOTS = 8;
 export const REFRESH_MS = 5 * 60 * 1000;
 const BATCH = 500;              // kino.catalog: items per upsert, ids per get/remove
 const MAX_PAGES = 25;           // discovery RPCs per refresh (Home has 20 s)
+const REFRESH_BUDGET_MS = 14000; // from the start of the call: key exchange, login and pages; then stop and go on later
 const PURGE_BATCHES = 40;       // remove calls per purge step (20 000 ids)
 const SCAN_BATCHES = 10;        // get calls per channel row or page (5 000 message ids)
 const ROW_ITEMS = 30;
@@ -25,7 +28,7 @@ const HLS = /mpegurl/i;
 
 // ---- shell state (tg.shell) ----
 
-const freshShell = (fp) => ({ v: 1, fp, slots: [], titles: {}, gone: {}, applied: [], top: {}, purge: [], indexedAt: 0, incomplete: false, count: 0, error: null, refused: null, channelErrors: 0 });
+const freshShell = (fp) => ({ v: 1, fp, slots: [], titles: {}, gone: {}, applied: [], top: {}, purge: [], indexedAt: 0, incomplete: false, count: 0, unslotted: 0, error: null, refused: null, channelErrors: 0 });
 
 export function loadShell(c) {
   const s = readJson(KEYS.shell);
@@ -152,22 +155,32 @@ function noticeFor(problem, now = Date.now()) {
   }
 }
 
-/** Starts over for another bot (or after the catalog came back empty): the index and the discovery state go. */
+/** Starts over for another bot: the index and the discovery state go (this device keeps its mark). */
 async function resetIndex(shell) {
   remove(KEYS.discovery);
   shell.slots = []; shell.titles = {}; shell.gone = {}; shell.applied = []; shell.top = {}; shell.purge = [];
-  shell.indexedAt = 0; shell.incomplete = false; shell.count = 0; shell.channelErrors = 0;
+  shell.indexedAt = 0; shell.incomplete = false; shell.count = 0; shell.unslotted = 0; shell.channelErrors = 0;
+  const mark = await deviceMark();
   try { await kino.catalog.clear(); } catch (e) { kino.log("catalog clear failed: " + (e && e.code)); }
+  await markDevice(mark || undefined);
 }
 
-/** Gives a slot to every channel the discovery knows that has none (at most SLOTS); refreshes the titles. */
+/** How many videos the catalog holds (the device mark is a row too, not a video). */
+export async function countVideos() {
+  const n = await kino.catalog.count();
+  return Math.max(0, n - ((await kino.catalog.get([DEVICE_ROW])).length));
+}
+
+/** The slots: the first SLOTS channels the discovery knows, by ascending channel id; the titles of all of them. */
 function assignSlots(shell, channels) {
-  for (const [rawId, c] of Object.entries(channels || {})) {
+  const ids = Object.keys(channels || {}).sort((a, b) => { const x = BigInt(a), y = BigInt(b); return x < y ? -1 : x > y ? 1 : 0; });
+  for (const rawId of ids) {
     const chatId = channelChatId(rawId);
-    shell.titles[chatId] = clip(c.title, 100);
+    shell.titles[chatId] = clip(channels[rawId].title, 100);
     delete shell.gone[chatId];
-    if (!shell.slots.includes(chatId) && shell.slots.length < SLOTS) shell.slots.push(chatId);
   }
+  shell.slots = ids.slice(0, SLOTS).map(channelChatId);
+  shell.unslotted = Math.max(0, ids.length - SLOTS);
 }
 
 /** Applies one refresh's changes to the catalog: only videos of active channels, never an HLS playlist. */
@@ -208,26 +221,29 @@ async function applyToggles(shell, live) {
   return changed;
 }
 
+let running = null; // the refresh in flight: a second caller (Home and "Actualizar ahora" at once) shares its result
+
 /**
  * One refresh: toggles, purges, then (unless the index is recent and nothing is pending, or `force`) the discovery.
- * Never throws: answers { shell, added, problem }. A failure keeps the old rows and is stored in `shell.error`.
+ * Never throws: answers { shell, added, problem }. A failure keeps the old rows and is stored in `shell.error`. One at
+ * a time per runtime: a call while another runs gets that one's answer.
  */
-export async function refresh({ force = false } = {}) {
+export function refresh(opts = {}) {
+  if (!running) running = runRefresh(opts).finally(() => { running = null; });
+  return running;
+}
+
+async function runRefresh({ force = false } = {}) {
   const c = credentials();
   if (!c.complete) return { shell: loadShell(null), added: 0, problem: { kind: "config" } };
-  let shell = loadShell(c);
-  const now = Date.now();
+  const started = Date.now();
+  const now = started;
+  let shell = null;
   let added = 0;
   try {
+    await checkDevice(); // first: a restored storage from another device is dropped before anything reads it
+    shell = loadShell(c);
     if (shell.fp !== sessionFp(c)) { await resetIndex(shell); shell.fp = sessionFp(c); shell.error = null; shell.refused = null; }
-    if (shell.count > 0 && (await kino.catalog.count()) === 0) {
-      // The catalog is never in a backup, kino.storage is: an empty catalog with a full marker is most likely a
-      // restore on another device. Its auth key belongs to the first device (AUTH_KEY_DUPLICATED), so this one opens
-      // its own session too (one login, budgeted), then reads everything again.
-      kino.log("catalog empty after a restore or a reset: new session, indexing again");
-      await forgetSession();
-      await resetIndex(shell);
-    }
     const active0 = activeChats(shell);
     const togglesPending = [...active0].some((x) => !shell.applied.includes(x)) || shell.applied.some((x) => !active0.has(x));
     await purgeStep(shell); // what an earlier toggle left to remove: no network needed
@@ -236,30 +252,37 @@ export async function refresh({ force = false } = {}) {
     if (!force && blocked && (blocked.kind === "flood" || blocked.kind === "budget")) return { shell, added, problem: blocked };
     if (!force && !pending && shell.indexedAt && now - shell.indexedAt < REFRESH_MS) return { shell, added, problem: blocked };
 
-    const live = await connect(c, shell);
-    await applyToggles(shell, live);
-    await purgeStep(shell);
-    // A second pass only when the first gave an active slot to a channel it had not scanned (slot 1 starts on).
-    for (let pass = 0; pass < 2; pass++) {
-      const active = activeChats(shell);
-      const res = await live.discovery.refresh({ maxPages: MAX_PAGES, shouldScan: (rawId) => active.has(channelChatId(rawId)) });
-      added += await applyChanges(shell, res.changes, active);
-      shell.channelErrors = (res.errors || []).filter((x) => x.scope === "channel").length;
-      assignSlots(shell, res.state.channels);
-      shell.incomplete = !!res.incomplete;
-      if (res.floodWait !== undefined) {
-        shell.error = { kind: "flood", until: now + res.floodWait * 1000, at: now };
-        shell.incomplete = true;
-        break;
+    const deadline = started + REFRESH_BUDGET_MS;
+    await withSession(c, shell, async (live) => {
+      live.client.timeoutMs = 9000;
+      await applyToggles(shell, live);
+      await purgeStep(shell);
+      // A second pass only when the first gave an active slot to a channel it had not scanned (slot 1 starts on).
+      for (let pass = 0; pass < 2 && Date.now() < deadline; pass++) {
+        const active = activeChats(shell);
+        const res = await live.discovery.refresh({ maxPages: MAX_PAGES, deadline, commit: false, shouldScan: (rawId) => active.has(channelChatId(rawId)) });
+        // The catalog first, then the discovery's progress: a write that fails (or a call cut off in between) leaves
+        // the update state where it was, and the next refresh reads those pages again (upserts are idempotent).
+        added += await applyChanges(shell, res.changes, active);
+        res.commit();
+        shell.channelErrors = (res.errors || []).filter((x) => x.scope === "channel").length;
+        assignSlots(shell, res.state.channels);
+        shell.incomplete = !!res.incomplete;
+        if (res.floodWait !== undefined) {
+          shell.error = { kind: "flood", until: now + res.floodWait * 1000, at: now };
+          shell.incomplete = true;
+          return;
+        }
+        shell.error = null;
+        if (!(await applyToggles(shell, live))) return;
       }
-      shell.error = null;
-      if (!(await applyToggles(shell, live))) break;
-    }
+      if (Date.now() >= deadline) shell.incomplete = true;
+    });
     shell.refused = null;
     if (!shell.incomplete) shell.indexedAt = now;
-    shell.count = await kino.catalog.count();
     return { shell, added, problem: problemOf(shell, now) };
   } catch (e) {
+    shell = shell || loadShell(c);
     const kind = kindOf(e);
     shell.error = { kind, at: now };
     if (kind === "flood" || kind === "budget") shell.error.until = now + (Number(e.seconds) || 60) * 1000;
@@ -267,8 +290,11 @@ export async function refresh({ force = false } = {}) {
     kino.log("refresh failed: " + kind + " " + (e && e.code ? e.code : ""));
     return { shell, added, problem: shell.error };
   } finally {
-    saveSession();
-    saveShell(shell);
+    if (shell) {
+      try { shell.count = await countVideos(); } catch { /* keep the last count */ }
+      saveSession();
+      saveShell(shell);
+    }
   }
 }
 
@@ -278,6 +304,7 @@ export async function forget() {
   remove(KEYS.discovery);
   remove(KEYS.shell);
   await kino.catalog.clear();
+  await markDevice();
 }
 
 // ---- what Kino shows ----
@@ -341,7 +368,7 @@ export async function browsePage(ref, cursor) {
 /** Search in the catalog only (accents and case aside, every word); `within` a channel keeps that channel's rows. */
 export async function searchPage(query) {
   const q = String((query && query.q) || "").trim().slice(0, 256);
-  if (!q) return [];
+  if (!q) return { items: [] };
   if (!credentials().complete) return { items: [] };
   const shell = loadShell(credentials());
   const active = activeChats(shell);
@@ -379,7 +406,7 @@ export function statusLines() {
     const key = "ch" + (i + 1) + "_name";
     if (!chatId) { out[key] = t("slot.free"); continue; }
     const title = shell.titles[chatId] || chatId;
-    out[key] = shell.gone[chatId] ? t("slot.gone", { title }) : kino.config.get("ch" + (i + 1)) === true ? title : t("slot.off", { title });
+    out[key] = kino.config.get("ch" + (i + 1)) === true ? title : t("slot.off", { title });
   }
   const parts = [shell.count > 0 ? videoCount(shell.count) : t("index.none")];
   if (shell.indexedAt) {
@@ -389,6 +416,7 @@ export function statusLines() {
   if (shell.incomplete) parts.push(t("index.reading"));
   if (problem) parts.push(problem.kind === "flood" || problem.kind === "budget" ? t("setup.flood", { min: minutes((problem.until - now) / 1000) }) : noticeFor(problem).items[0].title);
   if (shell.channelErrors > 0) parts.push(t("index.channelErrors", { n: shell.channelErrors }));
+  if (shell.unslotted > 0) parts.push(t("index.unslotted", { n: shell.unslotted }));
   out.index_status = parts.join(" · ").slice(0, 200);
   return out;
 }

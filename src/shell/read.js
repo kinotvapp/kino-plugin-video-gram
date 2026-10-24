@@ -7,13 +7,15 @@
 // prelude decoding the WebSocket frame, and the transport's one toHex of it (src/mtproto/transport.js).
 import { CHUNK } from "../mtproto/client.js";
 import { toBase64, fromHex } from "../mtproto/bytes.js";
-import { credentials, connect, saveSession } from "./live.js";
+import { credentials, withSession, saveSession } from "./live.js";
 import { loadShell, rowFor, rowOf } from "./library.js";
 import { shellError } from "./errors.js";
 import { hexToBase64Native } from "./b64.js";
 
 const SHORT_FLOOD_S = 5;     // a FLOOD_WAIT this short is waited out once inside the read (kino.sleep: 5 s at most)
-const RETRY_BUDGET_MS = 9000; // no retry once the read has run this long (Kino gives it 20 s)
+const READ_BUDGET_MS = 17000; // everything a read does (getFile, refetch, retries) ends before this; Kino gives it 20 s
+const PER_CALL_MS = 9000;     // the longest one request may wait, when the budget still allows it
+const MIN_LEFT_MS = 1500;     // a request is not started with less than this left
 
 /** The getFile requests for [offset, offset + want): each a power of two times 4096, never across a 1 MiB boundary. */
 export function pieces(offset, want) {
@@ -54,37 +56,48 @@ export async function read(arg) {
   const size = row.data.size;
   const want = Math.max(0, Math.min(length, size - offset));
   if (want === 0) return { bytes: "" };
-  const live = await connect(c, loadShell(c));
+  const deadline = started + READ_BUDGET_MS;
+  // Each request waits at most what is left of the read's budget, so getFile + refetch + a retry fit inside it.
+  const budget = (live) => {
+    const left = deadline - Date.now();
+    if (left < MIN_LEFT_MS) throw shellError("network", "read budget spent");
+    live.client.timeoutMs = Math.min(PER_CALL_MS, left - 500);
+  };
   let refetched = false, waited = false;
   let hex = "";
   try {
-    for (const piece of pieces(offset, want)) {
-      for (;;) {
-        try {
-          hex += await live.client.getFile(locOf(row.data), piece.offset, piece.limit, { hex: true });
-          break;
-        } catch (e) {
-          const late = Date.now() - started > RETRY_BUDGET_MS;
-          if (e.code === "file_reference_expired" && !refetched && !late) {
-            refetched = true;
-            const fresh = await live.discovery.refetch({ chatId: row.data.chatId, msgId: row.data.msgId });
-            if (!fresh) {
-              await kino.catalog.remove([row.id]);
-              throw shellError("not_found", "the message is gone");
+    await withSession(c, loadShell(c), async (live) => {
+      hex = "";
+      for (const piece of pieces(offset, want)) {
+        for (;;) {
+          budget(live);
+          try {
+            hex += await live.client.getFile(locOf(row.data), piece.offset, piece.limit, { hex: true });
+            break;
+          } catch (e) {
+            const left = deadline - Date.now();
+            if (e.code === "file_reference_expired" && !refetched && left > 2 * MIN_LEFT_MS) {
+              refetched = true;
+              budget(live);
+              const fresh = await live.discovery.refetch({ chatId: row.data.chatId, msgId: row.data.msgId });
+              if (!fresh) {
+                await kino.catalog.remove([row.id]);
+                throw shellError("not_found", "the message is gone");
+              }
+              row = rowOf(fresh);
+              await kino.catalog.upsert([row]);
+              continue;
             }
-            row = rowOf(fresh);
-            await kino.catalog.upsert([row]);
-            continue;
+            if (e.code === "flood_wait" && !waited && e.seconds <= SHORT_FLOOD_S && left > e.seconds * 1000 + 2 * MIN_LEFT_MS) {
+              waited = true;
+              await kino.sleep(Math.max(0, e.seconds) * 1000);
+              continue;
+            }
+            throw e;
           }
-          if (e.code === "flood_wait" && !waited && !late && e.seconds <= SHORT_FLOOD_S) {
-            waited = true;
-            await kino.sleep(Math.max(0, e.seconds) * 1000);
-            continue;
-          }
-          throw e;
         }
       }
-    }
+    });
   } finally {
     saveSession();
   }

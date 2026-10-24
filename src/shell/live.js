@@ -1,5 +1,6 @@
 // One live Telegram client per plugin runtime, reused by every call (Home, refresh, each read): the auth key and the
-// bot login come from tg.session, so a new runtime connects with the stored key, without a key exchange or a login.
+// bot login come from tg.session (when it was made on this device, see the device mark), so a new runtime connects
+// with the stored key, without a key exchange or a login.
 // The bot logs in once per device (the client's budget allows 3 an hour); a login Telegram refused is not tried again
 // until the settings change.
 import { TelegramClient } from "../mtproto/client.js";
@@ -25,7 +26,51 @@ export const sessionFp = (c) => digest("session\n" + c.apiId + "\n" + c.botToken
 /** Which exact settings a refused login was made with (api_hash included). */
 export const loginFp = (c) => digest("login\n" + c.apiId + "\n" + c.apiHash + "\n" + c.botToken);
 
-let live = null; // { fp, client, discovery, saved }
+let live = null;       // { fp, device, client, discovery, saved, ready }
+let connecting = null; // the one connect in flight: every caller of this runtime waits on it
+
+// ---- the device mark ----
+//
+// tg.session sits in kino.storage, which a password-protected backup carries to another device; kino.catalog never
+// travels. So the install's id lives in both: in tg.session, and in one row of the catalog that only this device has.
+// A stored session is used only when the two match. A restored copy (onto a fresh device, onto a device with its own
+// catalog, or taken before anything was indexed) never matches, so its auth key, which belongs to the other device,
+// is dropped and this device opens its own (one login, budgeted). What this does NOT cover: a Kino that would one day
+// carry the catalog file in a backup too (the mark would then travel with the key), and a catalog file reset by Kino
+// as damaged (the mark goes with it: a new session, which is only a cost).
+export const DEVICE_ROW = "~device";
+
+/** This install's id from the catalog's mark, or null when there is none. */
+export async function deviceMark() {
+  const [row] = await kino.catalog.get([DEVICE_ROW]);
+  return row && row.data && typeof row.data.device === "string" && /^[0-9a-f]{32}$/.test(row.data.device) ? row.data.device : null;
+}
+
+/** Writes the mark (a new random id unless one is given) and answers it. */
+export async function markDevice(id = kino.crypto.randomBytes(16)) {
+  await kino.catalog.upsert([{ id: DEVICE_ROW, title: "~", sort: 0, data: { device: id } }]);
+  return id;
+}
+
+/**
+ * Makes sure what kino.storage holds was made on this device. A stored session from elsewhere (no mark, or another
+ * one) is dropped together with what came with it from the same backup, the update state and the shell state, and
+ * this device's catalog is rebuilt from scratch under a new mark: the settings stay. Answers this device's mark.
+ */
+export async function checkDevice() {
+  const stored = readJson(KEYS.session);
+  let mark = await deviceMark();
+  if (stored && (!mark || stored.device !== mark)) {
+    kino.log("stored session was not made on this device: a new session and a new index");
+    if (live) await close();
+    remove(KEYS.session);
+    remove(KEYS.discovery);
+    remove(KEYS.shell);
+    await kino.catalog.clear();
+    mark = null;
+  }
+  return mark || markDevice();
+}
 
 function newClient(c) {
   return new TelegramClient({
@@ -38,29 +83,37 @@ function newClient(c) {
   });
 }
 
-/** Writes the client's state when it changed (a new DC key, a new salt, the login). */
+/** Writes the client's state when it changed (a new DC key, a dropped one, a new salt, the login). */
 export function saveSession() {
   if (!live) return;
   const state = live.client.exportState();
   const text = JSON.stringify(state);
   if (text === live.saved) return;
-  if (writeJson(KEYS.session, { v: 1, fp: live.fp, state })) live.saved = text;
+  if (writeJson(KEYS.session, { v: 1, fp: live.fp, device: live.device, state })) live.saved = text;
 }
 
 /**
- * The live client, connected and logged in, for these settings. `refused` is the shell's marker of a login Telegram
- * refused (`{ fp, kind }`): with the same settings, the login is not tried again (the error comes back at once).
+ * The live client, connected and logged in, for these settings. Every caller of the runtime shares one connect in
+ * flight (cleared when it fails), so concurrent calls never build two clients or spend two logins. `shell.refused`
+ * marks a login Telegram refused with these exact settings: it is not tried again.
  */
-export async function connect(c, shell) {
+export function connect(c, shell) {
   const fp = sessionFp(c);
-  if (live && live.fp === fp && live.ready) return live;
+  if (live && live.fp === fp && live.ready) return Promise.resolve(live);
+  if (!connecting) connecting = open(c, shell).finally(() => { connecting = null; });
+  return connecting;
+}
+
+async function open(c, shell) {
+  const fp = sessionFp(c);
   if (live && live.fp !== fp) await close();
   if (shell.refused && shell.refused.fp === loginFp(c)) throw shellError(shell.refused.kind, "login refused before");
   if (!live) {
+    const device = await checkDevice();
     const stored = readJson(KEYS.session);
     let client = newClient(c);
     let saved = null;
-    const state = stored && stored.v === 1 && stored.fp === fp && stored.state && stored.state.dcs ? stored.state : null;
+    const state = stored && stored.v === 1 && stored.fp === fp && stored.device === device && stored.state && stored.state.dcs ? stored.state : null;
     try {
       await client.connect(state && state.homeDc ? state.homeDc : FIRST_DC, state || undefined);
       saved = state ? JSON.stringify(state) : null;
@@ -70,7 +123,7 @@ export async function connect(c, shell) {
       client = newClient(c);
       await client.connect(FIRST_DC);
     }
-    live = { fp, client, saved, ready: false, discovery: createDiscovery({ client, store: kinoStore, persistEntries: false, log: (m) => kino.log("discovery: " + m) }) };
+    live = { fp, device, client, saved, ready: false, discovery: createDiscovery({ client, store: kinoStore, persistEntries: false, log: (m) => kino.log("discovery: " + m) }) };
   }
   try {
     await live.client.botLogin({ apiHash: c.apiHash, botToken: c.botToken });
@@ -79,6 +132,23 @@ export async function connect(c, shell) {
   }
   live.ready = true;
   return live;
+}
+
+/**
+ * Runs `fn(live)`; when the session died under it (a 401, SESSION_REVOKED, a dropped AUTH_KEY_DUPLICATED key), logs
+ * in again ONCE (inside the login budget) and runs `fn` once more. Never loops: a second failure is the caller's.
+ */
+export async function withSession(c, shell, fn) {
+  const l = await connect(c, shell);
+  try {
+    return await fn(l);
+  } catch (e) {
+    if (!e || e.code !== "auth_key_unregistered") throw e;
+    kino.log("session lost (" + (e.rpc && /^[A-Z_]{1,40}$/.test(e.rpc) ? e.rpc : "transport") + "): one new login");
+    l.ready = false;
+    saveSession();
+    return fn(await connect(c, shell));
+  }
 }
 
 /** Closes the live client (a settings change, a forget). */

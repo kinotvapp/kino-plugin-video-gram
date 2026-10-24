@@ -34,7 +34,6 @@ const ES = {
   "status.notYet": "Sin conectar todavía: abre Inicio o toca Actualizar ahora",
   "status.flood": "Telegram pidió esperar {min}",
   "slot.free": "Libre: agrega el bot a otro canal",
-  "slot.gone": "{title} (el bot ya no tiene acceso)",
   "slot.off": "{title} (desactivado)",
   "index.none": "Todavía no hay videos",
   "index.count.one": "1 video",
@@ -43,6 +42,7 @@ const ES = {
   "index.justNow": "actualizado ahora",
   "index.reading": "leyendo canales",
   "index.channelErrors": "{n} canal(es) con errores",
+  "index.unslotted": "{n} canales más sin lugar",
   "action.refreshed": "Listo: {count}, {added} nuevos",
   "action.forgot": "Listo: se borraron la sesión y el índice de este aparato",
   "validate.apiId": "Debe ser solo números",
@@ -78,7 +78,6 @@ const EN = {
   "status.notYet": "Not connected yet: open Home or tap Refresh now",
   "status.flood": "Telegram asked to wait {min}",
   "slot.free": "Free: add the bot to another channel",
-  "slot.gone": "{title} (the bot lost access)",
   "slot.off": "{title} (off)",
   "index.none": "No videos yet",
   "index.count.one": "1 video",
@@ -87,6 +86,7 @@ const EN = {
   "index.justNow": "updated just now",
   "index.reading": "reading channels",
   "index.channelErrors": "{n} channel(s) with errors",
+  "index.unslotted": "{n} more channels without a slot",
   "action.refreshed": "Done: {count}, {added} new",
   "action.forgot": "Done: this device's session and index were deleted",
   "validate.apiId": "Digits only",
@@ -1691,7 +1691,10 @@ class TelegramClient {
       }
       if (e.code === "timeout" || e.code === "closed" || e.code === "protocol") await this.drop(dc);
       if (e.code === "auth_key_unregistered") {
-        if (e.transport) { await this.drop(dc); this.dcs.delete(dc); }
+        // A key the server forgot (-404), refuses (AUTH_KEY_INVALID) or sees on two connections at once
+        // (AUTH_KEY_DUPLICATED: e.g. a copy restored on another device) is dead: drop it, the next call makes a new one.
+        // Any other 401 (AUTH_KEY_UNREGISTERED, SESSION_REVOKED...) keeps the key and only needs a new login.
+        if (e.transport || /^AUTH_KEY_(INVALID|DUPLICATED)$/.test(String(e.rpc || ""))) { await this.drop(dc); this.dcs.delete(dc); }
         else { const st = this.dcs.get(dc); if (st) st.loggedIn = false; }
       }
       throw e;
@@ -2269,7 +2272,7 @@ class Journal extends Map {
  * plugin has a larger storage quota). Operations run one at a time; each starts from the in-memory state when this
  * runtime has one that is newer than (or equal to) the saved copy, else from the saved state.
  */
-function createDiscovery({ client, store, budgetBytes = DEFAULT_BUDGET_BYTES, persistEntries = true, log = () => {} }) {
+function createDiscovery({ client, store, budgetBytes = DEFAULT_BUDGET_BYTES, persistEntries = true, now = () => Date.now(), log = () => {} }) {
   if (!client || typeof client.call !== "function") throw mtError("invalid_request", "createDiscovery needs a TelegramClient");
   if (!store || typeof store.get !== "function" || typeof store.set !== "function") throw mtError("invalid_request", "createDiscovery needs a get/set store");
   let chain = Promise.resolve();
@@ -2406,6 +2409,9 @@ function createDiscovery({ client, store, budgetBytes = DEFAULT_BUDGET_BYTES, pe
   const setState = (st, s) => { st.pts = s.pts; st.qts = s.qts; st.date = s.date; st.seq = s.seq; };
 
   /**
+   * Options: `shouldScan(channelId)` skips channels; `deadline` (a time of `now()`) stops early like maxPages does;
+   * `commit: false` saves nothing and answers `commit()`, which the caller runs once its own writes succeeded (until
+   * then, and when the pass throws, the next operation starts from the saved state again).
    * refresh({ maxPages = 20 }) -> { entries, newCount, state, incomplete?, floodWait? }: reads the common box (from
    * pts 1 on the first run, else from the saved state), then every known channel from its saved pts, at most
    * `maxPages` calls in all. `entries` is the whole index (newest first), `newCount` how many keys it gained.
@@ -2413,14 +2419,15 @@ function createDiscovery({ client, store, budgetBytes = DEFAULT_BUDGET_BYTES, pe
    * Also: `persisted` (false when the store refused the write), `truncated` (the saved copy left the oldest entries
    * out), `errors` [{ scope: "common" | "channel" | "storage", channelId?, code, message }] for what was isolated.
    */
-  function refresh({ maxPages = 20, shouldScan = null } = {}) {
+  function refresh({ maxPages = 20, shouldScan = null, commit = true, deadline = Infinity } = {}) {
     return serial(async () => {
+      const deferred = commit === false;
       const { st, index } = begin();
       const before = new Set(index.keys());
       const titles = new Map();
       const errors = [];
       let pages = 0, incomplete = false, floodWait;
-      const spend = () => { if (pages >= maxPages) { incomplete = true; return false; } pages++; return true; };
+      const spend = () => { if (pages >= maxPages || now() >= deadline) { incomplete = true; return false; } pages++; return true; };
       try {
         // 1. the common box
         let req = st.pts > 0 ? { pts: st.pts, date: st.date, qts: st.qts } : { pts: 1, date: 1, qts: -1 };
@@ -2482,15 +2489,24 @@ function createDiscovery({ client, store, budgetBytes = DEFAULT_BUDGET_BYTES, pe
           }
         }
       } catch (e) {
-        if (e.code !== "flood_wait") { save(st, index); throw e; } // save never throws, so `e` is what surfaces
+        if (e.code !== "flood_wait") {
+          if (deferred) mem = null; // nothing of this pass is kept: the next one starts from the saved state
+          else save(st, index); // save never throws, so `e` is what surfaces
+          throw e;
+        }
         incomplete = true;
         floodWait = e.seconds;
       }
-      const saved = save(st, index);
+      let saved = { persisted: false };
+      let pending = null;
+      if (deferred) { pending = mem; mem = null; } // until commit(), the next operation reads the saved state
+      else saved = save(st, index);
       if (saved.error) errors.push(saved.error);
       let newCount = 0;
       for (const k of index.keys()) if (!before.has(k)) newCount++;
       const out = { entries: sorted(index), newCount, state: publicState(st), persisted: saved.persisted, errors };
+      // commit: false: the caller writes `changes` somewhere first, then calls commit() to save this pass's progress.
+      if (deferred) out.commit = () => { mem = pending; return save(st, index); };
       if (saved.truncated) out.truncated = true;
       if (incomplete) out.incomplete = true;
       if (floodWait !== undefined) out.floodWait = floodWait;
@@ -2666,7 +2682,8 @@ return { KEYS, readJson, writeJson, remove, kinoStore };
 // ---- src/shell/live.js ----
 const __mod_src_shell_live = (() => {
 // One live Telegram client per plugin runtime, reused by every call (Home, refresh, each read): the auth key and the
-// bot login come from tg.session, so a new runtime connects with the stored key, without a key exchange or a login.
+// bot login come from tg.session (when it was made on this device, see the device mark), so a new runtime connects
+// with the stored key, without a key exchange or a login.
 // The bot logs in once per device (the client's budget allows 3 an hour); a login Telegram refused is not tried again
 // until the settings change.
 const { TelegramClient } = __mod_src_mtproto_client;
@@ -2692,7 +2709,51 @@ const sessionFp = (c) => digest("session\n" + c.apiId + "\n" + c.botToken);
 /** Which exact settings a refused login was made with (api_hash included). */
 const loginFp = (c) => digest("login\n" + c.apiId + "\n" + c.apiHash + "\n" + c.botToken);
 
-let live = null; // { fp, client, discovery, saved }
+let live = null;       // { fp, device, client, discovery, saved, ready }
+let connecting = null; // the one connect in flight: every caller of this runtime waits on it
+
+// ---- the device mark ----
+//
+// tg.session sits in kino.storage, which a password-protected backup carries to another device; kino.catalog never
+// travels. So the install's id lives in both: in tg.session, and in one row of the catalog that only this device has.
+// A stored session is used only when the two match. A restored copy (onto a fresh device, onto a device with its own
+// catalog, or taken before anything was indexed) never matches, so its auth key, which belongs to the other device,
+// is dropped and this device opens its own (one login, budgeted). What this does NOT cover: a Kino that would one day
+// carry the catalog file in a backup too (the mark would then travel with the key), and a catalog file reset by Kino
+// as damaged (the mark goes with it: a new session, which is only a cost).
+const DEVICE_ROW = "~device";
+
+/** This install's id from the catalog's mark, or null when there is none. */
+async function deviceMark() {
+  const [row] = await kino.catalog.get([DEVICE_ROW]);
+  return row && row.data && typeof row.data.device === "string" && /^[0-9a-f]{32}$/.test(row.data.device) ? row.data.device : null;
+}
+
+/** Writes the mark (a new random id unless one is given) and answers it. */
+async function markDevice(id = kino.crypto.randomBytes(16)) {
+  await kino.catalog.upsert([{ id: DEVICE_ROW, title: "~", sort: 0, data: { device: id } }]);
+  return id;
+}
+
+/**
+ * Makes sure what kino.storage holds was made on this device. A stored session from elsewhere (no mark, or another
+ * one) is dropped together with what came with it from the same backup, the update state and the shell state, and
+ * this device's catalog is rebuilt from scratch under a new mark: the settings stay. Answers this device's mark.
+ */
+async function checkDevice() {
+  const stored = readJson(KEYS.session);
+  let mark = await deviceMark();
+  if (stored && (!mark || stored.device !== mark)) {
+    kino.log("stored session was not made on this device: a new session and a new index");
+    if (live) await close();
+    remove(KEYS.session);
+    remove(KEYS.discovery);
+    remove(KEYS.shell);
+    await kino.catalog.clear();
+    mark = null;
+  }
+  return mark || markDevice();
+}
 
 function newClient(c) {
   return new TelegramClient({
@@ -2705,29 +2766,37 @@ function newClient(c) {
   });
 }
 
-/** Writes the client's state when it changed (a new DC key, a new salt, the login). */
+/** Writes the client's state when it changed (a new DC key, a dropped one, a new salt, the login). */
 function saveSession() {
   if (!live) return;
   const state = live.client.exportState();
   const text = JSON.stringify(state);
   if (text === live.saved) return;
-  if (writeJson(KEYS.session, { v: 1, fp: live.fp, state })) live.saved = text;
+  if (writeJson(KEYS.session, { v: 1, fp: live.fp, device: live.device, state })) live.saved = text;
 }
 
 /**
- * The live client, connected and logged in, for these settings. `refused` is the shell's marker of a login Telegram
- * refused (`{ fp, kind }`): with the same settings, the login is not tried again (the error comes back at once).
+ * The live client, connected and logged in, for these settings. Every caller of the runtime shares one connect in
+ * flight (cleared when it fails), so concurrent calls never build two clients or spend two logins. `shell.refused`
+ * marks a login Telegram refused with these exact settings: it is not tried again.
  */
-async function connect(c, shell) {
+function connect(c, shell) {
   const fp = sessionFp(c);
-  if (live && live.fp === fp && live.ready) return live;
+  if (live && live.fp === fp && live.ready) return Promise.resolve(live);
+  if (!connecting) connecting = open(c, shell).finally(() => { connecting = null; });
+  return connecting;
+}
+
+async function open(c, shell) {
+  const fp = sessionFp(c);
   if (live && live.fp !== fp) await close();
   if (shell.refused && shell.refused.fp === loginFp(c)) throw shellError(shell.refused.kind, "login refused before");
   if (!live) {
+    const device = await checkDevice();
     const stored = readJson(KEYS.session);
     let client = newClient(c);
     let saved = null;
-    const state = stored && stored.v === 1 && stored.fp === fp && stored.state && stored.state.dcs ? stored.state : null;
+    const state = stored && stored.v === 1 && stored.fp === fp && stored.device === device && stored.state && stored.state.dcs ? stored.state : null;
     try {
       await client.connect(state && state.homeDc ? state.homeDc : FIRST_DC, state || undefined);
       saved = state ? JSON.stringify(state) : null;
@@ -2737,7 +2806,7 @@ async function connect(c, shell) {
       client = newClient(c);
       await client.connect(FIRST_DC);
     }
-    live = { fp, client, saved, ready: false, discovery: createDiscovery({ client, store: kinoStore, persistEntries: false, log: (m) => kino.log("discovery: " + m) }) };
+    live = { fp, device, client, saved, ready: false, discovery: createDiscovery({ client, store: kinoStore, persistEntries: false, log: (m) => kino.log("discovery: " + m) }) };
   }
   try {
     await live.client.botLogin({ apiHash: c.apiHash, botToken: c.botToken });
@@ -2746,6 +2815,23 @@ async function connect(c, shell) {
   }
   live.ready = true;
   return live;
+}
+
+/**
+ * Runs `fn(live)`; when the session died under it (a 401, SESSION_REVOKED, a dropped AUTH_KEY_DUPLICATED key), logs
+ * in again ONCE (inside the login budget) and runs `fn` once more. Never loops: a second failure is the caller's.
+ */
+async function withSession(c, shell, fn) {
+  const l = await connect(c, shell);
+  try {
+    return await fn(l);
+  } catch (e) {
+    if (!e || e.code !== "auth_key_unregistered") throw e;
+    kino.log("session lost (" + (e.rpc && /^[A-Z_]{1,40}$/.test(e.rpc) ? e.rpc : "transport") + "): one new login");
+    l.ready = false;
+    saveSession();
+    return fn(await connect(c, shell));
+  }
 }
 
 /** Closes the live client (a settings change, a forget). */
@@ -2767,7 +2853,7 @@ const hasStoredLogin = (c) => {
   const home = s.state.dcs[String(s.state.homeDc)];
   return !!(home && home.loggedIn);
 };
-return { credentials, sessionFp, loginFp, saveSession, connect, close, forgetSession, hasStoredLogin };
+return { credentials, sessionFp, loginFp, DEVICE_ROW, deviceMark, markDevice, checkDevice, saveSession, connect, withSession, close, forgetSession, hasStoredLogin };
 })();
 
 // ---- src/shell/library.js ----
@@ -2775,14 +2861,16 @@ const __mod_src_shell_library = (() => {
 // The video library: Telegram's channels through the discovery, kept in kino.catalog (one row per video), and the
 // rows, pages and searches Kino shows, read from the catalog only.
 //
-// Channels: the bot learns every channel it administers; each gets a slot (1 to 8, in the order the discovery lists
-// them, ascending id) and the slot's toggle in the settings says whether it is shown and indexed. A channel that is
+// Channels: the bot learns every channel it administers; the slots are the first 8 of them by ascending channel id,
+// recomputed from the whole set at every refresh (a channel the bot lost frees its slot), so the same bot gives the same
+// slot -> channel mapping on every device once they have seen the same channels. The slot's toggle in the settings
+// (which syncs) says whether that channel is shown and indexed. A channel that is
 // off is never scanned and has no rows: turning it off removes its rows from the catalog (by id, in steps); turning
 // it on reads it again from its start. Slot 1's toggle starts on, the others off (the manifest's defaults).
 //
 // Refresh: from Home (at most every 5 minutes, sooner while a pass is unfinished or a toggle changed) and from the
 // "Actualizar ahora" action. Never from search. A refresh that fails keeps the old rows and stores the error.
-const { connect, credentials, saveSession, loginFp, sessionFp, forgetSession, hasStoredLogin: hasLogin } = __mod_src_shell_live;
+const { withSession, credentials, saveSession, loginFp, sessionFp, forgetSession, hasStoredLogin: hasLogin, checkDevice, deviceMark, markDevice, DEVICE_ROW } = __mod_src_shell_live;
 const { KEYS, readJson, writeJson, remove } = __mod_src_shell_store;
 const { shellError, kindOf } = __mod_src_shell_errors;
 const { t, minutes, videoCount } = __mod_src_shell_text;
@@ -2791,6 +2879,7 @@ const SLOTS = 8;
 const REFRESH_MS = 5 * 60 * 1000;
 const BATCH = 500;              // kino.catalog: items per upsert, ids per get/remove
 const MAX_PAGES = 25;           // discovery RPCs per refresh (Home has 20 s)
+const REFRESH_BUDGET_MS = 14000; // from the start of the call: key exchange, login and pages; then stop and go on later
 const PURGE_BATCHES = 40;       // remove calls per purge step (20 000 ids)
 const SCAN_BATCHES = 10;        // get calls per channel row or page (5 000 message ids)
 const ROW_ITEMS = 30;
@@ -2799,7 +2888,7 @@ const HLS = /mpegurl/i;
 
 // ---- shell state (tg.shell) ----
 
-const freshShell = (fp) => ({ v: 1, fp, slots: [], titles: {}, gone: {}, applied: [], top: {}, purge: [], indexedAt: 0, incomplete: false, count: 0, error: null, refused: null, channelErrors: 0 });
+const freshShell = (fp) => ({ v: 1, fp, slots: [], titles: {}, gone: {}, applied: [], top: {}, purge: [], indexedAt: 0, incomplete: false, count: 0, unslotted: 0, error: null, refused: null, channelErrors: 0 });
 
 function loadShell(c) {
   const s = readJson(KEYS.shell);
@@ -2926,22 +3015,32 @@ function noticeFor(problem, now = Date.now()) {
   }
 }
 
-/** Starts over for another bot (or after the catalog came back empty): the index and the discovery state go. */
+/** Starts over for another bot: the index and the discovery state go (this device keeps its mark). */
 async function resetIndex(shell) {
   remove(KEYS.discovery);
   shell.slots = []; shell.titles = {}; shell.gone = {}; shell.applied = []; shell.top = {}; shell.purge = [];
-  shell.indexedAt = 0; shell.incomplete = false; shell.count = 0; shell.channelErrors = 0;
+  shell.indexedAt = 0; shell.incomplete = false; shell.count = 0; shell.unslotted = 0; shell.channelErrors = 0;
+  const mark = await deviceMark();
   try { await kino.catalog.clear(); } catch (e) { kino.log("catalog clear failed: " + (e && e.code)); }
+  await markDevice(mark || undefined);
 }
 
-/** Gives a slot to every channel the discovery knows that has none (at most SLOTS); refreshes the titles. */
+/** How many videos the catalog holds (the device mark is a row too, not a video). */
+async function countVideos() {
+  const n = await kino.catalog.count();
+  return Math.max(0, n - ((await kino.catalog.get([DEVICE_ROW])).length));
+}
+
+/** The slots: the first SLOTS channels the discovery knows, by ascending channel id; the titles of all of them. */
 function assignSlots(shell, channels) {
-  for (const [rawId, c] of Object.entries(channels || {})) {
+  const ids = Object.keys(channels || {}).sort((a, b) => { const x = BigInt(a), y = BigInt(b); return x < y ? -1 : x > y ? 1 : 0; });
+  for (const rawId of ids) {
     const chatId = channelChatId(rawId);
-    shell.titles[chatId] = clip(c.title, 100);
+    shell.titles[chatId] = clip(channels[rawId].title, 100);
     delete shell.gone[chatId];
-    if (!shell.slots.includes(chatId) && shell.slots.length < SLOTS) shell.slots.push(chatId);
   }
+  shell.slots = ids.slice(0, SLOTS).map(channelChatId);
+  shell.unslotted = Math.max(0, ids.length - SLOTS);
 }
 
 /** Applies one refresh's changes to the catalog: only videos of active channels, never an HLS playlist. */
@@ -2982,26 +3081,29 @@ async function applyToggles(shell, live) {
   return changed;
 }
 
+let running = null; // the refresh in flight: a second caller (Home and "Actualizar ahora" at once) shares its result
+
 /**
  * One refresh: toggles, purges, then (unless the index is recent and nothing is pending, or `force`) the discovery.
- * Never throws: answers { shell, added, problem }. A failure keeps the old rows and is stored in `shell.error`.
+ * Never throws: answers { shell, added, problem }. A failure keeps the old rows and is stored in `shell.error`. One at
+ * a time per runtime: a call while another runs gets that one's answer.
  */
-async function refresh({ force = false } = {}) {
+function refresh(opts = {}) {
+  if (!running) running = runRefresh(opts).finally(() => { running = null; });
+  return running;
+}
+
+async function runRefresh({ force = false } = {}) {
   const c = credentials();
   if (!c.complete) return { shell: loadShell(null), added: 0, problem: { kind: "config" } };
-  let shell = loadShell(c);
-  const now = Date.now();
+  const started = Date.now();
+  const now = started;
+  let shell = null;
   let added = 0;
   try {
+    await checkDevice(); // first: a restored storage from another device is dropped before anything reads it
+    shell = loadShell(c);
     if (shell.fp !== sessionFp(c)) { await resetIndex(shell); shell.fp = sessionFp(c); shell.error = null; shell.refused = null; }
-    if (shell.count > 0 && (await kino.catalog.count()) === 0) {
-      // The catalog is never in a backup, kino.storage is: an empty catalog with a full marker is most likely a
-      // restore on another device. Its auth key belongs to the first device (AUTH_KEY_DUPLICATED), so this one opens
-      // its own session too (one login, budgeted), then reads everything again.
-      kino.log("catalog empty after a restore or a reset: new session, indexing again");
-      await forgetSession();
-      await resetIndex(shell);
-    }
     const active0 = activeChats(shell);
     const togglesPending = [...active0].some((x) => !shell.applied.includes(x)) || shell.applied.some((x) => !active0.has(x));
     await purgeStep(shell); // what an earlier toggle left to remove: no network needed
@@ -3010,30 +3112,37 @@ async function refresh({ force = false } = {}) {
     if (!force && blocked && (blocked.kind === "flood" || blocked.kind === "budget")) return { shell, added, problem: blocked };
     if (!force && !pending && shell.indexedAt && now - shell.indexedAt < REFRESH_MS) return { shell, added, problem: blocked };
 
-    const live = await connect(c, shell);
-    await applyToggles(shell, live);
-    await purgeStep(shell);
-    // A second pass only when the first gave an active slot to a channel it had not scanned (slot 1 starts on).
-    for (let pass = 0; pass < 2; pass++) {
-      const active = activeChats(shell);
-      const res = await live.discovery.refresh({ maxPages: MAX_PAGES, shouldScan: (rawId) => active.has(channelChatId(rawId)) });
-      added += await applyChanges(shell, res.changes, active);
-      shell.channelErrors = (res.errors || []).filter((x) => x.scope === "channel").length;
-      assignSlots(shell, res.state.channels);
-      shell.incomplete = !!res.incomplete;
-      if (res.floodWait !== undefined) {
-        shell.error = { kind: "flood", until: now + res.floodWait * 1000, at: now };
-        shell.incomplete = true;
-        break;
+    const deadline = started + REFRESH_BUDGET_MS;
+    await withSession(c, shell, async (live) => {
+      live.client.timeoutMs = 9000;
+      await applyToggles(shell, live);
+      await purgeStep(shell);
+      // A second pass only when the first gave an active slot to a channel it had not scanned (slot 1 starts on).
+      for (let pass = 0; pass < 2 && Date.now() < deadline; pass++) {
+        const active = activeChats(shell);
+        const res = await live.discovery.refresh({ maxPages: MAX_PAGES, deadline, commit: false, shouldScan: (rawId) => active.has(channelChatId(rawId)) });
+        // The catalog first, then the discovery's progress: a write that fails (or a call cut off in between) leaves
+        // the update state where it was, and the next refresh reads those pages again (upserts are idempotent).
+        added += await applyChanges(shell, res.changes, active);
+        res.commit();
+        shell.channelErrors = (res.errors || []).filter((x) => x.scope === "channel").length;
+        assignSlots(shell, res.state.channels);
+        shell.incomplete = !!res.incomplete;
+        if (res.floodWait !== undefined) {
+          shell.error = { kind: "flood", until: now + res.floodWait * 1000, at: now };
+          shell.incomplete = true;
+          return;
+        }
+        shell.error = null;
+        if (!(await applyToggles(shell, live))) return;
       }
-      shell.error = null;
-      if (!(await applyToggles(shell, live))) break;
-    }
+      if (Date.now() >= deadline) shell.incomplete = true;
+    });
     shell.refused = null;
     if (!shell.incomplete) shell.indexedAt = now;
-    shell.count = await kino.catalog.count();
     return { shell, added, problem: problemOf(shell, now) };
   } catch (e) {
+    shell = shell || loadShell(c);
     const kind = kindOf(e);
     shell.error = { kind, at: now };
     if (kind === "flood" || kind === "budget") shell.error.until = now + (Number(e.seconds) || 60) * 1000;
@@ -3041,8 +3150,11 @@ async function refresh({ force = false } = {}) {
     kino.log("refresh failed: " + kind + " " + (e && e.code ? e.code : ""));
     return { shell, added, problem: shell.error };
   } finally {
-    saveSession();
-    saveShell(shell);
+    if (shell) {
+      try { shell.count = await countVideos(); } catch { /* keep the last count */ }
+      saveSession();
+      saveShell(shell);
+    }
   }
 }
 
@@ -3052,6 +3164,7 @@ async function forget() {
   remove(KEYS.discovery);
   remove(KEYS.shell);
   await kino.catalog.clear();
+  await markDevice();
 }
 
 // ---- what Kino shows ----
@@ -3115,7 +3228,7 @@ async function browsePage(ref, cursor) {
 /** Search in the catalog only (accents and case aside, every word); `within` a channel keeps that channel's rows. */
 async function searchPage(query) {
   const q = String((query && query.q) || "").trim().slice(0, 256);
-  if (!q) return [];
+  if (!q) return { items: [] };
   if (!credentials().complete) return { items: [] };
   const shell = loadShell(credentials());
   const active = activeChats(shell);
@@ -3153,7 +3266,7 @@ function statusLines() {
     const key = "ch" + (i + 1) + "_name";
     if (!chatId) { out[key] = t("slot.free"); continue; }
     const title = shell.titles[chatId] || chatId;
-    out[key] = shell.gone[chatId] ? t("slot.gone", { title }) : kino.config.get("ch" + (i + 1)) === true ? title : t("slot.off", { title });
+    out[key] = kino.config.get("ch" + (i + 1)) === true ? title : t("slot.off", { title });
   }
   const parts = [shell.count > 0 ? videoCount(shell.count) : t("index.none")];
   if (shell.indexedAt) {
@@ -3163,10 +3276,11 @@ function statusLines() {
   if (shell.incomplete) parts.push(t("index.reading"));
   if (problem) parts.push(problem.kind === "flood" || problem.kind === "budget" ? t("setup.flood", { min: minutes((problem.until - now) / 1000) }) : noticeFor(problem).items[0].title);
   if (shell.channelErrors > 0) parts.push(t("index.channelErrors", { n: shell.channelErrors }));
+  if (shell.unslotted > 0) parts.push(t("index.unslotted", { n: shell.unslotted }));
   out.index_status = parts.join(" · ").slice(0, 200);
   return out;
 }
-return { SLOTS, REFRESH_MS, loadShell, activeChats, rowOf, itemOf, refresh, forget, homeRows, browsePage, searchPage, rowFor, channelTabs, statusLines, chatOfId, msgOfId };
+return { SLOTS, REFRESH_MS, loadShell, activeChats, rowOf, itemOf, countVideos, refresh, forget, homeRows, browsePage, searchPage, rowFor, channelTabs, statusLines, chatOfId, msgOfId };
 })();
 
 // ---- src/shell/b64.js ----
@@ -3199,13 +3313,15 @@ const __mod_src_shell_read = (() => {
 // prelude decoding the WebSocket frame, and the transport's one toHex of it (src/mtproto/transport.js).
 const { CHUNK } = __mod_src_mtproto_client;
 const { toBase64, fromHex } = __mod_src_mtproto_bytes;
-const { credentials, connect, saveSession } = __mod_src_shell_live;
+const { credentials, withSession, saveSession } = __mod_src_shell_live;
 const { loadShell, rowFor, rowOf } = __mod_src_shell_library;
 const { shellError } = __mod_src_shell_errors;
 const { hexToBase64Native } = __mod_src_shell_b64;
 
 const SHORT_FLOOD_S = 5;     // a FLOOD_WAIT this short is waited out once inside the read (kino.sleep: 5 s at most)
-const RETRY_BUDGET_MS = 9000; // no retry once the read has run this long (Kino gives it 20 s)
+const READ_BUDGET_MS = 17000; // everything a read does (getFile, refetch, retries) ends before this; Kino gives it 20 s
+const PER_CALL_MS = 9000;     // the longest one request may wait, when the budget still allows it
+const MIN_LEFT_MS = 1500;     // a request is not started with less than this left
 
 /** The getFile requests for [offset, offset + want): each a power of two times 4096, never across a 1 MiB boundary. */
 function pieces(offset, want) {
@@ -3246,37 +3362,48 @@ async function read(arg) {
   const size = row.data.size;
   const want = Math.max(0, Math.min(length, size - offset));
   if (want === 0) return { bytes: "" };
-  const live = await connect(c, loadShell(c));
+  const deadline = started + READ_BUDGET_MS;
+  // Each request waits at most what is left of the read's budget, so getFile + refetch + a retry fit inside it.
+  const budget = (live) => {
+    const left = deadline - Date.now();
+    if (left < MIN_LEFT_MS) throw shellError("network", "read budget spent");
+    live.client.timeoutMs = Math.min(PER_CALL_MS, left - 500);
+  };
   let refetched = false, waited = false;
   let hex = "";
   try {
-    for (const piece of pieces(offset, want)) {
-      for (;;) {
-        try {
-          hex += await live.client.getFile(locOf(row.data), piece.offset, piece.limit, { hex: true });
-          break;
-        } catch (e) {
-          const late = Date.now() - started > RETRY_BUDGET_MS;
-          if (e.code === "file_reference_expired" && !refetched && !late) {
-            refetched = true;
-            const fresh = await live.discovery.refetch({ chatId: row.data.chatId, msgId: row.data.msgId });
-            if (!fresh) {
-              await kino.catalog.remove([row.id]);
-              throw shellError("not_found", "the message is gone");
+    await withSession(c, loadShell(c), async (live) => {
+      hex = "";
+      for (const piece of pieces(offset, want)) {
+        for (;;) {
+          budget(live);
+          try {
+            hex += await live.client.getFile(locOf(row.data), piece.offset, piece.limit, { hex: true });
+            break;
+          } catch (e) {
+            const left = deadline - Date.now();
+            if (e.code === "file_reference_expired" && !refetched && left > 2 * MIN_LEFT_MS) {
+              refetched = true;
+              budget(live);
+              const fresh = await live.discovery.refetch({ chatId: row.data.chatId, msgId: row.data.msgId });
+              if (!fresh) {
+                await kino.catalog.remove([row.id]);
+                throw shellError("not_found", "the message is gone");
+              }
+              row = rowOf(fresh);
+              await kino.catalog.upsert([row]);
+              continue;
             }
-            row = rowOf(fresh);
-            await kino.catalog.upsert([row]);
-            continue;
+            if (e.code === "flood_wait" && !waited && e.seconds <= SHORT_FLOOD_S && left > e.seconds * 1000 + 2 * MIN_LEFT_MS) {
+              waited = true;
+              await kino.sleep(Math.max(0, e.seconds) * 1000);
+              continue;
+            }
+            throw e;
           }
-          if (e.code === "flood_wait" && !waited && !late && e.seconds <= SHORT_FLOOD_S) {
-            waited = true;
-            await kino.sleep(Math.max(0, e.seconds) * 1000);
-            continue;
-          }
-          throw e;
         }
       }
-    }
+    });
   } finally {
     saveSession();
   }
@@ -3328,8 +3455,10 @@ export async function browse(ref, cursor) {
 export async function resolve(ref) {
   return guard(async () => {
     if (typeof ref === "string" && ref.startsWith("setup:")) {
-      const kind = ref.slice(6);
-      throw shellError(["config", "token", "api_id", "flood", "budget"].includes(kind) ? kind : "unavailable", "setup notice", { seconds: secondsLeft(kind) });
+      let kind = ref.slice(6);
+      const seconds = secondsLeft(kind);
+      if ((kind === "flood" || kind === "budget") && seconds === undefined) kind = "unavailable"; // the wait is over
+      throw shellError(["config", "token", "api_id", "flood", "budget"].includes(kind) ? kind : "unavailable", "setup notice", { seconds });
     }
     if (!credentials().complete) throw shellError("config");
     const row = await rowFor(ref);
@@ -3347,7 +3476,7 @@ export async function resolve(ref) {
 
 function secondsLeft(kind) {
   const e = loadShell(credentials()).error;
-  return e && e.kind === kind && e.until ? Math.max(1, Math.ceil((e.until - Date.now()) / 1000)) : undefined;
+  return e && e.kind === kind && e.until && e.until > Date.now() ? Math.max(1, Math.ceil((e.until - Date.now()) / 1000)) : undefined;
 }
 
 export async function read(arg) {

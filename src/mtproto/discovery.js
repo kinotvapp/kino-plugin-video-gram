@@ -187,7 +187,7 @@ class Journal extends Map {
  * plugin has a larger storage quota). Operations run one at a time; each starts from the in-memory state when this
  * runtime has one that is newer than (or equal to) the saved copy, else from the saved state.
  */
-export function createDiscovery({ client, store, budgetBytes = DEFAULT_BUDGET_BYTES, persistEntries = true, log = () => {} }) {
+export function createDiscovery({ client, store, budgetBytes = DEFAULT_BUDGET_BYTES, persistEntries = true, now = () => Date.now(), log = () => {} }) {
   if (!client || typeof client.call !== "function") throw mtError("invalid_request", "createDiscovery needs a TelegramClient");
   if (!store || typeof store.get !== "function" || typeof store.set !== "function") throw mtError("invalid_request", "createDiscovery needs a get/set store");
   let chain = Promise.resolve();
@@ -324,6 +324,9 @@ export function createDiscovery({ client, store, budgetBytes = DEFAULT_BUDGET_BY
   const setState = (st, s) => { st.pts = s.pts; st.qts = s.qts; st.date = s.date; st.seq = s.seq; };
 
   /**
+   * Options: `shouldScan(channelId)` skips channels; `deadline` (a time of `now()`) stops early like maxPages does;
+   * `commit: false` saves nothing and answers `commit()`, which the caller runs once its own writes succeeded (until
+   * then, and when the pass throws, the next operation starts from the saved state again).
    * refresh({ maxPages = 20 }) -> { entries, newCount, state, incomplete?, floodWait? }: reads the common box (from
    * pts 1 on the first run, else from the saved state), then every known channel from its saved pts, at most
    * `maxPages` calls in all. `entries` is the whole index (newest first), `newCount` how many keys it gained.
@@ -331,14 +334,15 @@ export function createDiscovery({ client, store, budgetBytes = DEFAULT_BUDGET_BY
    * Also: `persisted` (false when the store refused the write), `truncated` (the saved copy left the oldest entries
    * out), `errors` [{ scope: "common" | "channel" | "storage", channelId?, code, message }] for what was isolated.
    */
-  function refresh({ maxPages = 20, shouldScan = null } = {}) {
+  function refresh({ maxPages = 20, shouldScan = null, commit = true, deadline = Infinity } = {}) {
     return serial(async () => {
+      const deferred = commit === false;
       const { st, index } = begin();
       const before = new Set(index.keys());
       const titles = new Map();
       const errors = [];
       let pages = 0, incomplete = false, floodWait;
-      const spend = () => { if (pages >= maxPages) { incomplete = true; return false; } pages++; return true; };
+      const spend = () => { if (pages >= maxPages || now() >= deadline) { incomplete = true; return false; } pages++; return true; };
       try {
         // 1. the common box
         let req = st.pts > 0 ? { pts: st.pts, date: st.date, qts: st.qts } : { pts: 1, date: 1, qts: -1 };
@@ -400,15 +404,24 @@ export function createDiscovery({ client, store, budgetBytes = DEFAULT_BUDGET_BY
           }
         }
       } catch (e) {
-        if (e.code !== "flood_wait") { save(st, index); throw e; } // save never throws, so `e` is what surfaces
+        if (e.code !== "flood_wait") {
+          if (deferred) mem = null; // nothing of this pass is kept: the next one starts from the saved state
+          else save(st, index); // save never throws, so `e` is what surfaces
+          throw e;
+        }
         incomplete = true;
         floodWait = e.seconds;
       }
-      const saved = save(st, index);
+      let saved = { persisted: false };
+      let pending = null;
+      if (deferred) { pending = mem; mem = null; } // until commit(), the next operation reads the saved state
+      else saved = save(st, index);
       if (saved.error) errors.push(saved.error);
       let newCount = 0;
       for (const k of index.keys()) if (!before.has(k)) newCount++;
       const out = { entries: sorted(index), newCount, state: publicState(st), persisted: saved.persisted, errors };
+      // commit: false: the caller writes `changes` somewhere first, then calls commit() to save this pass's progress.
+      if (deferred) out.commit = () => { mem = pending; return save(st, index); };
       if (saved.truncated) out.truncated = true;
       if (incomplete) out.incomplete = true;
       if (floodWait !== undefined) out.floodWait = floodWait;
