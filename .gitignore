@@ -3,3 +3,5 @@ dist/
 .kino-storage.json
 .kino-cookies.json
 .kino-secrets.json
+.superpowers/
+*.pem

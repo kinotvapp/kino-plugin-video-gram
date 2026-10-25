@@ -1,10 +1,12 @@
 {
-  "name": "kino-plugin-telegram-library",
+  "name": "kino-plugin-video-gram",
   "private": true,
   "type": "module",
-  "description": "Kino plugin: a personal Telegram video library over MTProto (bot login, chunked downloads).",
+  "description": "Kino plugin Video-Gram: your Telegram videos in Kino over MTProto (a bot, or your own account read only).",
   "scripts": {
     "build": "node scripts/build.mjs src/plugin.js plugin.js",
-    "test": "node scripts/build.mjs src/plugin.js plugin.js && node --test"
+    "test": "node scripts/build.mjs src/plugin.js plugin.js && node --test",
+    "validate": "npm run build && node sdk/validate.mjs . --repo kinotvapp/kino-plugin-video-gram",
+    "sign": "npm run build && node sdk/seal.mjs --sign --repo kinotvapp/kino-plugin-video-gram --key ~/.config/kino/kino-author-key.pem"
   }
 }

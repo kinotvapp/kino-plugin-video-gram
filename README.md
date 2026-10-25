@@ -1,18 +1,48 @@
-# Telegram Library (Kino plugin)
+# Video-Gram (Kino plugin)
 
-A personal Telegram video library for [Kino](https://github.com/kinotvapp/kino-light): the videos you post in your own
-private Telegram channel show up in Kino's Inicio and search, and play in Kino's player with seeking, Chromecast and
+**Tus videos de Telegram en Kino. / Your Telegram videos in Kino.** Unofficial: not affiliated with Telegram. / No
+oficial: sin relación con Telegram.
+
+A personal video library for [Kino](https://github.com/kinotvapp/kino-light): the videos you post in your own
+Telegram channels and chats show up in Kino's Inicio and search, and play in Kino's player with seeking, Chromecast and
 DLNA. You bring your own Telegram app id and either your own bot or your own account (signed in with a QR, **read
 only**); Kino ships none, and there is no server in between: the phone talks to Telegram directly.
 
-This is for **your own** channel. It is not a catalogue of films, and it is not meant to share one.
+This is for **your own** videos. It is not a catalogue of films, and it is not meant to share one.
 
-- Plugin id `telegram-library`. Requires Kino with **apiVersion 13** (Kino 0.9.75 or newer). Both numbers are **provisional**: the app release that carries `socket`, `byteSource` and `catalog` is not out yet, and they may still change. For full speed it needs the Kino build with the `kino.crypto` ops `convert` and `aesIgeVerify`; on a Kino without them it falls back to slower code and still works. Phone first.
+## Instalar
+
+En Kino: Ajustes ▸ Plugins ▸ Agregar plugin, y escribe:
+
+```
+kinotvapp/kino-plugin-video-gram
+```
+
+Kino lo muestra como **Firmado**: `plugin.js` va firmado con la llave de autor de kinotvapp, y la firma está en
+`kino-plugin.json` (ligada a este repositorio). Después sigue los pasos de abajo.
+
+## Install
+
+In Kino: Settings ▸ Plugins ▸ Add plugin, and type:
+
+```
+kinotvapp/kino-plugin-video-gram
+```
+
+Kino shows it as **Signed**: `plugin.js` is signed with kinotvapp's author key, and the signature is in
+`kino-plugin.json` (bound to this repository). Then follow the steps below.
+
+## In short
+
+- Plugin id `video-gram`, name Video-Gram. Requires Kino with **apiVersion 13**: Kino 0.9.74 or later (the next
+  release, not published yet). For full speed it needs the `kino.crypto` ops `convert` and `aesIgeVerify`, which come
+  with that Kino; on a Kino without them it falls back to slower code and still works. Phone first.
 - Capabilities: `home`, `search`, `browse`, `scopedSearch`, `resolve`, `socket`, `byteSource`, `catalog`, `imageSource`,
   plus its own section, categories (one tile per channel), `details` and a theme. No `download`, no `storageLarge`.
 - Posters: TMDB's, through Kino's own TMDB access (`kino.meta`: the plugin has no TMDB key and no TMDB host); when TMDB
   does not know the video, Telegram's own thumbnail of it, through the plugin's `image` export.
 - Hosts: `pluto`, `venus`, `aurora`, `vesta` and `flora` `.web.telegram.org` (Telegram's five data centres, over WebSocket). Nothing else.
+- License: MIT ([LICENSE](LICENSE)).
 
 ## Setup (Español)
 

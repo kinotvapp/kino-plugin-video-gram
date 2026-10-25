@@ -1,4 +1,4 @@
-// telegram-library: a personal Telegram video library for Kino. The person brings their own api_id/api_hash
+// Video-Gram (id video-gram): a personal library of your Telegram videos for Kino. The person brings their own api_id/api_hash
 // (my.telegram.org) and a bot (@BotFather) that administers their private channel(s); the plugin lists the channels'
 // videos in Inicio and in search, and streams them through Kino's byteSource (`read`), seeking, Cast and DLNA included.
 //

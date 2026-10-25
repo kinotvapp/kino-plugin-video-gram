@@ -4,7 +4,7 @@
 import { createKino } from "../sdk/kino-shim.mjs";
 
 export const TEST_MANIFEST = Object.freeze({
-  id: "telegram-library-test",
+  id: "video-gram-test",
   name: "Telegram library (tests)",
   version: "0.0.0",
   apiVersion: 13,

@@ -1,11 +1,12 @@
 {
-  "id": "telegram-library",
-  "name": "Telegram Library",
-  "version": "0.3.1",
+  "id": "video-gram",
+  "name": "Video-Gram",
+  "version": "1.0.0",
   "apiVersion": 13,
   "entry": "plugin.js",
-  "description": "Tu biblioteca personal: los videos de tus canales y chats de Telegram, con tu propio bot o tu cuenta (solo lectura), en Kino. Your personal library: the videos of your Telegram channels and chats, with your own bot or your account (read only).",
+  "description": "Tus videos de Telegram en Kino: los de tus canales y chats, con tu propio bot o tu cuenta (solo lectura). No oficial: sin relación con Telegram. (Your Telegram videos in Kino, with your own bot or your account, read only. Unofficial: not affiliated with Telegram.)",
   "author": "kinotvapp",
+  "homepage": "https://github.com/kinotvapp/kino-plugin-video-gram",
   "hosts": [
     "pluto.web.telegram.org",
     "venus.web.telegram.org",
@@ -27,17 +28,17 @@
   "categories": [
     "movies"
   ],
-  "color": "#2AABEE",
+  "color": "#E8894A",
   "section": {
-    "label": "Telegram",
-    "labelEn": "Telegram"
+    "label": "Video-Gram",
+    "labelEn": "Video-Gram"
   },
   "theme": {
-    "accent": "#2AABEE",
-    "onAccent": "#0B1621",
-    "background": "#0E1621",
-    "surface": "#17212B",
-    "highlight": "#7CC4F5"
+    "accent": "#E8894A",
+    "onAccent": "#1C1006",
+    "background": "#14100D",
+    "surface": "#211A15",
+    "highlight": "#F4B183"
   },
   "settings": [
     {
@@ -252,5 +253,9 @@
       "confirm": "¿Borrar la sesión y el índice de este aparato? Tus videos siguen en Telegram.",
       "confirmEn": "Delete this device's session and index? Your videos stay on Telegram."
     }
-  ]
+  ],
+  "signature": {
+    "authorKey": "82b87b938e0a95b142467c815a8823cb54310a13a828c3c4c77b1eda43294ae6",
+    "value": "3fafcb90ad2b15acbea03cb8c040ee2b9feb224cca44f66a0166afe9c303df877ed7029696ea6def25dee248f95fc5d6be3691e94893a134514394882824f70d"
+  }
 }

@@ -1,4 +1,4 @@
-# telegram-library: notes for developers
+# Video-Gram (video-gram): notes for developers
 
 The plugin's sources are ES modules under `src/`. `scripts/build.mjs` bundles them into the single file Kino loads: `npm run build` writes `plugin.js` (the published entry, committed; a test fails when it is stale). Tests run with `node --test`: `npm test` builds, then runs `test/`. No test reaches the network.
 
@@ -82,3 +82,14 @@ The plugin's sources are ES modules under `src/`. `scripts/build.mjs` bundles th
 - **Session.** `tg.usession` is sealed like `tg.session` (AES-256-GCM, key HMAC-SHA256(api_hash + "\naccount:" + api_id, "tg.usession\n" + salt)), carries the device mark, is never synced; `checkDevice` drops either session when it was not made here. A 401 from a logged-in account (SESSION_REVOKED, AUTH_KEY_UNREGISTERED: the person ended it in Settings ▸ Devices) deletes `tg.usession` and records `tg.login` `closed`: Home and the status line say so, and nothing is sent until the person signs in again (no retry loop). `logout` sends auth.logOut (best effort) and deletes `tg.usession`, `tg.adiscovery`, `tg.qr`, `tg.shell` and the catalog; a bot session stays.
 - **Mode switch.** `sessionFp` differs per mode, so switching `access` resets the shell and clears the catalog: bot and account rows never mix (a switch back re-reads the other mode's chats).
 - **Index** (`account-library.js`). messages.getDialogs (100 per page, at most 5 pages per listing, every 30 minutes; a complete listing drops the chats no longer in it) keeps channels, supergroups, basic groups and Saved Messages (the `self` user), never private chats with others. A chat is probed (search with inputMessagesFilterVideo, limit 1, then inputMessagesFilterDocument, limit 20, for videos sent as files; Saved Messages first); only chats with a video get `seen` and reach the slots; no video means another probe after a day. A chat switched on is walked with both filters from the newest (100 per page, `scan` cursor), then each refresh asks only `min_id` = the highest id seen. Known limits: a deleted video stays until it is played (the refetch finds it gone) or the chat is switched off and on; an edited caption is seen only on such a re-read.
+
+## Publishing (repo kinotvapp/kino-plugin-video-gram)
+
+- The signature in `kino-plugin.json` covers `plugin.js`, the id `video-gram`, the version and the repository
+  `kinotvapp/kino-plugin-video-gram`. Any change to `plugin.js` or the version needs a new one: `npm run sign` (builds,
+  then `node sdk/seal.mjs --sign --repo kinotvapp/kino-plugin-video-gram --key ~/.config/kino/kino-author-key.pem`; the
+  author key, never an SSH key, never committed: `*.pem` is ignored). `npm run validate` checks it like Kino does.
+- `sdk/`, `contract.json` and `kino.d.ts` are copies of the Kino repository's (`plugins/sdk/`, `docs/plugins/`); refresh
+  them from there, never edit them here.
+- apiVersion 13 needs Kino 0.9.74 or later, and the 2FA password's `"sync": false` needs that build too: publish only
+  together with it.
