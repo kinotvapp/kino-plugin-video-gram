@@ -4,7 +4,7 @@ import { test, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { FakeTelegram } from "../testkit/fake-dc.mjs";
 import { FakeBotWorld } from "../testkit/fake-world.mjs";
-import { device } from "../testkit/plugin-harness.mjs";
+import { device, places } from "../testkit/plugin-harness.mjs";
 import { openSession } from "../testkit/session-open.mjs";
 
 const MiB = 1048576;
@@ -49,16 +49,16 @@ test("a stranger's channel (lower id, added later) never takes the owner's slot 
   const spam = postVideo(STRANGER, { name: "spam.mp4" });
   await p.action("refresh");
   let s = await p.settingsStatus();
-  assert.equal(s.ch1_name, "Mis videos");
-  assert.match(s.ch2_name, /^Spam \(desactivado\)/);
+  assert.equal(places(s)[0], "✓ Mis videos");
+  assert.match(places(s)[1], /^— Spam/);
   const items = flat(await p.home());
   assert.ok(items.some((i) => i.ref === mine));
   assert.ok(!items.some((i) => i.ref === spam), "a switched-off stranger shows nothing");
   for (let i = 0; i < 9; i++) world.addChannel({ id: 1000000000n + BigInt(i), accessHash: 3n, title: "Otro" + i });
   await p.action("refresh");
   s = await p.settingsStatus();
-  assert.equal(s.ch1_name, "Mis videos", "nine more strangers do not move the owner");
-  assert.match(s.ch2_name, /^Spam/);
+  assert.equal(places(s)[0], "✓ Mis videos", "nine more strangers do not move the owner");
+  assert.match(places(s)[1], /^— Spam/);
 });
 
 // ---- TMDB switch ----
@@ -188,7 +188,7 @@ test("control and bidi characters are stripped from channel titles, file names a
   const item = flat(rows).find((i) => i.ref === ref);
   assert.ok(item);
   assert.doesNotMatch(JSON.stringify(rows.map((r) => [r.title, r.items.map((i) => [i.title, i.overview])])).replace(/\\u[0-9a-f]{4}/gi, (m) => String.fromCharCode(parseInt(m.slice(2), 16))), bad);
-  assert.doesNotMatch((await p.settingsStatus()).ch1_name, bad);
+  assert.doesNotMatch((await p.settingsStatus()).channels_status, bad);
   assert.doesNotMatch(JSON.stringify(await p.details(ref)).replace(/\\u[0-9a-f]{4}/gi, (m) => String.fromCharCode(parseInt(m.slice(2), 16))), bad);
 });
 
@@ -196,7 +196,7 @@ test("control and bidi characters are stripped from channel titles, file names a
 
 test("Home answers within its budget: past 17 s by Kino's clock, the channel rows stop (logged), the recent row stays", async () => {
   const on = {};
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < 6; i++) {
     const id = 3100000000n + BigInt(i);
     world.addChannel({ id, accessHash: 1n, title: "Canal " + i });
     postVideo(id, { name: "v" + i + ".mp4" });
@@ -209,8 +209,8 @@ test("Home answers within its budget: past 17 s by Kino's clock, the channel row
   const p = await d.runtime({ ...SETTINGS, ...on }, { catalog: slow, now: () => Date.now() + skew });
   const rows = await p.home();
   assert.equal(rows[0].id, "recent");
-  assert.ok(rows.length < 9, "fewer than all 8 channel rows: " + rows.length);
+  assert.ok(rows.length < 7, "fewer than all 6 channel rows: " + rows.length);
   assert.ok(d.logs.some((l) => /channel rows skipped, out of time/.test(l)));
   const full = await (await d.runtime({ ...SETTINGS, ...on })).home();
-  assert.equal(full.length, 9, "with a normal clock every row is there");
+  assert.equal(full.length, 7, "with a normal clock every row is there");
 });

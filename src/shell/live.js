@@ -6,6 +6,7 @@
 import { TelegramClient } from "../mtproto/client.js";
 import { TELEGRAM_PUBLIC_KEYS } from "../mtproto/keys.js";
 import { createDiscovery } from "../mtproto/discovery.js";
+import { createAccountDiscovery, ACCOUNT_STATE_KEY } from "../mtproto/account-library.js";
 import { KEYS, readJson, writeJson, remove, kinoStore } from "./store.js";
 import { shellError } from "./errors.js";
 
@@ -13,18 +14,25 @@ import { shellError } from "./errors.js";
 const PUBLIC_KEYS = TELEGRAM_PUBLIC_KEYS;
 const FIRST_DC = 2;
 
-/** The person's settings (trimmed); `complete` when all three are there. Never logged, never stored. */
+/**
+ * The person's settings (trimmed). `mode` is "bot" (the default, a bot in the person's channels) or "account" (the
+ * person's own account, read only, signed in with a QR). `complete` when the mode has what it needs. Never logged,
+ * never stored.
+ */
 export function credentials() {
   const get = (k) => String(kino.config.get(k) ?? "").trim();
-  const apiId = get("api_id"), apiHash = get("api_hash"), botToken = get("bot_token");
-  return { apiId, apiHash, botToken, complete: !!(apiId && apiHash && botToken) };
+  const mode = kino.config.get("access") === "account" ? "account" : "bot";
+  const apiId = get("api_id"), apiHash = get("api_hash"), botToken = mode === "bot" ? get("bot_token") : "";
+  return { mode, apiId, apiHash, botToken, complete: !!(apiId && apiHash && (mode === "account" || botToken)) };
 }
 
 const digest = (text) => kino.crypto.hash("sha256", text).slice(0, 16);
-/** Which bot (and api_id) a session belongs to. */
-export const sessionFp = (c) => digest("session\n" + c.apiId + "\n" + c.botToken);
+/** Which bot (and api_id) a session belongs to; in account mode, which api_id (the account is learned at the login). */
+export const sessionFp = (c) => (c.mode === "account" ? digest("account\n" + c.apiId) : digest("session\n" + c.apiId + "\n" + c.botToken));
 /** Which exact settings a refused login was made with (api_hash included). */
-export const loginFp = (c) => digest("login\n" + c.apiId + "\n" + c.apiHash + "\n" + c.botToken);
+export const loginFp = (c) => (c.mode === "account" ? digest("alogin\n" + c.apiId + "\n" + c.apiHash) : digest("login\n" + c.apiId + "\n" + c.apiHash + "\n" + c.botToken));
+/** Where the mode's session lives: the bot's and the account's are separate keys, never mixed. */
+export const sessionStoreKey = (c) => (c.mode === "account" ? KEYS.usession : KEYS.session);
 
 let live = null;       // { fp, device, client, discovery, saved, ready }
 let connecting = null; // the one connect in flight: every caller of this runtime waits on it
@@ -66,14 +74,12 @@ export function checkDevice() {
   return checking;
 }
 async function runCheckDevice() {
-  const stored = readJson(KEYS.session);
+  const stored = [readJson(KEYS.session), readJson(KEYS.usession)].filter(Boolean);
   let mark = await deviceMark();
-  if (stored && (!mark || stored.device !== mark)) {
+  if (stored.some((x) => !mark || x.device !== mark)) {
     kino.log("stored session was not made on this device: a new session and a new index");
     if (live) await close();
-    remove(KEYS.session);
-    remove(KEYS.discovery);
-    remove(KEYS.shell);
+    for (const k of [KEYS.session, KEYS.usession, KEYS.discovery, ACCOUNT_STATE_KEY, KEYS.shell, KEYS.qr]) remove(k);
     await kino.catalog.clear();
     mark = null;
   }
@@ -82,6 +88,7 @@ async function runCheckDevice() {
 
 function newClient(c) {
   return new TelegramClient({
+    mode: c.mode,
     apiId: Number(c.apiId),
     publicKeys: PUBLIC_KEYS,
     store: kinoStore,
@@ -101,7 +108,11 @@ function newClient(c) {
 // under a key derived (HMAC-SHA256) from the bot token and the api_hash, with a random per-install salt kept beside it.
 // The fingerprint and the device mark stay readable (they hold no secret). A changed token or api_hash cannot open the
 // old blob: that is no session (a new one, one login inside the budget). Nothing of it is ever logged.
-const sessionKey = (c, salt) => kino.crypto.hmac("sha256", c.apiHash + "\n" + c.botToken, "tg.session\n" + salt, { keyEncoding: "utf8", inputEncoding: "utf8", outputEncoding: "hex" });
+// The account's session (tg.usession) is sealed the same way under the api_hash and api_id: whoever reads the plain
+// kino.storage (a backup file, a dump) gets nothing usable without the password settings, which Kino keeps encrypted.
+const sessionKey = (c, salt) => (c.mode === "account"
+  ? kino.crypto.hmac("sha256", c.apiHash + "\naccount:" + c.apiId, "tg.usession\n" + salt, { keyEncoding: "utf8", inputEncoding: "utf8", outputEncoding: "hex" })
+  : kino.crypto.hmac("sha256", c.apiHash + "\n" + c.botToken, "tg.session\n" + salt, { keyEncoding: "utf8", inputEncoding: "utf8", outputEncoding: "hex" }));
 
 function sealState(key, salt, state) {
   const iv = kino.crypto.randomBytes(12);
@@ -130,7 +141,7 @@ export function saveSession() {
   const state = live.client.exportState();
   const text = JSON.stringify(state);
   if (text === live.saved) return;
-  if (writeJson(KEYS.session, { v: 2, fp: live.fp, device: live.device, ...sealState(live.key, live.salt, state) })) live.saved = text;
+  if (writeJson(live.skey, { v: 2, fp: live.fp, device: live.device, ...sealState(live.key, live.salt, state) })) live.saved = text;
 }
 
 // ---- logins that must wait ----
@@ -138,16 +149,17 @@ export function saveSession() {
 // A login Telegram refused (token, api_id) or asked to delay (FLOOD_WAIT, or the device's own budget) is recorded in
 // tg.login for these exact settings, by whoever met it (Home, a read, a picture), and checked before every login: so
 // the player's retries of read() never send another importBotAuthorization while the wait runs.
-function loginBlocked(c) {
+export function loginBlocked(c) {
   const rec = readJson(KEYS.login);
   if (!rec || rec.fp !== loginFp(c)) return null;
   if (rec.kind === "token" || rec.kind === "api_id") return shellError(rec.kind, "login refused before");
+  if (rec.kind === "closed") return null; // an account session Telegram ended: only a reason to show, the QR login clears it
   if ((rec.kind === "flood" || rec.kind === "budget") && Number(rec.until) > Date.now()) {
     return shellError(rec.kind, "login must wait", { seconds: Math.max(1, Math.ceil((Number(rec.until) - Date.now()) / 1000)) });
   }
   return null;
 }
-function recordLoginFailure(c, e) {
+export function recordLoginFailure(c, e) {
   const code = e && e.code;
   const kind = code === "token_invalid" ? "token" : code === "api_id_invalid" ? "api_id" : code === "flood_wait" ? "flood" : code === "login_budget" ? "budget" : null;
   if (!kind) return;
@@ -161,24 +173,31 @@ function recordLoginFailure(c, e) {
  * flight (cleared when it fails), so concurrent calls never build two clients or spend two logins. `shell.refused`
  * marks a login Telegram refused with these exact settings: it is not tried again.
  */
-export function connect(c, shell, { deadline, noLogin = false } = {}) {
+export function connect(c, shell, { deadline, noLogin = false, loginFlow = false } = {}) {
   const fp = sessionFp(c);
-  if (live && live.fp === fp && live.ready) return Promise.resolve(live);
+  if (live && live.fp === fp && live.mode === c.mode && live.ready) return Promise.resolve(live);
   // A picture never logs in: it opens on its own (Kino runs a plugin's calls one at a time) and gives up before a login.
-  if (noLogin) return open(c, shell, deadline, true);
-  if (!connecting) connecting = open(c, shell, deadline, false).finally(() => { connecting = null; });
+  // The account's QR login (`loginFlow`, only from a settings action or the settings form) gets the client unlogged.
+  if (noLogin || loginFlow) return open(c, shell, deadline, noLogin, loginFlow);
+  if (!connecting) connecting = open(c, shell, deadline, false, false).finally(() => { connecting = null; });
   return connecting;
 }
 
 /** Connect and login, each request inside `deadline` (the first caller's: whoever joins waits on the same one). */
-async function open(c, shell, deadline, noLogin) {
+async function open(c, shell, deadline, noLogin, loginFlow = false) {
   const fp = sessionFp(c);
-  if (live && live.fp !== fp) await close();
+  if (live && (live.fp !== fp || live.mode !== c.mode)) await close();
   if (shell.refused && shell.refused.fp === loginFp(c)) throw shellError(shell.refused.kind, "login refused before");
+  // An account with no session on this device: nothing to open (no key exchange either) until the person's QR login.
+  if (c.mode === "account" && !loginFlow && !live && !readJson(sessionStoreKey(c))) {
+    const rec = readJson(KEYS.login);
+    throw shellError(rec && rec.fp === loginFp(c) && rec.kind === "closed" ? "closed" : "signin", "no account session");
+  }
   const t0 = Date.now();
   if (!live) {
     const device = await checkDevice();
-    const stored = readJson(KEYS.session);
+    const skey = sessionStoreKey(c);
+    const stored = readJson(skey);
     let client = newClient(c);
     let saved = null;
     const mine = stored && stored.fp === fp && stored.device === device ? stored : null;
@@ -195,15 +214,31 @@ async function open(c, shell, deadline, noLogin) {
       client = newClient(c);
       await client.connect(FIRST_DC, undefined, { deadline });
     }
-    live = { fp, device, client, saved: mine && mine.v === 2 ? saved : null, key: sessionKey(c, salt), salt, ready: false, discovery: createDiscovery({ client, store: kinoStore, persistEntries: false, log: (m) => kino.log("discovery: " + m) }) };
+    const discovery = c.mode === "account"
+      ? createAccountDiscovery({ client, store: kinoStore, log: (m) => kino.log("discovery: " + m) })
+      : createDiscovery({ client, store: kinoStore, persistEntries: false, log: (m) => kino.log("discovery: " + m) });
+    live = { fp, mode: c.mode, skey, device, client, saved: mine && mine.v === 2 ? saved : null, key: sessionKey(c, salt), salt, ready: false, discovery };
     if (mine && mine.v === 1) saveSession(); // the old plaintext session is rewritten encrypted at once
   }
   const t1 = Date.now();
   let who = null;
   if (live.client.needsLogin()) {
     if (noLogin) throw shellError("unavailable", "no login on this device");
+    if (c.mode === "account") {
+      // An account never logs in by itself: only the person's QR login (a settings action) does.
+      lastOpen = { connect: t1 - t0, loginms: 0, login: "-" };
+      saveSession();
+      if (loginFlow) return live;
+      const rec = readJson(KEYS.login);
+      throw shellError(rec && rec.fp === loginFp(c) && rec.kind === "closed" ? "closed" : "signin", "no account session");
+    }
     const blocked = loginBlocked(c);
     if (blocked) throw blocked;
+  }
+  if (c.mode === "account") {
+    lastOpen = { connect: t1 - t0, loginms: 0, login: "reused" };
+    live.ready = true;
+    return live;
   }
   try {
     who = await live.client.botLogin({ apiHash: c.apiHash, botToken: c.botToken, deadline });
@@ -229,6 +264,7 @@ export async function withSession(c, shell, fn, { deadline } = {}) {
     return await fn(l);
   } catch (e) {
     if (!e || e.code !== "auth_key_unregistered") throw e;
+    if (c.mode === "account") { await sessionClosed(c); throw shellError("closed", "account session ended"); }
     kino.log("session lost (" + (e.rpc && /^[A-Z_]{1,40}$/.test(e.rpc) ? e.rpc : "transport") + "): one new login");
     l.ready = false;
     saveSession();
@@ -248,14 +284,31 @@ export async function close() {
   if (l) { try { await l.client.close(); } catch { /* already closed */ } }
 }
 
+/**
+ * An account session Telegram ended (SESSION_REVOKED, AUTH_KEY_UNREGISTERED: the person closed it in Settings ▸
+ * Devices): the key is dropped and the reason kept, and nothing logs in again by itself. Never a loop.
+ */
+export async function sessionClosed(c) {
+  kino.log("account session ended by Telegram: sign in again");
+  await close();
+  remove(KEYS.usession);
+  writeJson(KEYS.login, { fp: loginFp(c), kind: "closed" });
+}
+
 /** Forgets the session of this device (the login budget stays: it protects the bot from a flood wait). */
 export async function forgetSession() {
   await close();
   remove(KEYS.session);
+  remove(KEYS.usession);
 }
 
+/** The live client of this runtime when it is open for these settings (the account's login flow). */
+export const liveFor = (c) => (live && live.fp === sessionFp(c) && live.mode === c.mode ? live : null);
+/** The account just logged in (the QR or the password): the live client is ready, the session saved. */
+export function markLoggedIn() { if (live) { live.ready = true; saveSession(); } }
+
 export const hasStoredLogin = (c) => {
-  const s = readJson(KEYS.session);
+  const s = readJson(sessionStoreKey(c));
   if (!s || s.fp !== sessionFp(c)) return false;
   const state = openState(s, c);
   if (!state) return false;

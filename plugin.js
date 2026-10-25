@@ -33,9 +33,6 @@ const ES = {
   "status.connected": "Conectado como bot en este aparato",
   "status.notYet": "Sin conectar todavía: abre Inicio o toca Actualizar ahora",
   "status.flood": "Telegram pidió esperar {min}",
-  "slot.free": "Libre: agrega el bot a otro canal",
-  "slot.off": "{title} (desactivado)",
-  "slot.gone": "{title} (el bot ya no tiene acceso)",
   "index.none": "Todavía no hay videos",
   "index.count.one": "1 video",
   "index.count.many": "{n} videos",
@@ -43,12 +40,49 @@ const ES = {
   "index.justNow": "actualizado ahora",
   "index.reading": "leyendo canales",
   "index.channelErrors": "{n} canal(es) con errores",
-  "index.unslotted": "{n} canales más sin lugar",
   "action.refreshed": "Listo: {count}, {added} nuevos",
   "action.forgot": "Listo: se borraron la sesión y el índice de este aparato",
   "validate.apiId": "Debe ser solo números",
   "validate.apiHash": "Deben ser 32 letras de la a a la f y números",
   "validate.token": "Debe verse como 123456:ABC… (lo da @BotFather)",
+  "validate.tokenNeeded": "Con un bot hace falta su token (o elige «Mi cuenta»)",
+  "setup.signin": "Inicia sesión con tu cuenta: Ajustes ▸ Telegram Library ▸ Iniciar sesión con QR",
+  "setup.closed": "Tu sesión de Telegram se cerró: vuelve a iniciar sesión con QR en Ajustes ▸ Telegram Library",
+  "setup.configAccount": "Escribe tu api_id y tu api_hash en Ajustes ▸ Telegram Library",
+  "setup.noChats": "No hay chats con videos todavía: publica un video en un canal o en Mensajes guardados",
+  "setup.checking": "Revisando tus chats para encontrar videos; vuelve en un momento",
+  "um.signin": "Inicia sesión con tu cuenta en los ajustes de este plugin.",
+  "um.closed": "La sesión se cerró: vuelve a iniciar sesión en los ajustes de este plugin.",
+  "status.missingAccount": "Faltan datos: api_id y api_hash",
+  "status.signin": "Sin sesión: toca Iniciar sesión con QR",
+  "status.accountOn": "Sesión iniciada con tu cuenta en este aparato (solo lectura)",
+  "status.closed": "Telegram cerró esta sesión: vuelve a iniciar sesión con QR",
+  "status.password": "Tu cuenta tiene contraseña de dos pasos: escríbela arriba, toca Guardar y luego Confirmar la contraseña",
+  "qr.botMode": "El inicio de sesión con QR es para «Mi cuenta»: elígelo en Conectar con y toca Guardar",
+  "qr.already": "Ya iniciaste sesión con tu cuenta en este aparato",
+  "qr.scan": "En tu teléfono, abre Telegram ▸ Ajustes ▸ Dispositivos ▸ Vincular un dispositivo y escanea el código",
+  "qr.waiting": "Esperando que escanees el código con Telegram",
+  "qr.expired": "El código venció: toca Iniciar sesión con QR otra vez",
+  "qr.done": "Listo: sesión iniciada con tu cuenta (solo lectura)",
+  "qr.password": "Tu cuenta tiene contraseña de dos pasos: escríbela arriba, toca Guardar y luego Confirmar la contraseña",
+  "qr.failed": "No se pudo iniciar sesión ahora; vuelve a intentar",
+  "qr.budget": "Demasiados intentos de inicio de sesión en este aparato: vuelve a intentar en {min}",
+  "pw.notNeeded": "Telegram no está pidiendo una contraseña ahora",
+  "pw.empty": "Escribe primero la contraseña arriba y toca Guardar",
+  "pw.wrong": "La contraseña no es correcta; escríbela de nuevo, toca Guardar y luego Confirmar",
+  "pw.budget": "Demasiados intentos de contraseña: vuelve a intentar en {min}",
+  "logout.done": "Listo: se cerró la sesión de tu cuenta y se borró su índice en este aparato",
+  "logout.none": "No hay una sesión de tu cuenta en este aparato",
+  "chat.saved": "Mensajes guardados",
+  "slots.free": "libre",
+  "slots.gone": "sin acceso",
+  "slots.none": "Todavía no hay canales ni chats con videos",
+  "more.none": "Ninguno",
+  "more.list": "{list}. Para dar un lugar: apaga uno arriba, toca Guardar y luego Dar lugar a los que esperan",
+  "more.wasOn": "{title} (estaba activo)",
+  "free.done": "Listo: {n} lugar(es) entregados; llegan apagados, actívalos arriba",
+  "free.none": "No hay lugares apagados o no hay canales esperando",
+  "index.checking": "revisando {n} chat(s)",
   "tab.recent": "Recientes",
 };
 const EN = {
@@ -78,9 +112,6 @@ const EN = {
   "status.connected": "Connected as a bot on this device",
   "status.notYet": "Not connected yet: open Home or tap Refresh now",
   "status.flood": "Telegram asked to wait {min}",
-  "slot.free": "Free: add the bot to another channel",
-  "slot.off": "{title} (off)",
-  "slot.gone": "{title} (the bot lost access)",
   "index.none": "No videos yet",
   "index.count.one": "1 video",
   "index.count.many": "{n} videos",
@@ -88,12 +119,49 @@ const EN = {
   "index.justNow": "updated just now",
   "index.reading": "reading channels",
   "index.channelErrors": "{n} channel(s) with errors",
-  "index.unslotted": "{n} more channels without a slot",
   "action.refreshed": "Done: {count}, {added} new",
   "action.forgot": "Done: this device's session and index were deleted",
   "validate.apiId": "Digits only",
   "validate.apiHash": "It must be 32 letters from a to f and digits",
   "validate.token": "It looks like 123456:ABC… (@BotFather gives it)",
+  "validate.tokenNeeded": "A bot needs its token (or pick «My account»)",
+  "setup.signin": "Sign in with your account: Settings ▸ Telegram Library ▸ Sign in with a QR",
+  "setup.closed": "Your Telegram session was ended: sign in again with a QR in Settings ▸ Telegram Library",
+  "setup.configAccount": "Enter your api_id and api_hash in Settings ▸ Telegram Library",
+  "setup.noChats": "No chats with videos yet: post a video in a channel or in Saved Messages",
+  "setup.checking": "Looking through your chats for videos; come back in a moment",
+  "um.signin": "Sign in with your account in this plugin's settings.",
+  "um.closed": "The session was ended: sign in again in this plugin's settings.",
+  "status.missingAccount": "Missing details: api_id and api_hash",
+  "status.signin": "Not signed in: tap Sign in with a QR",
+  "status.accountOn": "Signed in with your account on this device (read only)",
+  "status.closed": "Telegram ended this session: sign in again with a QR",
+  "status.password": "Your account has a two-step password: type it above, tap Save, then Confirm the password",
+  "qr.botMode": "Signing in with a QR is for «My account»: pick it in Connect with and tap Save",
+  "qr.already": "You are already signed in with your account on this device",
+  "qr.scan": "On your phone, open Telegram ▸ Settings ▸ Devices ▸ Link Desktop Device and scan the code",
+  "qr.waiting": "Waiting for you to scan the code with Telegram",
+  "qr.expired": "The code expired: tap Sign in with a QR again",
+  "qr.done": "Done: signed in with your account (read only)",
+  "qr.password": "Your account has a two-step password: type it above, tap Save, then Confirm the password",
+  "qr.failed": "Could not sign in now; try again",
+  "qr.budget": "Too many sign-in attempts on this device: try again in {min}",
+  "pw.notNeeded": "Telegram is not asking for a password now",
+  "pw.empty": "Type the password above and tap Save first",
+  "pw.wrong": "The password is not right; type it again, tap Save, then Confirm",
+  "pw.budget": "Too many password attempts: try again in {min}",
+  "logout.done": "Done: your account was signed out and its index deleted on this device",
+  "logout.none": "There is no session of your account on this device",
+  "chat.saved": "Saved Messages",
+  "slots.free": "free",
+  "slots.gone": "no access",
+  "slots.none": "No channels or chats with videos yet",
+  "more.none": "None",
+  "more.list": "{list}. To give one a place: turn one off above, tap Save, then Give places to those waiting",
+  "more.wasOn": "{title} (was on)",
+  "free.done": "Done: {n} place(s) given; they arrive off, turn them on above",
+  "free.none": "No place is off, or no channel is waiting",
+  "index.checking": "checking {n} chat(s)",
   "tab.recent": "Recent",
 };
 
@@ -124,7 +192,7 @@ const __mod_src_shell_errors = (() => {
 // codes and numbers (never a message from elsewhere, so never a secret), and the person's sentence in their language.
 const { t, minutes } = __mod_src_shell_text;
 
-/** A failure the shell understands: `kind` is config | token | api_id | flood | budget | not_found | invalid | network | unavailable. */
+/** A failure the shell understands: `kind` is config | token | api_id | flood | budget | signin | closed | not_found | invalid | network | unavailable. */
 function shellError(kind, detail = "", extra = {}) {
   const e = new Error(kind + (detail ? " " + detail : ""));
   e.shell = kind;
@@ -165,6 +233,8 @@ function toKinoError(e) {
     case "config": return kino.error("auth_required", "settings missing", { userMessage: t("um.config") });
     case "token": return kino.error("auth_required", "bot token refused", { userMessage: t("um.token") });
     case "api_id": return kino.error("auth_required", "api id refused", { userMessage: t("um.apiId") });
+    case "signin": return kino.error("auth_required", "account not signed in", { userMessage: t("um.signin") });
+    case "closed": return kino.error("auth_required", "account session ended", { userMessage: t("um.closed") });
     case "flood":
     case "budget":
       return attach(kino.error("rate_limited", (kind === "flood" ? "flood_wait " : "login_budget ") + (seconds ?? 0) + "s", { userMessage: t("um.flood", { min: minutes(seconds) }) }), { seconds });
@@ -433,6 +503,9 @@ const CODES = Object.freeze([
   "bot_method_invalid",     // a method bots may not call (BOT_METHOD_INVALID)
   "token_invalid",          // the bot token was refused at login (ACCESS_TOKEN_INVALID / ACCESS_TOKEN_EXPIRED)
   "api_id_invalid",         // the api_id/api_hash pair was refused (API_ID_INVALID, API_ID_PUBLISHED_FLOOD)
+  "password_needed",        // the account has a 2FA password: auth.checkPassword next (SESSION_PASSWORD_NEEDED)
+  "password_invalid",       // the 2FA password was wrong (PASSWORD_HASH_INVALID), or its SRP round went stale (SRP_ID_INVALID)
+  "login_token_invalid",    // a QR login token expired, was already used or is unknown (AUTH_TOKEN_*)
 ]);
 
 function mtError(code, message, extra) {
@@ -456,6 +529,10 @@ function fromRpcError({ code, message }) {
   if (/^ACCESS_TOKEN_(INVALID|EXPIRED)$/.test(m)) return mtError("token_invalid", m, { status: code, rpc: m });
   if (/^API_ID_(INVALID|PUBLISHED_FLOOD)$/.test(m)) return mtError("api_id_invalid", m, { status: code, rpc: m });
   if (m === "BOT_METHOD_INVALID") return mtError("bot_method_invalid", m, { status: code, rpc: m });
+  // Before the 401 rule: SESSION_PASSWORD_NEEDED is a 401 that keeps the key (the login goes on with the password).
+  if (m === "SESSION_PASSWORD_NEEDED") return mtError("password_needed", m, { status: code, rpc: m });
+  if (m === "PASSWORD_HASH_INVALID" || m === "SRP_ID_INVALID" || m === "SRP_PASSWORD_CHANGED") return mtError("password_invalid", m, { status: code, rpc: m });
+  if (/^AUTH_TOKEN_(INVALID|EXPIRED|ALREADY_ACCEPTED|INVALIDX)$/.test(m)) return mtError("login_token_invalid", m, { status: code, rpc: m });
   if (code === 401 || /^AUTH_KEY_(UNREGISTERED|INVALID|DUPLICATED)$/.test(m) || m === "SESSION_REVOKED") return mtError("auth_key_unregistered", m, { status: code, rpc: m });
   return mtError("rpc_error", code + " " + m, { status: code, rpc: m });
 }
@@ -495,7 +572,7 @@ function describeError(e) {
 }
 
 /** Whether `e` leaves the connection it came from in a known state (a server's own answer): else it must be dropped. */
-const isServerAnswer = (e) => !!(e && typeof e === "object" && ["flood_wait", "file_migrate", "user_migrate", "file_reference_expired", "rpc_error", "channel_invalid", "bot_method_invalid", "token_invalid", "api_id_invalid", "auth_key_unregistered", "login_budget", "invalid_request"].includes(e.code) && !e.transport);
+const isServerAnswer = (e) => !!(e && typeof e === "object" && ["flood_wait", "file_migrate", "user_migrate", "file_reference_expired", "rpc_error", "channel_invalid", "bot_method_invalid", "token_invalid", "api_id_invalid", "auth_key_unregistered", "login_budget", "invalid_request", "password_needed", "password_invalid", "login_token_invalid"].includes(e.code) && !e.transport);
 return { CODES, mtError, fromRpcError, fromTransportError, describeError, isServerAnswer };
 })();
 
@@ -899,6 +976,19 @@ const exportAuthorization = (dcId) => new Writer().int(CTOR.exportAuthorization)
 
 const importAuthorization = ({ id, bytes }) => new Writer().int(CTOR.importAuthorization).long(id).bytes(bytes).done();
 
+// account login (QR) and logout, layer 198:
+// auth.exportLoginToken#b7e085fe api_id:int api_hash:string except_ids:Vector<long> = auth.LoginToken
+// auth.importLoginToken#95ac5ce4 token:bytes = auth.LoginToken
+// account.getPassword#548a30f5 = account.Password
+// auth.checkPassword#d18b4d16 password:InputCheckPasswordSRP = auth.Authorization
+// inputCheckPasswordSRP#d27ff082 srp_id:long A:bytes M1:bytes
+// auth.logOut#3e72ba19 = auth.LoggedOut
+const exportLoginToken = ({ apiId, apiHash }) => new Writer().int(0xb7e085fe).int(apiId).string(apiHash).vectorLong([]).done();
+const importLoginToken = (token) => new Writer().int(0x95ac5ce4).bytes(token).done();
+const getPassword = () => new Writer().int(0x548a30f5).done();
+const checkPassword = ({ srpId, A, M1 }) => new Writer().int(0xd18b4d16).int(0xd27ff082).long(srpId).bytes(A).bytes(M1).done();
+const logOut = () => new Writer().int(0x3e72ba19).done();
+
 const msgsAck = (ids) => new Writer().int(CTOR.msgsAck).vectorLong(ids).done();
 
 const inputDocumentFileLocation = ({ id, accessHash, fileReference, thumbSize = "" }) =>
@@ -1143,7 +1233,7 @@ function parseMessage(r) {
   }
   return out;
 }
-return { LAYER, CTOR, Writer, Reader, reqPqMulti, pqInnerDataDc, reqDHParams, clientDHInnerData, setClientDHParams, invokeWithLayer, initConnection, importBotAuthorization, exportAuthorization, importAuthorization, msgsAck, inputDocumentFileLocation, uploadGetFile, parseRpcError, parseUploadFile, hexU32, hexBytesAt, parseUploadFileHex, parseExportedAuthorization, parseAuthorization, parseDocument, parseMessageMedia, parseMessage };
+return { LAYER, CTOR, Writer, Reader, reqPqMulti, pqInnerDataDc, reqDHParams, clientDHInnerData, setClientDHParams, invokeWithLayer, initConnection, importBotAuthorization, exportAuthorization, importAuthorization, exportLoginToken, importLoginToken, getPassword, checkPassword, logOut, msgsAck, inputDocumentFileLocation, uploadGetFile, parseRpcError, parseUploadFile, hexU32, hexBytesAt, parseUploadFileHex, parseExportedAuthorization, parseAuthorization, parseDocument, parseMessageMedia, parseMessage };
 })();
 
 // ---- src/mtproto/msgid.js ----
@@ -1767,563 +1857,13 @@ class Session {
 return { Session };
 })();
 
-// ---- src/mtproto/requests.js ----
-const __mod_src_mtproto_requests = (() => {
-// Serialized API methods for the discovery (layer 198), written field by field from their TL lines:
-// updates.getState#edd4882a = updates.State
-// updates.getDifference#19c2f763 flags:# pts:int pts_limit:flags.1?int pts_total_limit:flags.0?int date:int qts:int qts_limit:flags.2?int
-// updates.getChannelDifference#3173d78 flags:# force:flags.0?true channel:InputChannel filter:ChannelMessagesFilter pts:int limit:int
-// channels.getMessages#ad8c9a23 channel:InputChannel id:Vector<InputMessage>
-// messages.getMessages#63c66506 id:Vector<InputMessage>
-// inputChannel#f35aec28 channel_id:long access_hash:long   inputMessageID#a676a322 id:int   channelMessagesFilterEmpty#94d42ee7
-const { Writer, CTOR } = __mod_src_mtproto_tl;
-
-/**
- * The ONLY methods TelegramClient.call sends: the five the discovery needs. A new method for the plugin shell is added
- * here, in this one list, never per call site. Anything else (auth methods, the invoke and initConnection wrappers, gzip_packed,
- * msg_container, destructive methods) is refused by the client before a byte goes out.
- */
-const ALLOWED_CALLS = Object.freeze([
-  0xedd4882a, // updates.getState
-  0x19c2f763, // updates.getDifference
-  0x03173d78, // updates.getChannelDifference
-  0xad8c9a23, // channels.getMessages
-  0x63c66506, // messages.getMessages
-]);
-
-const big = (v) => (typeof v === "bigint" ? v : BigInt(v));
-const inputChannel = (w, channelId, accessHash) => w.int(0xf35aec28).long(big(channelId)).long(big(accessHash));
-const inputMessageIds = (w, ids) => { w.int(CTOR.vector).int(ids.length); for (const id of ids) w.int(0xa676a322).int(id); return w; };
-
-const getState = () => new Writer().int(0xedd4882a).done();
-
-const getDifference = ({ pts, date, qts }) => new Writer().int(0x19c2f763).int(0).int(pts).int(date).int(qts).done();
-
-const getChannelDifference = ({ channelId, accessHash, pts, limit = 100, force = false }) =>
-  inputChannel(new Writer().int(0x03173d78).int(force ? 1 : 0), channelId, accessHash).int(0x94d42ee7).int(pts).int(limit).done();
-
-const channelsGetMessages = ({ channelId, accessHash, ids }) =>
-  inputMessageIds(inputChannel(new Writer().int(0xad8c9a23), channelId, accessHash), ids).done();
-
-const messagesGetMessages = (ids) => inputMessageIds(new Writer().int(0x63c66506), ids).done();
-return { ALLOWED_CALLS, getState, getDifference, getChannelDifference, channelsGetMessages, messagesGetMessages };
-})();
-
-// ---- src/mtproto/keys.js ----
-const __mod_src_mtproto_keys = (() => {
-// Telegram's PUBLIC RSA server keys (from tg-public-keys.json, as used by the verified-live spike), keyed by the
-// signed decimal fingerprint the server lists in resPQ. n is big-endian hex, e decimal.
-const TELEGRAM_PUBLIC_KEYS = Object.freeze({
-  "-3414540481677951611": {
-    "n": "e8bb3305c0b52c6cf2afdf7637313489e63e05268e5badb601af417786472e5f93b85438968e20e6729a301c0afc121bf7151f834436f7fda680847a66bf64accec78ee21c0b316f0edafe2f41908da7bd1f4a5107638eeb67040ace472a14f90d9f7c2b7def99688ba3073adb5750bb02964902a359fe745d8170e36876d4fd8a5d41b2a76cbff9a13267eb9580b2d06d10357448d20d9da2191cb5d8c93982961cdfdeda629e37f1fb09a0722027696032fe61ed663db7a37f6f263d370f69db53a0dc0a1748bdaaff6209d5645485e6e001d1953255757e4b8e42813347b11da6ab500fd0ace7e6dfa3736199ccaf9397ed0745a427dcfa6cd67bcb1acff3",
-    "e": 65537
-  },
-  "-5595554452916591101": {
-    "n": "c8c11d635691fac091dd9489aedced2932aa8a0bcefef05fa800892d9b52ed03200865c9e97211cb2ee6c7ae96d3fb0e15aeffd66019b44a08a240cfdd2868a85e1f54d6fa5deaa041f6941ddf302690d61dc476385c2fa655142353cb4e4b59f6e5b6584db76fe8b1370263246c010c93d011014113ebdf987d093f9d37c2be48352d69a1683f8f6e6c2167983c761e3ab169fde5daaa12123fa1beab621e4da5935e9c198f82f35eae583a99386d8110ea6bd1abb0f568759f62694419ea5f69847c43462abef858b4cb5edc84e7b9226cd7bd7e183aa974a712c079dde85b9dc063b8a5c08e8f859c0ee5dcd824c7807f20153361a7f63cfd2a433a1be7f5",
-    "e": 65537
-  }
-});
-return { TELEGRAM_PUBLIC_KEYS };
-})();
-
-// ---- src/mtproto/client.js ----
-const __mod_src_mtproto_client = (() => {
-// The high-level client: one auth key per DC, a bot login once per home DC, DC migration, chunked file downloads and
-// a JSON-safe state the plugin shell stores encrypted. Calls run one at a time (Kino calls `read` one at a time too).
-const { toBase64, fromBase64, toHex, fromHex } = __mod_src_mtproto_bytes;
-const { sha1 } = __mod_src_mtproto_crypto;
-const { Transport } = __mod_src_mtproto_transport;
-const { createAuthKey } = __mod_src_mtproto_authkey;
-const { Session } = __mod_src_mtproto_session;
-const { CTOR, LAYER, invokeWithLayer, initConnection, importBotAuthorization, exportAuthorization, importAuthorization, inputDocumentFileLocation, uploadGetFile, parseUploadFile, parseUploadFileHex, parseAuthorization, parseExportedAuthorization } = __mod_src_mtproto_tl;
-const { mtError } = __mod_src_mtproto_errors;
-const { ALLOWED_CALLS } = __mod_src_mtproto_requests;
-const { describeError, isServerAnswer } = __mod_src_mtproto_errors;
-const { big } = __mod_src_mtproto_big;
-const { TELEGRAM_PUBLIC_KEYS } = __mod_src_mtproto_keys;
-
-const CHUNK = 1048576;
-const BUDGET_KEY = "mtproto.botLogins";
-const BUDGET_MAX = 3;
-const BUDGET_WINDOW_MS = 3600000;
-const MIN_LEFT_MS = 1500;   // a request never starts with less time than this before its caller's deadline
-const MARGIN_MS = 500;      // what a request leaves its caller after its own wait
-const POLL_MS = 250;        // how often a call waiting for its turn checks its deadline
-const MAX_AHEAD = 2;           // file chunks requested ahead and tracked (answered or still in flight), oldest dropped first:
-                              // a hard count cap, so answered hex held is at most ~2 chunks whatever the timing
-const MAX_AHEAD_BYTES = 5 << 20; // characters of ANSWERED read-ahead hex kept at once: ~2 chunks (a 1 MiB chunk is
-                                 // ~2 MiB of hex), enough for the depth-2 read-ahead, so a runtime with no forced GC
-                                 // never piles several more up
-const MAX_IN_FLIGHT = 3;    // requests on one connection at once (the asked chunk included), on every path
-const ROOM_WAIT_MS = 2500;  // the longest a chunk request waits for room before taking the oldest in flight as lost
-const AHEAD_WAIT_MS = 8000; // the longest a read waits for a chunk requested ahead before asking for it again
-
-/**
- * At most 3 bot logins per hour per device (Telegram answered FLOOD_WAIT_3121 after about ten in an hour). `store` is
- * kino.storage or anything with get/set of strings. Answers { allowed, remaining, retryAfterSeconds, record() };
- * record() notes a login now, or throws `login_budget` (with `seconds`) when none is left.
- */
-function loginBudget(store, now = Date.now()) {
-  let times = [];
-  try {
-    const v = JSON.parse(store.get(BUDGET_KEY) || "[]");
-    if (Array.isArray(v)) times = v.filter((t) => typeof t === "number" && t <= now && now - t < BUDGET_WINDOW_MS).sort((a, b) => a - b);
-  } catch { times = []; }
-  const allowed = times.length < BUDGET_MAX;
-  const retryAfterSeconds = allowed ? 0 : Math.ceil((times[0] + BUDGET_WINDOW_MS - now) / 1000);
-  return {
-    allowed,
-    remaining: Math.max(0, BUDGET_MAX - times.length),
-    retryAfterSeconds,
-    record() {
-      if (!allowed) throw mtError("login_budget", "too many bot logins on this device in the last hour", { seconds: retryAfterSeconds });
-      times.push(now);
-      store.set(BUDGET_KEY, JSON.stringify(times));
-    },
-  };
-}
-
-function encodeState(dc, s) {
-  const out = { dc, authKey: toBase64(s.authKey), authKeyId: toHex(s.authKeyId), serverSalt: toBase64(s.serverSalt), timeOffset: s.timeOffset | 0, loggedIn: !!s.loggedIn };
-  if (s.userId !== undefined) out.userId = String(s.userId);
-  return out;
-}
-
-function decodeState(v) {
-  const authKey = fromBase64(String(v.authKey || ""));
-  if (authKey.length !== 256) throw mtError("invalid_request", "stored auth key must be 256 bytes");
-  let serverSalt = new Uint8Array(8);
-  try { const s = fromBase64(String(v.serverSalt || "")); if (s.length === 8) serverSalt = s; } catch { /* a bad salt is fixed by bad_server_salt */ }
-  const s = { authKey, authKeyId: sha1(authKey).slice(12, 20), serverSalt, timeOffset: Number(v.timeOffset) | 0, loggedIn: v.loggedIn === true };
-  if (v.userId !== undefined) s.userId = BigInt(v.userId);
-  return s;
-}
-
-// `call` sends only what is on the allowlist (requests.js): the first 4 bytes of the body must be one of those method ids.
-const ALLOWED = new Set(ALLOWED_CALLS);
-
-const DEFAULT_DEVICE = Object.freeze({ deviceModel: "Kino", systemVersion: "Android", appVersion: "1.0", systemLangCode: "en", langPack: "", langCode: "en" });
-
-function checkRange(offset, limit) {
-  if (!Number.isInteger(offset) || offset < 0 || offset % 4096 !== 0) throw mtError("invalid_request", "offset must be a non-negative multiple of 4096");
-  if (!Number.isInteger(limit) || limit <= 0 || limit % 4096 !== 0 || CHUNK % limit !== 0) throw mtError("invalid_request", "limit must be a multiple of 4096 that divides 1 MiB");
-  if (Math.floor(offset / CHUNK) !== Math.floor((offset + limit - 1) / CHUNK)) throw mtError("invalid_request", "a chunk may not cross a 1 MiB boundary");
-}
-
-class TelegramClient {
-  /**
-   * `apiId` is needed for initConnection on every new connection. `publicKeys` defaults to Telegram's (tests inject a
-   * fake DC's). `store` is REQUIRED: kino.storage (or any get/set of strings) for the login budget, which keeps a
-   * burst of bot logins from earning a FLOOD_WAIT of almost an hour; only a test may pass `store: false` to go without.
-   * `wsOpen`/`urlFor` are for tests and other transports.
-   */
-  constructor({ apiId, publicKeys = TELEGRAM_PUBLIC_KEYS, device = {}, store, timeoutMs = 20000, now = () => Date.now(), log = () => {}, onUpdate = null, wsOpen, urlFor, abandonedMs } = {}) {
-    this.abandonedMs = abandonedMs;
-    this.maxInflight = 0; // the most requests ever in flight on one connection at a send (tests)
-    if (store === false) store = null;
-    else if (!store || typeof store.get !== "function" || typeof store.set !== "function") {
-      throw mtError("invalid_request", "TelegramClient needs `store` (kino.storage) for the bot login budget; only tests may pass store: false");
-    }
-    this.apiId = apiId;
-    this.publicKeys = publicKeys;
-    this.device = { ...DEFAULT_DEVICE, ...device };
-    this.store = store;
-    this.timeoutMs = timeoutMs;
-    this.now = now;
-    this.log = log;
-    this.onUpdate = onUpdate;
-    this.wsOpen = wsOpen;
-    this.urlFor = urlFor;
-    this.homeDc = null;
-    this.dcs = new Map();   // dc -> { authKey, authKeyId, serverSalt, timeOffset, loggedIn, userId? }
-    this.conns = new Map(); // dc -> { transport, session, inited }
-    this.chain = Promise.resolve();
-    this.ahead = new Map(); // "<doc id>:<offset>" -> { dc, session, entry, limit }, in request order
-    this.lastActiveAt = this.now(); // when a chunk request last ran: an idle runtime drops its caches (idleReset)
-  }
-
-  /** How many chunks requested ahead are kept (tests). */
-  aheadCount() { return this.ahead.size; }
-  /** Characters of answered read-ahead hex held right now (in-flight entries hold nothing yet). */
-  aheadBytes() { let n = 0; for (const a of this.ahead.values()) if (a.entry.done && a.entry.result) n += a.entry.result.length; return n; }
-
-  /**
-   * Frees everything a finished play leaves behind when the runtime has been idle for `idleMs`: the read-ahead cache
-   * (hex chunks) and the open connection (its transport buffers and session). The next read reconnects with the stored
-   * key (no key exchange, no login). There is no "stream closed" hook from Kino, so this is where retention is bounded
-   * between plays.
-   */
-  async idleReset(idleMs) {
-    if ((this.ahead.size || this.conns.size) && this.now() - this.lastActiveAt >= idleMs) {
-      this.log("idle " + Math.round((this.now() - this.lastActiveAt) / 1000) + " s: releasing caches and the connection");
-      await this.reset();
-    }
-  }
-
-  /**
-   * Tears everything down after a failure the caller cannot place: every connection closes (the requests in flight on
-   * them are dropped), the chunks read ahead are forgotten. The keys and logins stay: the next call reconnects with
-   * them, with no key exchange and no new login.
-   */
-  reset() {
-    return this.serial(async () => {
-      for (const [k, a] of [...this.ahead]) this.dropAhead(k, a);
-      for (const dc of [...this.conns.keys()]) await this.drop(dc);
-    });
-  }
-
-  /**
-   * Runs `fn` after the calls already queued (one at a time). With a `deadline` (a time of `now()`), the call is
-   * dropped unsent when its turn comes too late, and a caller queued behind a busy client gets a typed timeout at its
-   * deadline instead of waiting for its turn (`kino.sleep` polls; it is only used while the client is busy).
-   */
-  serial(fn, deadline, trace) {
-    const queuedAt = trace ? Date.now() : 0;
-    const busy = this.pending > 0;
-    this.pending = (this.pending || 0) + 1;
-    const turn = () => {
-      if (trace) trace.queue += Date.now() - queuedAt;
-      if (deadline !== undefined && this.now() > deadline - MIN_LEFT_MS) throw mtError("timeout", "no time left before the caller's deadline", { deadline: true });
-      return fn();
-    };
-    const run = this.chain.then(turn, turn);
-    this.chain = run.then(() => { this.pending--; }, () => { this.pending--; });
-    if (!busy || deadline === undefined || typeof kino === "undefined" || typeof kino.sleep !== "function") return run;
-    let settled = false;
-    run.then(() => { settled = true; }, () => { settled = true; });
-    const watch = (async () => {
-      for (;;) {
-        const left = deadline - MIN_LEFT_MS - this.now();
-        if (settled) return new Promise(() => {}); // the call won: this side never answers
-        if (left <= 0) throw mtError("timeout", "the client stayed busy past the caller's deadline", { deadline: true });
-        await kino.sleep(Math.min(POLL_MS, left));
-      }
-    })();
-    return Promise.race([run, watch]);
-  }
-
-  /** The wait of one request: the client's timeout, or less when the caller's `deadline` is closer (typed timeout when too close). */
-  budget(deadline) {
-    if (deadline === undefined || deadline === null || !Number.isFinite(deadline)) return { ms: this.timeoutMs, clamped: false };
-    const left = deadline - this.now() - MARGIN_MS;
-    if (left < MIN_LEFT_MS - MARGIN_MS) throw mtError("timeout", "no time left before the caller's deadline", { deadline: true });
-    return left < this.timeoutMs ? { ms: left, clamped: true } : { ms: this.timeoutMs, clamped: false };
-  }
-
-  /** Takes a state from exportState() (all DCs) or one DC's entry of it. */
-  importState(state) {
-    if (!state || typeof state !== "object") return;
-    if (state.dcs && typeof state.dcs === "object") {
-      for (const [k, v] of Object.entries(state.dcs)) this.dcs.set(Number(k), decodeState(v));
-      if (state.homeDc) this.homeDc = Number(state.homeDc);
-    } else if (state.authKey) {
-      this.dcs.set(Number(state.dc), decodeState(state));
-    }
-  }
-
-  /** { homeDc, dcs: { "<dc>": { dc, authKey (base64), authKeyId (hex), serverSalt (base64), timeOffset, loggedIn, userId? } } } */
-  exportState() {
-    const dcs = {};
-    for (const [dc, s] of this.dcs) dcs[String(dc)] = encodeState(dc, s);
-    return { homeDc: this.homeDc, dcs };
-  }
-
-  /** Connects to the home DC (`state.homeDc` wins over `dc` when a full state is given), reusing a stored key. */
-  connect(dc, state, { deadline } = {}) {
-    return this.serial(async () => {
-      this.importState(state);
-      if (!(state && state.homeDc)) this.homeDc = Number(dc);
-      await this.conn(this.homeDc, deadline);
-      return this;
-    }, deadline);
-  }
-
-  async conn(dc, deadline) {
-    let c = this.conns.get(dc);
-    if (c && !c.transport.closed && !c.session.broken) return c;
-    if (c) await this.drop(dc);
-    const transport = await new Transport(dc, { open: this.wsOpen, url: this.urlFor ? this.urlFor(dc) : undefined }).open();
-    let st = this.dcs.get(dc);
-    if (!st) {
-      try {
-        st = { ...(await createAuthKey(transport, { dc, publicKeys: this.publicKeys, now: this.now, timeoutMs: this.budget(deadline).ms })), loggedIn: false };
-      } catch (e) {
-        await transport.close();
-        throw e;
-      }
-      this.dcs.set(dc, st);
-    }
-    let session;
-    try {
-      session = new Session(transport, st, { now: this.now, timeoutMs: this.timeoutMs, onUpdate: this.onUpdate, log: this.log, ...(this.abandonedMs !== undefined ? { abandonedMs: this.abandonedMs } : {}) });
-    } catch (e) {
-      await transport.close();
-      throw e;
-    }
-    c = { transport, session, inited: false };
-    this.conns.set(dc, c);
-    return c;
-  }
-
-  async drop(dc) {
-    const c = this.conns.get(dc);
-    this.conns.delete(dc);
-    for (const [k, a] of [...this.ahead]) if (a.dc === dc) this.dropAhead(k, a); // their answers die with the connection
-    if (c) await c.transport.close();
-  }
-
-  /** Forgets one chunk read ahead: an answered one gives its result back, one in flight is abandoned. */
-  dropAhead(k, a) {
-    this.ahead.delete(k);
-    if (a.entry.done) { if (a.entry.result) big.release(a.entry.result.length); a.entry.result = null; }
-    else a.session.forget(a.entry);
-  }
-
-  /**
-   * One API call on DC `dc`; the first call of each connection goes inside invokeWithLayer(initConnection(...)).
-   * A closed socket is retried once on a new connection unless `retry` is false (the bot login retries by itself, so
-   * that every attempt spends the budget). `hex` answers the result as a hex string (Session.call).
-   */
-  async invoke(dc, body, { retry = true, hex = false, deadline, trace, after, before } = {}) {
-    const c = await this.conn(dc, deadline);
-    const wrapped = c.inited ? body : invokeWithLayer(LAYER, initConnection({ apiId: this.apiId, ...this.device }, body));
-    const wait = this.budget(deadline);
-    try {
-      // `before` makes room on the connection first (a chunk request waits for fewer than 3 in flight). When the room
-      // does not come (requests that never answer), the connection goes: that takes them off the wire, and a new one
-      // (stored key, no key exchange, no login) starts with nothing in flight. A failure while waiting (a socket that
-      // closed) is handled below like any other.
-      if (before && (await before(c)) === false) {
-        this.log("no room on the connection: reconnecting");
-        await this.drop(dc);
-        return this.invoke(dc, body, { retry, hex, deadline, trace, after });
-      }
-      const started = this.now();
-      const entry = await c.session.request(wrapped, { hex, trace });
-      this.maxInflight = Math.max(this.maxInflight, c.session.maxInflight);
-      // `after` sends more requests right behind this one, on a connection already initialised: never a failure of its own.
-      if (after && c.inited) { try { await after(c); } catch (e) { this.log("request ahead not sent (" + describeError(e) + ")"); } }
-      const res = await c.session.settle(entry, started + wait.ms);
-      c.inited = true;
-      return res;
-    } catch (thrown) {
-      // Anything may be thrown from below (a native failure is not always an Error): read it through `e`.
-      const e = thrown && typeof thrown === "object" ? thrown : { code: undefined, thrown };
-      if (e.code === "closed" && retry) {
-        await this.drop(dc);
-        return this.invoke(dc, body, { retry: false, hex, deadline, trace, before, after });
-      }
-      // A connection in an unknown state is never used again: the next call reconnects with the stored key.
-      if (e.code === "timeout" || e.code === "closed" || e.code === "protocol" || !isServerAnswer(e) || c.session.broken) await this.drop(dc);
-      if (e.code === "timeout" && wait.clamped) e.deadline = true; // the caller's deadline, not the server's silence alone
-      if (e.code === "auth_key_unregistered") {
-        // A key the server forgot (-404), refuses (AUTH_KEY_INVALID) or sees on two connections at once
-        // (AUTH_KEY_DUPLICATED: e.g. a copy restored on another device) is dead: drop it, the next call makes a new one.
-        // Any other 401 (AUTH_KEY_UNREGISTERED, SESSION_REVOKED...) keeps the key and only needs a new login.
-        if (e.transport || /^AUTH_KEY_(INVALID|DUPLICATED)$/.test(String(e.rpc || ""))) { await this.drop(dc); this.dcs.delete(dc); }
-        else { const st = this.dcs.get(dc); if (st) st.loggedIn = false; }
-      }
-      throw thrown;
-    }
-  }
-
-  /**
-   * Logs the bot in on the home DC once: a DC already logged in (also from a stored state) sends nothing and answers
-   * { reused: true, userId }. Follows USER_MIGRATE_n (the home DC changes only when the login there succeeds) and
-   * retries once after a closed socket. Every attempt sent, migrations and retries included, spends a budget slot.
-   */
-  /** Whether the home DC still needs a bot login (no key there yet, or a key not logged in). */
-  needsLogin() {
-    const home = this.homeDc ? this.dcs.get(this.homeDc) : null;
-    return !(home && home.loggedIn);
-  }
-
-  botLogin({ apiId, apiHash, botToken, deadline }) {
-    return this.serial(async () => {
-      if (apiId !== undefined) this.apiId = Number(apiId);
-      if (!this.homeDc) throw mtError("invalid_request", "connect first");
-      if (!apiHash || !botToken || !this.apiId) throw mtError("invalid_request", "apiId, apiHash and botToken are required");
-      const home = this.dcs.get(this.homeDc);
-      if (home && home.loggedIn) return { reused: true, userId: home.userId };
-      let dc = this.homeDc;
-      let hops = 0, closedRetries = 0;
-      for (;;) {
-        if (this.store) loginBudget(this.store, this.now()).record();
-        try {
-          const auth = parseAuthorization(await this.invoke(dc, importBotAuthorization({ apiId: this.apiId, apiHash, botToken }), { retry: false, deadline }));
-          if (auth.ctor !== CTOR.authAuthorization) throw mtError("protocol", "unexpected answer to the bot login");
-          const st = this.dcs.get(dc);
-          st.loggedIn = true;
-          st.userId = auth.userId;
-          this.homeDc = dc;
-          return { userId: auth.userId };
-        } catch (e) {
-          if (e.code === "user_migrate" && hops < 2 && e.dc !== dc) { hops++; dc = e.dc; continue; }
-          if (e.code === "closed" && closedRetries < 1) { closedRetries++; continue; }
-          throw e;
-        }
-      }
-    }, deadline);
-  }
-
-  /**
-   * One raw API call on the home DC for the logged-in bot: `body` is the serialized method (a Uint8Array), the answer
-   * is the result's bytes (unzipped; decode them with schema/reader.js). Server errors come back typed (errors.js).
-   * Refused with `invalid_request` before a login, and for any method not on ALLOWED_CALLS (requests.js): auth
-   * methods, invoke wrappers, gzip_packed, msg_container and every other method are never sent.
-   */
-  call(body, { deadline } = {}) {
-    try {
-      if (!(body instanceof Uint8Array) || body.length < 4) throw mtError("invalid_request", "call needs the serialized method as a Uint8Array");
-      const id = (body[0] | (body[1] << 8) | (body[2] << 16) | (body[3] << 24)) >>> 0;
-      if (!ALLOWED.has(id)) throw mtError("invalid_request", "method 0x" + id.toString(16).padStart(8, "0") + " is not allowed through call (see ALLOWED_CALLS)");
-    } catch (e) {
-      return Promise.reject(e);
-    }
-    return this.serial(async () => {
-      if (!this.homeDc) throw mtError("invalid_request", "connect first");
-      const st = this.dcs.get(this.homeDc);
-      if (!st || !st.loggedIn) throw mtError("invalid_request", "log in first");
-      return this.invoke(this.homeDc, body, { deadline });
-    }, deadline);
-  }
-
-  /** Makes DC `dc` act for the logged-in bot: export the authorization from the home DC, import it there. */
-  async authorize(dc, deadline) {
-    if (dc === this.homeDc) return;
-    await this.conn(dc, deadline);
-    const st = this.dcs.get(dc);
-    if (st && st.loggedIn) return;
-    const exp = parseExportedAuthorization(await this.invoke(this.homeDc, exportAuthorization(dc), { deadline }));
-    if (exp.ctor !== CTOR.exportedAuthorization) throw mtError("protocol", "unexpected answer to auth.exportAuthorization");
-    const auth = parseAuthorization(await this.invoke(dc, importAuthorization(exp), { deadline }));
-    if (auth.ctor !== CTOR.authAuthorization) throw mtError("protocol", "unexpected answer to auth.importAuthorization");
-    this.dcs.get(dc).loggedIn = true;
-  }
-
-  /**
-   * `limit` bytes of a document from `offset` (fewer at the end of the file), via upload.getFile with an
-   * InputDocumentFileLocation. `loc` is { id, accessHash, fileReference (Uint8Array), dcId? }. Offset a multiple of
-   * 4096, limit a multiple of 4096 dividing 1 MiB, never across a 1 MiB boundary (Telegram's rules, checked here first).
-   * Follows FILE_MIGRATE_n; FLOOD_WAIT_n, FILE_REFERENCE_EXPIRED... come back as typed errors. With `{ hex: true }`
-   * the bytes come back as a hex string, sliced out of the decrypted answer with no JS pass over them.
-   * With `{ thumbSize: "m" }` it reads the document's thumbnail of that type instead (thumb_size in the location):
-   * nothing is read ahead for it and it never touches the file's chunks read ahead.
-   */
-  getFile(loc, offset, limit, { hex = false, deadline, trace, ahead = [], abandon = false, thumbSize = "" } = {}) {
-    try {
-      if (!loc || loc.id === undefined || loc.accessHash === undefined || !(loc.fileReference && typeof loc.fileReference.length === "number")) {
-        throw mtError("invalid_request", "a location needs id, accessHash and fileReference");
-      }
-      if (typeof thumbSize !== "string" || !/^[A-Za-z0-9]{0,4}$/.test(thumbSize)) throw mtError("invalid_request", "a thumb size is 1 to 4 letters or digits");
-      checkRange(offset, limit);
-    } catch (e) {
-      return Promise.reject(e);
-    }
-    if (thumbSize) { ahead = []; abandon = false; }
-    const location = inputDocumentFileLocation({ id: BigInt(loc.id), accessHash: BigInt(loc.accessHash), fileReference: loc.fileReference, thumbSize });
-    const body = uploadGetFile(location, offset, limit);
-    // Chunks read ahead are kept by offset: a read asking a shorter limit there (the file's last chunk) uses them too.
-    const doc = String(loc.id) + ":" + toHex(loc.fileReference) + ":" + (thumbSize ? "t" + thumbSize + ":" : "");
-    const keyOf = (o) => doc + o;
-    const dropAhead = (k, a) => this.dropAhead(k, a);
-    return this.serial(async () => {
-      if (!this.homeDc) throw mtError("invalid_request", "connect first");
-      this.lastActiveAt = this.now();
-      let dc = Number(loc.dcId) || this.homeDc;
-      if (trace) { trace.pipe = "miss"; trace.ahead = 0; }
-      // The chunks to request right behind this one: not already requested, never this one, and never more than
-      // MAX_IN_FLIGHT chunk requests on the connection (abandoned ones still on the wire count): Telegram may pack all
-      // the answers in flight into one packet, and each MiB of it is 2 MiB of hex per copy under QuickJS's 64 MiB cap.
-      const sendAhead = async (c) => {
-        for (const a of ahead) {
-          const k = keyOf(a.offset);
-          if (this.ahead.has(k) || a.offset === offset) continue;
-          if (c.session.inflight() >= MAX_IN_FLIGHT) break;
-          try { checkRange(a.offset, a.limit); } catch { continue; }
-          const entry = await c.session.request(uploadGetFile(location, a.offset, a.limit), { hex: true });
-          this.maxInflight = Math.max(this.maxInflight, c.session.maxInflight);
-          this.ahead.set(k, { dc, session: c.session, entry, limit: a.limit });
-          if (trace) trace.ahead++;
-          // Bound both the count and the ANSWERED bytes held: drop the oldest until both fit.
-          while (this.ahead.size > MAX_AHEAD || this.aheadBytes() > MAX_AHEAD_BYTES) {
-            const oldest = this.ahead.entries().next().value;
-            if (!oldest || oldest[0] === k) break; // never the one just added
-            dropAhead(oldest[0], oldest[1]);
-          }
-        }
-      };
-      // A seek first: the chunks read ahead for this file that this read no longer wants are given up (their answers,
-      // when they come, are dropped without being kept); this read's own chunk, if read ahead, is kept.
-      if (abandon) {
-        const wanted = new Set([keyOf(offset), ...ahead.map((a) => keyOf(a.offset))]);
-        for (const [k, a] of [...this.ahead]) if (k.startsWith(doc) && !wanted.has(k)) dropAhead(k, a);
-      }
-      // A chunk requested ahead by an earlier read: its answer may already be here (or on its way).
-      const pre = this.ahead.get(keyOf(offset));
-      if (pre && pre.limit >= limit) {
-        this.ahead.delete(keyOf(offset));
-        const c = this.conns.get(pre.dc);
-        if (c && c.session === pre.session && !c.transport.closed) {
-          try {
-            const until = Math.min(this.now() + AHEAD_WAIT_MS, deadline === undefined ? Infinity : deadline - MIN_LEFT_MS);
-            let answer = await c.session.settle(pre.entry, until); // read-aheads are always asked as hex
-            let file;
-            try { file = parseUploadFileHex(answer); } finally { big.release(answer.length); answer = null; } // its last use
-            if (file.ctor === CTOR.uploadFile) {
-              if (trace) trace.pipe = "hit";
-              if (ahead.length) { try { await sendAhead(c); } catch (e) { this.log("request ahead not sent (" + describeError(e) + ")"); } } // keep the pipe full
-              const chunk = file.bytesHex.length > limit * 2 ? file.bytesHex.slice(0, limit * 2) : file.bytesHex;
-              return hex ? chunk : fromHex(chunk);
-            }
-          } catch (e) {
-            this.log("chunk read ahead not usable (" + describeError(e) + "): asking again");
-            if (!isServerAnswer(e) || c.session.broken) await this.drop(pre.dc); // the stream is in an unknown state
-          }
-        } else {
-          dropAhead(keyOf(offset), pre);
-        }
-      }
-      // The asked chunk goes out only with room on the wire (fewer than MAX_IN_FLIGHT in flight), never waiting long.
-      const makeRoom = (c) => c.session.drainBelow(MAX_IN_FLIGHT, Math.min(this.now() + ROOM_WAIT_MS, deadline === undefined ? Infinity : deadline - 3 * MIN_LEFT_MS));
-      for (let attempt = 0; attempt < 4; attempt++) {
-        try {
-          await this.authorize(dc, deadline);
-          let answer = await this.invoke(dc, body, { hex, deadline, trace, before: makeRoom, after: attempt === 0 && ahead.length ? sendAhead : undefined });
-          const tp = trace ? Date.now() : 0;
-          const file = hex ? parseUploadFileHex(answer) : parseUploadFile(answer);
-          if (hex) big.release(answer.length); // its last use: the answer below is a slice of it
-          answer = null;
-          if (trace) trace.parse += Date.now() - tp;
-          if (file.ctor === CTOR.uploadFileCdnRedirect) throw mtError("protocol", "CDN redirects are not supported");
-          if (file.ctor !== CTOR.uploadFile) throw mtError("protocol", "unexpected answer to upload.getFile");
-          return hex ? file.bytesHex : file.bytes;
-        } catch (e) {
-          if (e && e.code === "file_migrate" && e.dc !== dc) { dc = e.dc; continue; }
-          if (e && e.code === "auth_key_unregistered" && dc !== this.homeDc) continue; // authorize() again (a new key if it was dropped)
-          throw e;
-        }
-      }
-      throw mtError("protocol", "too many redirects for one chunk");
-    }, deadline, trace);
-  }
-
-  async close() {
-    await this.serial(async () => {
-      for (const dc of [...this.conns.keys()]) await this.drop(dc);
-    });
-  }
-}
-return { CHUNK, loginBudget, TelegramClient };
-})();
-
 // ---- src/mtproto/schema/generated.js ----
 const __mod_src_mtproto_schema_generated = (() => {
 // Generated by scripts/gen-schema.mjs from the layer-198 TL schema -- do not edit.
-// Roots: updates.State, updates.Difference, updates.ChannelDifference, messages.Messages, Message, MessageMedia, Document, DocumentAttribute, Chat, User, Peer, Update, Updates. 673 of 1396 constructors, 150 types.
+// Roots: updates.State, updates.Difference, updates.ChannelDifference, messages.Messages, Message, MessageMedia, Document, DocumentAttribute, Chat, User, Peer, Update, Updates, messages.Dialogs, auth.LoginToken, auth.Authorization, account.Password, auth.LoggedOut. 689 of 1396 constructors, 158 types.
 const SCHEMA_LAYER = 198;
-const SCHEMA_TYPES = ["InputPeer","InputUser","InputFile","InputMedia","InputGeoPoint","InputPhoto","Peer","User","UserProfilePhoto","UserStatus","Chat","ChatParticipant","ChatParticipants","ChatPhoto","Message","MessageMedia","MessageAction","Dialog","Photo","PhotoSize","GeoPoint","PeerNotifySettings","PeerSettings","WallPaper","messages.Messages","Update","updates.State","updates.Difference","Updates","DcOption","EncryptedChat","EncryptedFile","EncryptedMessage","InputDocument","Document","NotifyPeer","SendMessageAction","PrivacyKey","PrivacyRule","DocumentAttribute","StickerPack","WebPage","ExportedChatInvite","InputStickerSet","StickerSet","messages.StickerSet","BotCommand","KeyboardButton","KeyboardButtonRow","ReplyMarkup","MessageEntity","InputChannel","updates.ChannelDifference","ChannelParticipant","MessageFwdHeader","InputBotInlineMessageID","DraftMessage","MaskCoords","Game","InputGame","RichText","PageBlock","PhoneCallDiscardReason","DataJSON","LabeledPrice","Invoice","PaymentCharge","PostAddress","PaymentRequestedInfo","WebDocument","InputWebDocument","PhoneCall","PhoneConnection","PhoneCallProtocol","LangPackString","LangPackDifference","DialogPeer","SecureFile","SecureData","SecurePlainData","SecureValueType","SecureValue","SecureCredentialsEncrypted","PageTableCell","PageTableRow","PageCaption","PageListItem","PageListOrderedItem","PageRelatedArticle","Page","PollAnswer","Poll","PollAnswerVoters","PollResults","ChatAdminRights","ChatBannedRights","WallPaperSettings","Folder","FolderPeer","PeerLocated","RestrictionReason","Theme","BaseTheme","ThemeSettings","WebPageAttribute","DialogFilter","VideoSize","MessageReplyHeader","MessageReplies","GroupCall","InputGroupCall","GroupCallParticipant","InlineQueryPeerType","GroupCallParticipantVideoSourceGroup","GroupCallParticipantVideo","ReactionCount","MessageReactions","MessagePeerReaction","BotMenuButton","NotificationSound","EmojiStatus","Reaction","MessageExtendedMedia","StickerKeyword","Username","ForumTopic","RequestPeerType","TextWithEntities","BotApp","StoryViews","StoryItem","InputReplyTo","StoriesStealthMode","MediaAreaCoordinates","MediaArea","Boost","StoryFwdHeader","PeerColor","QuickReply","BotBusinessConnection","RequestedPeer","BroadcastRevenueBalances","FactCheck","GeoPointAddress","StarsRevenueStatus","StarsSubscriptionPricing","MessageReactor","StarGift","StarsAmount","StarGiftAttribute"];
-const SCHEMA_CTORS = "7f3b18ea inputPeerEmpty 0\n7da07ec9 inputPeerSelf 0\n35a95cb9 inputPeerChat 0 chat_id:l\ndde8a54c inputPeerUser 0 user_id:l access_hash:l\n27bcbbfc inputPeerChannel 0 channel_id:l access_hash:l\na87b0a1c inputPeerUserFromMessage 0 peer:0 msg_id:i user_id:l\nbd2a0840 inputPeerChannelFromMessage 0 peer:0 msg_id:i channel_id:l\nb98886cf inputUserEmpty 1\nf7c1b13f inputUserSelf 1\nf21158c6 inputUser 1 user_id:l access_hash:l\n1da448e2 inputUserFromMessage 1 peer:0 msg_id:i user_id:l\nf52ff27f inputFile 2 id:l parts:i name:s md5_checksum:s\nfa4f0bb5 inputFileBig 2 id:l parts:i name:s\n62dc8b48 inputFileStoryDocument 2 id:33\n9664f57f inputMediaEmpty 3\n1e287d04 inputMediaUploadedPhoto 3 flags:# spoiler:flags.2?t file:2 stickers:flags.0?V33 ttl_seconds:flags.1?i\nb3ba0635 inputMediaPhoto 3 flags:# spoiler:flags.1?t id:5 ttl_seconds:flags.0?i\nf9c44144 inputMediaGeoPoint 3 geo_point:4\nf8ab7dfb inputMediaContact 3 phone_number:s first_name:s last_name:s vcard:s\n37c9330 inputMediaUploadedDocument 3 flags:# nosound_video:flags.3?t force_file:flags.4?t spoiler:flags.5?t file:2 thumb:flags.2?2 mime_type:s attributes:V39 stickers:flags.0?V33 video_cover:flags.6?5 video_timestamp:flags.7?i ttl_seconds:flags.1?i\na8763ab5 inputMediaDocument 3 flags:# spoiler:flags.2?t id:33 video_cover:flags.3?5 video_timestamp:flags.4?i ttl_seconds:flags.0?i query:flags.1?s\nc13d1c11 inputMediaVenue 3 geo_point:4 title:s address:s provider:s venue_id:s venue_type:s\ne5bbfe1a inputMediaPhotoExternal 3 flags:# spoiler:flags.1?t url:s ttl_seconds:flags.0?i\n779600f9 inputMediaDocumentExternal 3 flags:# spoiler:flags.1?t url:s ttl_seconds:flags.0?i video_cover:flags.2?5 video_timestamp:flags.3?i\nd33f43f3 inputMediaGame 3 id:59\n405fef0d inputMediaInvoice 3 flags:# title:s description:s photo:flags.0?70 invoice:65 payload:b provider:flags.3?s provider_data:63 start_param:flags.1?s extended_media:flags.2?3\n971fa843 inputMediaGeoLive 3 flags:# stopped:flags.0?t geo_point:4 heading:flags.2?i period:flags.1?i proximity_notification_radius:flags.3?i\nf94e5f1 inputMediaPoll 3 flags:# poll:91 correct_answers:flags.0?Vb solution:flags.1?s solution_entities:flags.1?V50\ne66fbf7b inputMediaDice 3 emoticon:s\n89fdd778 inputMediaStory 3 peer:0 id:i\nc21b8849 inputMediaWebPage 3 flags:# force_large_media:flags.0?t force_small_media:flags.1?t optional:flags.2?t url:s\nc4103386 inputMediaPaidMedia 3 flags:# stars_amount:l extended_media:V3 payload:flags.0?s\ne4c123d6 inputGeoPointEmpty 4\n48222faf inputGeoPoint 4 flags:# lat:d long:d accuracy_radius:flags.0?i\n1cd7bf0d inputPhotoEmpty 5\n3bb3b94a inputPhoto 5 id:l access_hash:l file_reference:b\n59511722 peerUser 6 user_id:l\n36c6019a peerChat 6 chat_id:l\na2a5371e peerChannel 6 channel_id:l\nd3bc4b7a userEmpty 7 id:l\n4b46c37e user 7 flags:# self:flags.10?t contact:flags.11?t mutual_contact:flags.12?t deleted:flags.13?t bot:flags.14?t bot_chat_history:flags.15?t bot_nochats:flags.16?t verified:flags.17?t restricted:flags.18?t min:flags.20?t bot_inline_geo:flags.21?t support:flags.23?t scam:flags.24?t apply_min_photo:flags.25?t fake:flags.26?t bot_attach_menu:flags.27?t premium:flags.28?t attach_menu_enabled:flags.29?t flags2:# bot_can_edit:flags2.1?t close_friend:flags2.2?t stories_hidden:flags2.3?t stories_unavailable:flags2.4?t contact_require_premium:flags2.10?t bot_business:flags2.11?t bot_has_main_app:flags2.13?t id:l access_hash:flags.0?l first_name:flags.1?s last_name:flags.2?s username:flags.3?s phone:flags.4?s photo:flags.5?8 status:flags.6?9 bot_info_version:flags.14?i restriction_reason:flags.18?V100 bot_inline_placeholder:flags.19?s lang_code:flags.22?s emoji_status:flags.30?120 usernames:flags2.0?V124 stories_max_id:flags2.5?i color:flags2.8?137 profile_color:flags2.9?137 bot_active_users:flags2.12?i bot_verification_icon:flags2.14?l\n4f11bae1 userProfilePhotoEmpty 8\n82d1f706 userProfilePhoto 8 flags:# has_video:flags.0?t personal:flags.2?t photo_id:l stripped_thumb:flags.1?b dc_id:i\n9d05049 userStatusEmpty 9\nedb93949 userStatusOnline 9 expires:i\n8c703f userStatusOffline 9 was_online:i\n7b197dc8 userStatusRecently 9 flags:# by_me:flags.0?t\n541a1d1a userStatusLastWeek 9 flags:# by_me:flags.0?t\n65899777 userStatusLastMonth 9 flags:# by_me:flags.0?t\n29562865 chatEmpty 10 id:l\n41cbf256 chat 10 flags:# creator:flags.0?t left:flags.2?t deactivated:flags.5?t call_active:flags.23?t call_not_empty:flags.24?t noforwards:flags.25?t id:l title:s photo:13 participants_count:i date:i version:i migrated_to:flags.6?51 admin_rights:flags.14?94 default_banned_rights:flags.18?95\n6592a1a7 chatForbidden 10 id:l title:s\ne00998b7 channel 10 flags:# creator:flags.0?t left:flags.2?t broadcast:flags.5?t verified:flags.7?t megagroup:flags.8?t restricted:flags.9?t signatures:flags.11?t min:flags.12?t scam:flags.19?t has_link:flags.20?t has_geo:flags.21?t slowmode_enabled:flags.22?t call_active:flags.23?t call_not_empty:flags.24?t fake:flags.25?t gigagroup:flags.26?t noforwards:flags.27?t join_to_send:flags.28?t join_request:flags.29?t forum:flags.30?t flags2:# stories_hidden:flags2.1?t stories_hidden_min:flags2.2?t stories_unavailable:flags2.3?t signature_profiles:flags2.12?t id:l access_hash:flags.13?l title:s username:flags.6?s photo:13 date:i restriction_reason:flags.9?V100 admin_rights:flags.14?94 banned_rights:flags.15?95 default_banned_rights:flags.18?95 participants_count:flags.17?i usernames:flags2.0?V124 stories_max_id:flags2.4?i color:flags2.7?137 profile_color:flags2.8?137 emoji_status:flags2.9?120 level:flags2.10?i subscription_until_date:flags2.11?i bot_verification_icon:flags2.13?l\n17d493d5 channelForbidden 10 flags:# broadcast:flags.5?t megagroup:flags.8?t id:l access_hash:l title:s until_date:flags.16?i\nc02d4007 chatParticipant 11 user_id:l inviter_id:l date:i\ne46bcee4 chatParticipantCreator 11 user_id:l\na0933f5b chatParticipantAdmin 11 user_id:l inviter_id:l date:i\n8763d3e1 chatParticipantsForbidden 12 flags:# chat_id:l self_participant:flags.0?11\n3cbc93f8 chatParticipants 12 chat_id:l participants:V11 version:i\n37c1011c chatPhotoEmpty 13\n1c6e1c11 chatPhoto 13 flags:# has_video:flags.0?t photo_id:l stripped_thumb:flags.1?b dc_id:i\n90a6ca84 messageEmpty 14 flags:# id:i peer_id:flags.0?6\n96fdbbe9 message 14 flags:# out:flags.1?t mentioned:flags.4?t media_unread:flags.5?t silent:flags.13?t post:flags.14?t from_scheduled:flags.18?t legacy:flags.19?t edit_hide:flags.21?t pinned:flags.24?t noforwards:flags.26?t invert_media:flags.27?t flags2:# offline:flags2.1?t video_processing_pending:flags2.4?t id:i from_id:flags.8?6 from_boosts_applied:flags.29?i peer_id:6 saved_peer_id:flags.28?6 fwd_from:flags.2?54 via_bot_id:flags.11?l via_business_bot_id:flags2.0?l reply_to:flags.3?107 date:i message:s media:flags.9?15 reply_markup:flags.6?49 entities:flags.7?V50 views:flags.10?i forwards:flags.10?i replies:flags.23?108 edit_date:flags.15?i post_author:flags.16?s grouped_id:flags.17?l reactions:flags.20?116 restriction_reason:flags.22?V100 ttl_period:flags.25?i quick_reply_shortcut_id:flags.30?i effect:flags2.2?l factcheck:flags2.3?142 report_delivery_until_date:flags2.5?i\nd3d28540 messageService 14 flags:# out:flags.1?t mentioned:flags.4?t media_unread:flags.5?t reactions_are_possible:flags.9?t silent:flags.13?t post:flags.14?t legacy:flags.19?t id:i from_id:flags.8?6 peer_id:6 reply_to:flags.3?107 date:i action:16 reactions:flags.20?116 ttl_period:flags.25?i\n3ded6320 messageMediaEmpty 15\n695150d7 messageMediaPhoto 15 flags:# spoiler:flags.3?t photo:flags.0?18 ttl_seconds:flags.2?i\n56e0d474 messageMediaGeo 15 geo:20\n70322949 messageMediaContact 15 phone_number:s first_name:s last_name:s vcard:s user_id:l\n9f84f49e messageMediaUnsupported 15\n52d8ccd9 messageMediaDocument 15 flags:# nopremium:flags.3?t spoiler:flags.4?t video:flags.6?t round:flags.7?t voice:flags.8?t document:flags.0?34 alt_documents:flags.5?V34 video_cover:flags.9?18 video_timestamp:flags.10?i ttl_seconds:flags.2?i\nddf10c3b messageMediaWebPage 15 flags:# force_large_media:flags.0?t force_small_media:flags.1?t manual:flags.3?t safe:flags.4?t webpage:41\n2ec0533f messageMediaVenue 15 geo:20 title:s address:s provider:s venue_id:s venue_type:s\nfdb19008 messageMediaGame 15 game:58\nf6a548d3 messageMediaInvoice 15 flags:# shipping_address_requested:flags.1?t test:flags.3?t title:s description:s photo:flags.0?69 receipt_msg_id:flags.2?i currency:s total_amount:l start_param:s extended_media:flags.4?122\nb940c666 messageMediaGeoLive 15 flags:# geo:20 heading:flags.0?i period:i proximity_notification_radius:flags.1?i\n4bd6e798 messageMediaPoll 15 poll:91 results:93\n3f7ee58b messageMediaDice 15 value:i emoticon:s\n68cb6283 messageMediaStory 15 flags:# via_mention:flags.1?t peer:6 id:i story:flags.0?130\naa073beb messageMediaGiveaway 15 flags:# only_new_subscribers:flags.0?t winners_are_visible:flags.2?t channels:Vl countries_iso2:flags.1?Vs prize_description:flags.3?s quantity:i months:flags.4?i stars:flags.5?l until_date:i\nceaa3ea1 messageMediaGiveawayResults 15 flags:# only_new_subscribers:flags.0?t refunded:flags.2?t channel_id:l additional_peers_count:flags.3?i launch_msg_id:i winners_count:i unclaimed_count:i winners:Vl months:flags.4?i stars:flags.5?l prize_description:flags.1?s until_date:i\na8852491 messageMediaPaidMedia 15 stars_amount:l extended_media:V122\nb6aef7b0 messageActionEmpty 16\nbd47cbad messageActionChatCreate 16 title:s users:Vl\nb5a1ce5a messageActionChatEditTitle 16 title:s\n7fcb13a8 messageActionChatEditPhoto 16 photo:18\n95e3fbef messageActionChatDeletePhoto 16\n15cefd00 messageActionChatAddUser 16 users:Vl\na43f30cc messageActionChatDeleteUser 16 user_id:l\n31224c3 messageActionChatJoinedByLink 16 inviter_id:l\n95d2ac92 messageActionChannelCreate 16 title:s\ne1037f92 messageActionChatMigrateTo 16 channel_id:l\nea3948e9 messageActionChannelMigrateFrom 16 title:s chat_id:l\n94bd38ed messageActionPinMessage 16\n9fbab604 messageActionHistoryClear 16\n92a72876 messageActionGameScore 16 game_id:l score:i\nffa00ccc messageActionPaymentSentMe 16 flags:# recurring_init:flags.2?t recurring_used:flags.3?t currency:s total_amount:l payload:b info:flags.0?68 shipping_option_id:flags.1?s charge:66 subscription_until_date:flags.4?i\nc624b16e messageActionPaymentSent 16 flags:# recurring_init:flags.2?t recurring_used:flags.3?t currency:s total_amount:l invoice_slug:flags.0?s subscription_until_date:flags.4?i\n80e11a7f messageActionPhoneCall 16 flags:# video:flags.2?t call_id:l reason:flags.0?62 duration:flags.1?i\n4792929b messageActionScreenshotTaken 16\nfae69f56 messageActionCustomAction 16 message:s\nc516d679 messageActionBotAllowed 16 flags:# attach_menu:flags.1?t from_request:flags.3?t domain:flags.0?s app:flags.2?128\n1b287353 messageActionSecureValuesSentMe 16 values:V81 credentials:82\nd95c6154 messageActionSecureValuesSent 16 types:V80\nf3f25f76 messageActionContactSignUp 16\n98e0d697 messageActionGeoProximityReached 16 from_id:6 to_id:6 distance:i\n7a0d7f42 messageActionGroupCall 16 flags:# call:110 duration:flags.0?i\n502f92f7 messageActionInviteToGroupCall 16 call:110 users:Vl\n3c134d7b messageActionSetMessagesTTL 16 flags:# period:i auto_setting_from:flags.0?l\nb3a07661 messageActionGroupCallScheduled 16 call:110 schedule_date:i\naa786345 messageActionSetChatTheme 16 emoticon:s\nebbca3cb messageActionChatJoinedByRequest 16\n47dd8079 messageActionWebViewDataSentMe 16 text:s data:s\nb4c38cb5 messageActionWebViewDataSent 16 text:s\n6c6274fa messageActionGiftPremium 16 flags:# currency:s amount:l months:i crypto_currency:flags.0?s crypto_amount:flags.0?l message:flags.1?127\nd999256 messageActionTopicCreate 16 flags:# title:s icon_color:i icon_emoji_id:flags.0?l\nc0944820 messageActionTopicEdit 16 flags:# title:flags.0?s icon_emoji_id:flags.1?l closed:flags.2?B hidden:flags.3?B\n57de635e messageActionSuggestProfilePhoto 16 photo:18\n31518e9b messageActionRequestedPeer 16 button_id:i peers:V6\n5060a3f4 messageActionSetChatWallPaper 16 flags:# same:flags.0?t for_both:flags.1?t wallpaper:23\n56d03994 messageActionGiftCode 16 flags:# via_giveaway:flags.0?t unclaimed:flags.2?t boost_peer:flags.1?6 months:i slug:s currency:flags.2?s amount:flags.2?l crypto_currency:flags.3?s crypto_amount:flags.3?l message:flags.4?127\na80f51e4 messageActionGiveawayLaunch 16 flags:# stars:flags.0?l\n87e2f155 messageActionGiveawayResults 16 flags:# stars:flags.0?t winners_count:i unclaimed_count:i\ncc02aa6d messageActionBoostApply 16 boosts:i\n93b31848 messageActionRequestedPeerSentMe 16 button_id:i peers:V140\n41b3e202 messageActionPaymentRefunded 16 flags:# peer:6 currency:s total_amount:l payload:flags.0?b charge:66\n45d5b021 messageActionGiftStars 16 flags:# currency:s amount:l stars:l crypto_currency:flags.0?s crypto_amount:flags.0?l transaction_id:flags.1?s\nb00c47a2 messageActionPrizeStars 16 flags:# unclaimed:flags.0?t stars:l transaction_id:s boost_peer:6 giveaway_msg_id:i\n4717e8a4 messageActionStarGift 16 flags:# name_hidden:flags.0?t saved:flags.2?t converted:flags.3?t upgraded:flags.5?t refunded:flags.9?t can_upgrade:flags.10?t gift:147 message:flags.1?127 convert_stars:flags.4?l upgrade_msg_id:flags.5?i upgrade_stars:flags.8?l from_id:flags.11?6 peer:flags.12?6 saved_id:flags.12?l\nacdfcb81 messageActionStarGiftUnique 16 flags:# upgrade:flags.0?t transferred:flags.1?t saved:flags.2?t refunded:flags.5?t gift:147 can_export_at:flags.3?i transfer_stars:flags.4?l from_id:flags.6?6 peer:flags.7?6 saved_id:flags.7?l\nd58a08c6 dialog 17 flags:# pinned:flags.2?t unread_mark:flags.3?t view_forum_as_messages:flags.6?t peer:6 top_message:i read_inbox_max_id:i read_outbox_max_id:i unread_count:i unread_mentions_count:i unread_reactions_count:i notify_settings:21 pts:flags.0?i draft:flags.1?56 folder_id:flags.4?i ttl_period:flags.5?i\n71bd134c dialogFolder 17 flags:# pinned:flags.2?t folder:97 peer:6 top_message:i unread_muted_peers_count:i unread_unmuted_peers_count:i unread_muted_messages_count:i unread_unmuted_messages_count:i\n2331b22d photoEmpty 18 id:l\nfb197a65 photo 18 flags:# has_stickers:flags.0?t id:l access_hash:l file_reference:b date:i sizes:V19 video_sizes:flags.1?V106 dc_id:i\ne17e23c photoSizeEmpty 19 type:s\n75c78e60 photoSize 19 type:s w:i h:i size:i\n21e1ad6 photoCachedSize 19 type:s w:i h:i bytes:b\ne0b0bc2e photoStrippedSize 19 type:s bytes:b\nfa3efb95 photoSizeProgressive 19 type:s w:i h:i sizes:Vi\nd8214d41 photoPathSize 19 type:s bytes:b\n1117dd5f geoPointEmpty 20\nb2a2f663 geoPoint 20 flags:# long:d lat:d access_hash:l accuracy_radius:flags.0?i\n99622c0c peerNotifySettings 21 flags:# show_previews:flags.0?B silent:flags.1?B mute_until:flags.2?i ios_sound:flags.3?119 android_sound:flags.4?119 other_sound:flags.5?119 stories_muted:flags.6?B stories_hide_sender:flags.7?B stories_ios_sound:flags.8?119 stories_android_sound:flags.9?119 stories_other_sound:flags.10?119\nacd66c5e peerSettings 22 flags:# report_spam:flags.0?t add_contact:flags.1?t block_contact:flags.2?t share_contact:flags.3?t need_contacts_exception:flags.4?t report_geo:flags.5?t autoarchived:flags.7?t invite_members:flags.8?t request_chat_broadcast:flags.10?t business_bot_paused:flags.11?t business_bot_can_reply:flags.12?t geo_distance:flags.6?i request_chat_title:flags.9?s request_chat_date:flags.9?i business_bot_id:flags.13?l business_bot_manage_url:flags.13?s\na437c3ed wallPaper 23 id:l flags:# creator:flags.0?t default:flags.1?t pattern:flags.3?t dark:flags.4?t access_hash:l slug:s document:34 settings:flags.2?96\ne0804116 wallPaperNoFile 23 id:l flags:# default:flags.1?t dark:flags.4?t settings:flags.2?96\n8c718e87 messages.messages 24 messages:V14 chats:V10 users:V7\n3a54685e messages.messagesSlice 24 flags:# inexact:flags.1?t count:i next_rate:flags.0?i offset_id_offset:flags.2?i messages:V14 chats:V10 users:V7\nc776ba4e messages.channelMessages 24 flags:# inexact:flags.1?t pts:i count:i offset_id_offset:flags.2?i messages:V14 topics:V125 chats:V10 users:V7\n74535f21 messages.messagesNotModified 24 count:i\n1f2b0afd updateNewMessage 25 message:14 pts:i pts_count:i\n4e90bfd6 updateMessageID 25 id:i random_id:l\na20db0e5 updateDeleteMessages 25 messages:Vi pts:i pts_count:i\nc01e857f updateUserTyping 25 user_id:l action:36\n83487af0 updateChatUserTyping 25 chat_id:l from_id:6 action:36\n7761198 updateChatParticipants 25 participants:12\ne5bdf8de updateUserStatus 25 user_id:l status:9\na7848924 updateUserName 25 user_id:l first_name:s last_name:s usernames:V124\n8951abef updateNewAuthorization 25 flags:# unconfirmed:flags.0?t hash:l date:flags.0?i device:flags.0?s location:flags.0?s\n12bcbd9a updateNewEncryptedMessage 25 message:32 qts:i\n1710f156 updateEncryptedChatTyping 25 chat_id:i\nb4a2e88d updateEncryption 25 chat:30 date:i\n38fe25b7 updateEncryptedMessagesRead 25 chat_id:i max_date:i date:i\n3dda5451 updateChatParticipantAdd 25 chat_id:l user_id:l inviter_id:l date:i version:i\ne32f3d77 updateChatParticipantDelete 25 chat_id:l user_id:l version:i\n8e5e9873 updateDcOptions 25 dc_options:V29\nbec268ef updateNotifySettings 25 peer:35 notify_settings:21\nebe46819 updateServiceNotification 25 flags:# popup:flags.0?t invert_media:flags.2?t inbox_date:flags.1?i type:s message:s media:15 entities:V50\nee3b272a updatePrivacy 25 key:37 rules:V38\n5492a13 updateUserPhone 25 user_id:l phone:s\n9c974fdf updateReadHistoryInbox 25 flags:# folder_id:flags.0?i peer:6 max_id:i still_unread_count:i pts:i pts_count:i\n2f2f21bf updateReadHistoryOutbox 25 peer:6 max_id:i pts:i pts_count:i\n7f891213 updateWebPage 25 webpage:41 pts:i pts_count:i\nf8227181 updateReadMessagesContents 25 flags:# messages:Vi pts:i pts_count:i date:flags.0?i\n108d941f updateChannelTooLong 25 flags:# channel_id:l pts:flags.0?i\n635b4c09 updateChannel 25 channel_id:l\n62ba04d9 updateNewChannelMessage 25 message:14 pts:i pts_count:i\n922e6e10 updateReadChannelInbox 25 flags:# folder_id:flags.0?i channel_id:l max_id:i still_unread_count:i pts:i\nc32d5b12 updateDeleteChannelMessages 25 channel_id:l messages:Vi pts:i pts_count:i\nf226ac08 updateChannelMessageViews 25 channel_id:l id:i views:i\nd7ca61a2 updateChatParticipantAdmin 25 chat_id:l user_id:l is_admin:B version:i\n688a30aa updateNewStickerSet 25 stickerset:45\nbb2d201 updateStickerSetsOrder 25 flags:# masks:flags.0?t emojis:flags.1?t order:Vl\n31c24808 updateStickerSets 25 flags:# masks:flags.0?t emojis:flags.1?t\n9375341e updateSavedGifs 25\n496f379c updateBotInlineQuery 25 flags:# query_id:l user_id:l query:s geo:flags.0?20 peer_type:flags.1?112 offset:s\n12f12a07 updateBotInlineSend 25 flags:# user_id:l query:s geo:flags.0?20 id:s msg_id:flags.1?55\n1b3f4df7 updateEditChannelMessage 25 message:14 pts:i pts_count:i\nb9cfc48d updateBotCallbackQuery 25 flags:# query_id:l user_id:l peer:6 msg_id:i chat_instance:l data:flags.0?b game_short_name:flags.1?s\ne40370a3 updateEditMessage 25 message:14 pts:i pts_count:i\n691e9052 updateInlineBotCallbackQuery 25 flags:# query_id:l user_id:l msg_id:55 chat_instance:l data:flags.0?b game_short_name:flags.1?s\nb75f99a9 updateReadChannelOutbox 25 channel_id:l max_id:i\n1b49ec6d updateDraftMessage 25 flags:# peer:6 top_msg_id:flags.0?i draft:56\n571d2742 updateReadFeaturedStickers 25\n9a422c20 updateRecentStickers 25\na229dd06 updateConfig 25\n3354678f updatePtsChanged 25\n2f2ba99f updateChannelWebPage 25 channel_id:l webpage:41 pts:i pts_count:i\n6e6fe51c updateDialogPinned 25 flags:# pinned:flags.0?t folder_id:flags.1?i peer:76\nfa0f3ca2 updatePinnedDialogs 25 flags:# folder_id:flags.1?i order:flags.0?V76\n8317c0c3 updateBotWebhookJSON 25 data:63\n9b9240a6 updateBotWebhookJSONQuery 25 query_id:l data:63 timeout:i\nb5aefd7d updateBotShippingQuery 25 query_id:l user_id:l payload:b shipping_address:67\n8caa9a96 updateBotPrecheckoutQuery 25 flags:# query_id:l user_id:l payload:b info:flags.0?68 shipping_option_id:flags.1?s currency:s total_amount:l\nab0f6b1e updatePhoneCall 25 phone_call:71\n46560264 updateLangPackTooLong 25 lang_code:s\n56022f4d updateLangPack 25 difference:75\ne511996d updateFavedStickers 25\nea29055d updateChannelReadMessagesContents 25 flags:# channel_id:l top_msg_id:flags.0?i messages:Vi\n7084a7be updateContactsReset 25\nb23fc698 updateChannelAvailableMessages 25 channel_id:l available_min_id:i\ne16459c3 updateDialogUnreadMark 25 flags:# unread:flags.0?t peer:76\naca1657b updateMessagePoll 25 flags:# poll_id:l poll:flags.0?91 results:93\n54c01850 updateChatDefaultBannedRights 25 peer:6 default_banned_rights:95 version:i\n19360dc0 updateFolderPeers 25 folder_peers:V98 pts:i pts_count:i\n6a7e7366 updatePeerSettings 25 peer:6 settings:22\nb4afcfb0 updatePeerLocated 25 peers:V99\n39a51dfb updateNewScheduledMessage 25 message:14\nf2a71983 updateDeleteScheduledMessages 25 flags:# peer:6 messages:Vi sent_messages:flags.0?Vi\n8216fba3 updateTheme 25 theme:101\n871fb939 updateGeoLiveViewed 25 peer:6 msg_id:i\n564fe691 updateLoginToken 25\n24f40e77 updateMessagePollVote 25 poll_id:l peer:6 options:Vb qts:i\n26ffde7d updateDialogFilter 25 flags:# id:i filter:flags.0?105\na5d72105 updateDialogFilterOrder 25 order:Vi\n3504914f updateDialogFilters 25\n2661bf09 updatePhoneCallSignalingData 25 phone_call_id:l data:b\nd29a27f4 updateChannelMessageForwards 25 channel_id:l id:i forwards:i\nd6b19546 updateReadChannelDiscussionInbox 25 flags:# channel_id:l top_msg_id:i read_max_id:i broadcast_id:flags.0?l broadcast_post:flags.0?i\n695c9e7c updateReadChannelDiscussionOutbox 25 channel_id:l top_msg_id:i read_max_id:i\nebe07752 updatePeerBlocked 25 flags:# blocked:flags.0?t blocked_my_stories_from:flags.1?t peer_id:6\n8c88c923 updateChannelUserTyping 25 flags:# channel_id:l top_msg_id:flags.0?i from_id:6 action:36\ned85eab5 updatePinnedMessages 25 flags:# pinned:flags.0?t peer:6 messages:Vi pts:i pts_count:i\n5bb98608 updatePinnedChannelMessages 25 flags:# pinned:flags.0?t channel_id:l messages:Vi pts:i pts_count:i\nf89a6a4e updateChat 25 chat_id:l\nf2ebdb4e updateGroupCallParticipants 25 call:110 participants:V111 version:i\n97d64341 updateGroupCall 25 flags:# chat_id:flags.0?l call:109\nbb9bb9a5 updatePeerHistoryTTL 25 flags:# peer:6 ttl_period:flags.0?i\nd087663a updateChatParticipant 25 flags:# chat_id:l date:i actor_id:l user_id:l prev_participant:flags.0?11 new_participant:flags.1?11 invite:flags.2?42 qts:i\n985d3abb updateChannelParticipant 25 flags:# via_chatlist:flags.3?t channel_id:l date:i actor_id:l user_id:l prev_participant:flags.0?53 new_participant:flags.1?53 invite:flags.2?42 qts:i\nc4870a49 updateBotStopped 25 user_id:l date:i stopped:B qts:i\nb783982 updateGroupCallConnection 25 flags:# presentation:flags.0?t params:63\n4d712f2e updateBotCommands 25 peer:6 bot_id:l commands:V46\n7063c3db updatePendingJoinRequests 25 peer:6 requests_pending:i recent_requesters:Vl\n11dfa986 updateBotChatInviteRequester 25 peer:6 date:i user_id:l about:s invite:42 qts:i\n5e1b3cb8 updateMessageReactions 25 flags:# peer:6 msg_id:i top_msg_id:flags.0?i reactions:116\n17b7a20b updateAttachMenuBots 25\n1592b79d updateWebViewResultSent 25 query_id:l\n14b85813 updateBotMenuButton 25 bot_id:l button:118\n74d8be99 updateSavedRingtones 25\n84cd5a updateTranscribedAudio 25 flags:# pending:flags.0?t peer:6 msg_id:i transcription_id:l text:s\nfb4c496c updateReadFeaturedEmojiStickers 25\n28373599 updateUserEmojiStatus 25 user_id:l emoji_status:120\n30f443db updateRecentEmojiStatuses 25\n6f7863f4 updateRecentReactions 25\n86fccf85 updateMoveStickerSetToTop 25 flags:# masks:flags.0?t emojis:flags.1?t stickerset:l\nd5a41724 updateMessageExtendedMedia 25 peer:6 msg_id:i extended_media:V122\n192efbe3 updateChannelPinnedTopic 25 flags:# pinned:flags.0?t channel_id:l topic_id:i\nfe198602 updateChannelPinnedTopics 25 flags:# channel_id:l order:flags.0?Vi\n20529438 updateUser 25 user_id:l\nec05b097 updateAutoSaveSettings 25\n75b3b798 updateStory 25 peer:6 story:130\nf74e932b updateReadStories 25 peer:6 max_id:i\n1bf335b9 updateStoryID 25 id:i random_id:l\n2c084dc1 updateStoriesStealthMode 25 stealth_mode:132\n7d627683 updateSentStoryReaction 25 peer:6 story_id:i reaction:121\n904dd49c updateBotChatBoost 25 peer:6 boost:135 qts:i\n7b68920 updateChannelViewForumAsMessages 25 channel_id:l enabled:B\nae3f101d updatePeerWallpaper 25 flags:# wallpaper_overridden:flags.1?t peer:6 wallpaper:flags.0?23\nac21d3ce updateBotMessageReaction 25 peer:6 msg_id:i date:i actor:6 old_reactions:V121 new_reactions:V121 qts:i\n9cb7759 updateBotMessageReactions 25 peer:6 msg_id:i date:i reactions:V115 qts:i\naeaf9e74 updateSavedDialogPinned 25 flags:# pinned:flags.0?t peer:76\n686c85a6 updatePinnedSavedDialogs 25 flags:# order:flags.0?V76\n39c67432 updateSavedReactionTags 25\nf16269d4 updateSmsJob 25 job_id:s\nf9470ab2 updateQuickReplies 25 quick_replies:V138\nf53da717 updateNewQuickReply 25 quick_reply:138\n53e6f1ec updateDeleteQuickReply 25 shortcut_id:i\n3e050d0f updateQuickReplyMessage 25 message:14\n566fe7cd updateDeleteQuickReplyMessages 25 shortcut_id:i messages:Vi\n8ae5c97a updateBotBusinessConnect 25 connection:139 qts:i\n9ddb347c updateBotNewBusinessMessage 25 flags:# connection_id:s message:14 reply_to_message:flags.0?14 qts:i\n7df587c updateBotEditBusinessMessage 25 flags:# connection_id:s message:14 reply_to_message:flags.0?14 qts:i\na02a982e updateBotDeleteBusinessMessage 25 connection_id:s peer:6 messages:Vi qts:i\n1824e40b updateNewStoryReaction 25 story_id:i peer:6 reaction:121\ndfd961f5 updateBroadcastRevenueTransactions 25 peer:6 balances:141\n4e80a379 updateStarsBalance 25 balance:148\n1ea2fda7 updateBusinessBotCallbackQuery 25 flags:# query_id:l user_id:l connection_id:s message:14 reply_to_message:flags.2?14 chat_instance:l data:flags.0?b\na584b019 updateStarsRevenueStatus 25 peer:6 status:144\n283bd312 updateBotPurchasedPaidMedia 25 user_id:l payload:s qts:i\n51ca7aec updatePaidReactionPrivacy 25 private:B\na56c2a3e updates.state 26 pts:i qts:i date:i seq:i unread_count:i\n5d75a138 updates.differenceEmpty 27 date:i seq:i\nf49ca0 updates.difference 27 new_messages:V14 new_encrypted_messages:V32 other_updates:V25 chats:V10 users:V7 state:26\na8fb1981 updates.differenceSlice 27 new_messages:V14 new_encrypted_messages:V32 other_updates:V25 chats:V10 users:V7 intermediate_state:26\n4afe8f6d updates.differenceTooLong 27 pts:i\ne317af7e updatesTooLong 28\n313bc7f8 updateShortMessage 28 flags:# out:flags.1?t mentioned:flags.4?t media_unread:flags.5?t silent:flags.13?t id:i user_id:l message:s pts:i pts_count:i date:i fwd_from:flags.2?54 via_bot_id:flags.11?l reply_to:flags.3?107 entities:flags.7?V50 ttl_period:flags.25?i\n4d6deea5 updateShortChatMessage 28 flags:# out:flags.1?t mentioned:flags.4?t media_unread:flags.5?t silent:flags.13?t id:i from_id:l chat_id:l message:s pts:i pts_count:i date:i fwd_from:flags.2?54 via_bot_id:flags.11?l reply_to:flags.3?107 entities:flags.7?V50 ttl_period:flags.25?i\n78d4dec1 updateShort 28 update:25 date:i\n725b04c3 updatesCombined 28 updates:V25 users:V7 chats:V10 date:i seq_start:i seq:i\n74ae4240 updates 28 updates:V25 users:V7 chats:V10 date:i seq:i\n9015e101 updateShortSentMessage 28 flags:# out:flags.1?t id:i pts:i pts_count:i date:i media:flags.9?15 entities:flags.7?V50 ttl_period:flags.25?i\n18b7a10d dcOption 29 flags:# ipv6:flags.0?t media_only:flags.1?t tcpo_only:flags.2?t cdn:flags.3?t static:flags.4?t this_port_only:flags.5?t id:i ip_address:s port:i secret:flags.10?b\nab7ec0a0 encryptedChatEmpty 30 id:i\n66b25953 encryptedChatWaiting 30 id:i access_hash:l date:i admin_id:l participant_id:l\n48f1d94c encryptedChatRequested 30 flags:# folder_id:flags.0?i id:i access_hash:l date:i admin_id:l participant_id:l g_a:b\n61f0d4c7 encryptedChat 30 id:i access_hash:l date:i admin_id:l participant_id:l g_a_or_b:b key_fingerprint:l\n1e1c7c45 encryptedChatDiscarded 30 flags:# history_deleted:flags.0?t id:i\nc21f497e encryptedFileEmpty 31\na8008cd8 encryptedFile 31 id:l access_hash:l size:l dc_id:i key_fingerprint:i\ned18c118 encryptedMessage 32 random_id:l chat_id:i date:i bytes:b file:31\n23734b06 encryptedMessageService 32 random_id:l chat_id:i date:i bytes:b\n72f0eaae inputDocumentEmpty 33\n1abfb575 inputDocument 33 id:l access_hash:l file_reference:b\n36f8c871 documentEmpty 34 id:l\n8fd4c4d8 document 34 flags:# id:l access_hash:l file_reference:b date:i mime_type:s size:l thumbs:flags.0?V19 video_thumbs:flags.1?V106 dc_id:i attributes:V39\n9fd40bd8 notifyPeer 35 peer:6\nb4c83b4c notifyUsers 35\nc007cec3 notifyChats 35\nd612e8ef notifyBroadcasts 35\n226e6308 notifyForumTopic 35 peer:6 top_msg_id:i\n16bf744e sendMessageTypingAction 36\nfd5ec8f5 sendMessageCancelAction 36\na187d66f sendMessageRecordVideoAction 36\ne9763aec sendMessageUploadVideoAction 36 progress:i\nd52f73f7 sendMessageRecordAudioAction 36\nf351d7ab sendMessageUploadAudioAction 36 progress:i\nd1d34a26 sendMessageUploadPhotoAction 36 progress:i\naa0cd9e4 sendMessageUploadDocumentAction 36 progress:i\n176f8ba1 sendMessageGeoLocationAction 36\n628cbc6f sendMessageChooseContactAction 36\ndd6a8f48 sendMessageGamePlayAction 36\n88f27fbc sendMessageRecordRoundAction 36\n243e1c66 sendMessageUploadRoundAction 36 progress:i\nd92c2285 speakingInGroupCallAction 36\ndbda9246 sendMessageHistoryImportAction 36 progress:i\nb05ac6b1 sendMessageChooseStickerAction 36\n25972bcb sendMessageEmojiInteraction 36 emoticon:s msg_id:i interaction:63\nb665902e sendMessageEmojiInteractionSeen 36 emoticon:s\nbc2eab30 privacyKeyStatusTimestamp 37\n500e6dfa privacyKeyChatInvite 37\n3d662b7b privacyKeyPhoneCall 37\n39491cc8 privacyKeyPhoneP2P 37\n69ec56a3 privacyKeyForwards 37\n96151fed privacyKeyProfilePhoto 37\nd19ae46d privacyKeyPhoneNumber 37\n42ffd42b privacyKeyAddedByPhone 37\n697f414 privacyKeyVoiceMessages 37\na486b761 privacyKeyAbout 37\n2000a518 privacyKeyBirthday 37\n2ca4fdf8 privacyKeyStarGiftsAutoSave 37\nfffe1bac privacyValueAllowContacts 38\n65427b82 privacyValueAllowAll 38\nb8905fb2 privacyValueAllowUsers 38 users:Vl\nf888fa1a privacyValueDisallowContacts 38\n8b73e763 privacyValueDisallowAll 38\ne4621141 privacyValueDisallowUsers 38 users:Vl\n6b134e8e privacyValueAllowChatParticipants 38 chats:Vl\n41c87565 privacyValueDisallowChatParticipants 38 chats:Vl\nf7e8d89b privacyValueAllowCloseFriends 38\nece9814b privacyValueAllowPremium 38\n21461b5d privacyValueAllowBots 38\nf6a5f82f privacyValueDisallowBots 38\n6c37c15c documentAttributeImageSize 39 w:i h:i\n11b58939 documentAttributeAnimated 39\n6319d612 documentAttributeSticker 39 flags:# mask:flags.1?t alt:s stickerset:43 mask_coords:flags.0?57\n43c57c48 documentAttributeVideo 39 flags:# round_message:flags.0?t supports_streaming:flags.1?t nosound:flags.3?t duration:d w:i h:i preload_prefix_size:flags.2?i video_start_ts:flags.4?d video_codec:flags.5?s\n9852f9c6 documentAttributeAudio 39 flags:# voice:flags.10?t duration:i title:flags.0?s performer:flags.1?s waveform:flags.2?b\n15590068 documentAttributeFilename 39 file_name:s\n9801d2f7 documentAttributeHasStickers 39\nfd149899 documentAttributeCustomEmoji 39 flags:# free:flags.0?t text_color:flags.1?t alt:s stickerset:43\n12b299d4 stickerPack 40 emoticon:s documents:Vl\n211a1788 webPageEmpty 41 flags:# id:l url:flags.0?s\nb0d13e47 webPagePending 41 flags:# id:l url:flags.0?s date:i\ne89c45b2 webPage 41 flags:# has_large_media:flags.13?t id:l url:s display_url:s hash:i type:flags.0?s site_name:flags.1?s title:flags.2?s description:flags.3?s photo:flags.4?18 embed_url:flags.5?s embed_type:flags.5?s embed_width:flags.6?i embed_height:flags.6?i duration:flags.7?i author:flags.8?s document:flags.9?34 cached_page:flags.10?89 attributes:flags.12?V104\n7311ca11 webPageNotModified 41 flags:# cached_page_views:flags.0?i\na22cbd96 chatInviteExported 42 flags:# revoked:flags.0?t permanent:flags.5?t request_needed:flags.6?t link:s admin_id:l date:i start_date:flags.4?i expire_date:flags.1?i usage_limit:flags.2?i usage:flags.3?i requested:flags.7?i subscription_expired:flags.10?i title:flags.8?s subscription_pricing:flags.9?145\ned107ab7 chatInvitePublicJoinRequests 42\nffb62b95 inputStickerSetEmpty 43\n9de7a269 inputStickerSetID 43 id:l access_hash:l\n861cc8a0 inputStickerSetShortName 43 short_name:s\n28703c8 inputStickerSetAnimatedEmoji 43\ne67f520e inputStickerSetDice 43 emoticon:s\ncde3739 inputStickerSetAnimatedEmojiAnimations 43\nc88b3b02 inputStickerSetPremiumGifts 43\n4c4d4ce inputStickerSetEmojiGenericAnimations 43\n29d0f5ee inputStickerSetEmojiDefaultStatuses 43\n44c1f8e9 inputStickerSetEmojiDefaultTopicIcons 43\n49748553 inputStickerSetEmojiChannelDefaultStatuses 43\n2dd14edc stickerSet 44 flags:# archived:flags.1?t official:flags.2?t masks:flags.3?t emojis:flags.7?t text_color:flags.9?t channel_emoji_status:flags.10?t creator:flags.11?t installed_date:flags.0?i id:l access_hash:l title:s short_name:s thumbs:flags.4?V19 thumb_dc_id:flags.4?i thumb_version:flags.4?i thumb_document_id:flags.8?l count:i hash:i\n6e153f16 messages.stickerSet 45 set:44 packs:V40 keywords:V123 documents:V34\nd3f924eb messages.stickerSetNotModified 45\nc27ac8c7 botCommand 46 command:s description:s\na2fa4880 keyboardButton 47 text:s\n258aff05 keyboardButtonUrl 47 text:s url:s\n35bbdb6b keyboardButtonCallback 47 flags:# requires_password:flags.0?t text:s data:b\nb16a6c29 keyboardButtonRequestPhone 47 text:s\nfc796b3f keyboardButtonRequestGeoLocation 47 text:s\n93b9fbb5 keyboardButtonSwitchInline 47 flags:# same_peer:flags.0?t text:s query:s peer_types:flags.1?V112\n50f41ccf keyboardButtonGame 47 text:s\nafd93fbb keyboardButtonBuy 47 text:s\n10b78d29 keyboardButtonUrlAuth 47 flags:# text:s fwd_text:flags.0?s url:s button_id:i\nd02e7fd4 inputKeyboardButtonUrlAuth 47 flags:# request_write_access:flags.0?t text:s fwd_text:flags.1?s url:s bot:1\nbbc7515d keyboardButtonRequestPoll 47 flags:# quiz:flags.0?B text:s\ne988037b inputKeyboardButtonUserProfile 47 text:s user_id:1\n308660c1 keyboardButtonUserProfile 47 text:s user_id:l\n13767230 keyboardButtonWebView 47 text:s url:s\na0c0505c keyboardButtonSimpleWebView 47 text:s url:s\n53d7bfd8 keyboardButtonRequestPeer 47 text:s button_id:i peer_type:126 max_quantity:i\nc9662d05 inputKeyboardButtonRequestPeer 47 flags:# name_requested:flags.0?t username_requested:flags.1?t photo_requested:flags.2?t text:s button_id:i peer_type:126 max_quantity:i\n75d2698e keyboardButtonCopy 47 text:s copy_text:s\n77608b83 keyboardButtonRow 48 buttons:V47\na03e5b85 replyKeyboardHide 49 flags:# selective:flags.2?t\n86b40b08 replyKeyboardForceReply 49 flags:# single_use:flags.1?t selective:flags.2?t placeholder:flags.3?s\n85dd99d1 replyKeyboardMarkup 49 flags:# resize:flags.0?t single_use:flags.1?t selective:flags.2?t persistent:flags.4?t rows:V48 placeholder:flags.3?s\n48a30254 replyInlineMarkup 49 rows:V48\nbb92ba95 messageEntityUnknown 50 offset:i length:i\nfa04579d messageEntityMention 50 offset:i length:i\n6f635b0d messageEntityHashtag 50 offset:i length:i\n6cef8ac7 messageEntityBotCommand 50 offset:i length:i\n6ed02538 messageEntityUrl 50 offset:i length:i\n64e475c2 messageEntityEmail 50 offset:i length:i\nbd610bc9 messageEntityBold 50 offset:i length:i\n826f8b60 messageEntityItalic 50 offset:i length:i\n28a20571 messageEntityCode 50 offset:i length:i\n73924be0 messageEntityPre 50 offset:i length:i language:s\n76a6d327 messageEntityTextUrl 50 offset:i length:i url:s\ndc7b1140 messageEntityMentionName 50 offset:i length:i user_id:l\n208e68c9 inputMessageEntityMentionName 50 offset:i length:i user_id:1\n9b69e34b messageEntityPhone 50 offset:i length:i\n4c4e743f messageEntityCashtag 50 offset:i length:i\n9c4e7e8b messageEntityUnderline 50 offset:i length:i\nbf0693d4 messageEntityStrike 50 offset:i length:i\n761e6af4 messageEntityBankCard 50 offset:i length:i\n32ca960f messageEntitySpoiler 50 offset:i length:i\nc8cf05f8 messageEntityCustomEmoji 50 offset:i length:i document_id:l\nf1ccaaac messageEntityBlockquote 50 flags:# collapsed:flags.0?t offset:i length:i\nee8c1e86 inputChannelEmpty 51\nf35aec28 inputChannel 51 channel_id:l access_hash:l\n5b934f9d inputChannelFromMessage 51 peer:0 msg_id:i channel_id:l\n3e11affb updates.channelDifferenceEmpty 52 flags:# final:flags.0?t pts:i timeout:flags.1?i\na4bcc6fe updates.channelDifferenceTooLong 52 flags:# final:flags.0?t timeout:flags.1?i dialog:17 messages:V14 chats:V10 users:V7\n2064674e updates.channelDifference 52 flags:# final:flags.0?t pts:i timeout:flags.1?i new_messages:V14 other_updates:V25 chats:V10 users:V7\ncb397619 channelParticipant 53 flags:# user_id:l date:i subscription_until_date:flags.0?i\n4f607bef channelParticipantSelf 53 flags:# via_request:flags.0?t user_id:l inviter_id:l date:i subscription_until_date:flags.1?i\n2fe601d3 channelParticipantCreator 53 flags:# user_id:l admin_rights:94 rank:flags.0?s\n34c3bb53 channelParticipantAdmin 53 flags:# can_edit:flags.0?t self:flags.1?t user_id:l inviter_id:flags.1?l promoted_by:l date:i admin_rights:94 rank:flags.2?s\n6df8014e channelParticipantBanned 53 flags:# left:flags.0?t peer:6 kicked_by:l date:i banned_rights:95\n1b03f006 channelParticipantLeft 53 peer:6\n4e4df4bb messageFwdHeader 54 flags:# imported:flags.7?t saved_out:flags.11?t from_id:flags.0?6 from_name:flags.5?s date:i channel_post:flags.2?i post_author:flags.3?s saved_from_peer:flags.4?6 saved_from_msg_id:flags.4?i saved_from_id:flags.8?6 saved_from_name:flags.9?s saved_date:flags.10?i psa_type:flags.6?s\n890c3d89 inputBotInlineMessageID 55 dc_id:i id:l access_hash:l\nb6d915d7 inputBotInlineMessageID64 55 dc_id:i owner_id:l id:i access_hash:l\n1b0c841a draftMessageEmpty 56 flags:# date:flags.0?i\n2d65321f draftMessage 56 flags:# no_webpage:flags.1?t invert_media:flags.6?t reply_to:flags.4?131 message:s entities:flags.3?V50 media:flags.5?3 date:i effect:flags.7?l\naed6dbb2 maskCoords 57 n:i x:d y:d zoom:d\nbdf9653b game 58 flags:# id:l access_hash:l short_name:s title:s description:s photo:18 document:flags.0?34\n32c3e77 inputGameID 59 id:l access_hash:l\nc331e80a inputGameShortName 59 bot_id:1 short_name:s\ndc3d824f textEmpty 60\n744694e0 textPlain 60 text:s\n6724abc4 textBold 60 text:60\nd912a59c textItalic 60 text:60\nc12622c4 textUnderline 60 text:60\n9bf8bb95 textStrike 60 text:60\n6c3f19b9 textFixed 60 text:60\n3c2884c1 textUrl 60 text:60 url:s webpage_id:l\nde5a0dd6 textEmail 60 text:60 email:s\n7e6260d7 textConcat 60 texts:V60\ned6a8504 textSubscript 60 text:60\nc7fb5e01 textSuperscript 60 text:60\n34b8621 textMarked 60 text:60\n1ccb966a textPhone 60 text:60 phone:s\n81ccf4f textImage 60 document_id:l w:i h:i\n35553762 textAnchor 60 text:60 name:s\n13567e8a pageBlockUnsupported 61\n70abc3fd pageBlockTitle 61 text:60\n8ffa9a1f pageBlockSubtitle 61 text:60\nbaafe5e0 pageBlockAuthorDate 61 author:60 published_date:i\nbfd064ec pageBlockHeader 61 text:60\nf12bb6e1 pageBlockSubheader 61 text:60\n467a0766 pageBlockParagraph 61 text:60\nc070d93e pageBlockPreformatted 61 text:60 language:s\n48870999 pageBlockFooter 61 text:60\ndb20b188 pageBlockDivider 61\nce0d37b0 pageBlockAnchor 61 name:s\ne4e88011 pageBlockList 61 items:V86\n263d7c26 pageBlockBlockquote 61 text:60 caption:60\n4f4456d3 pageBlockPullquote 61 text:60 caption:60\n1759c560 pageBlockPhoto 61 flags:# photo_id:l caption:85 url:flags.0?s webpage_id:flags.0?l\n7c8fe7b6 pageBlockVideo 61 flags:# autoplay:flags.0?t loop:flags.1?t video_id:l caption:85\n39f23300 pageBlockCover 61 cover:61\na8718dc5 pageBlockEmbed 61 flags:# full_width:flags.0?t allow_scrolling:flags.3?t url:flags.1?s html:flags.2?s poster_photo_id:flags.4?l w:flags.5?i h:flags.5?i caption:85\nf259a80b pageBlockEmbedPost 61 url:s webpage_id:l author_photo_id:l author:s date:i blocks:V61 caption:85\n65a0fa4d pageBlockCollage 61 items:V61 caption:85\n31f9590 pageBlockSlideshow 61 items:V61 caption:85\nef1751b5 pageBlockChannel 61 channel:10\n804361ea pageBlockAudio 61 audio_id:l caption:85\n1e148390 pageBlockKicker 61 text:60\nbf4dea82 pageBlockTable 61 flags:# bordered:flags.0?t striped:flags.1?t title:60 rows:V84\n9a8ae1e1 pageBlockOrderedList 61 items:V87\n76768bed pageBlockDetails 61 flags:# open:flags.0?t blocks:V61 title:60\n16115a96 pageBlockRelatedArticles 61 title:60 articles:V88\na44f3ef6 pageBlockMap 61 geo:20 zoom:i w:i h:i caption:85\n85e42301 phoneCallDiscardReasonMissed 62\ne095c1a0 phoneCallDiscardReasonDisconnect 62\n57adc690 phoneCallDiscardReasonHangup 62\nfaf7e8c9 phoneCallDiscardReasonBusy 62\nafe2b839 phoneCallDiscardReasonAllowGroupCall 62 encrypted_key:b\n7d748d04 dataJSON 63 data:s\ncb296bf8 labeledPrice 64 label:s amount:l\n49ee584 invoice 65 flags:# test:flags.0?t name_requested:flags.1?t phone_requested:flags.2?t email_requested:flags.3?t shipping_address_requested:flags.4?t flexible:flags.5?t phone_to_provider:flags.6?t email_to_provider:flags.7?t recurring:flags.9?t currency:s prices:V64 max_tip_amount:flags.8?l suggested_tip_amounts:flags.8?Vl terms_url:flags.10?s subscription_period:flags.11?i\nea02c27e paymentCharge 66 id:s provider_charge_id:s\n1e8caaeb postAddress 67 street_line1:s street_line2:s city:s state:s country_iso2:s post_code:s\n909c3f94 paymentRequestedInfo 68 flags:# name:flags.0?s phone:flags.1?s email:flags.2?s shipping_address:flags.3?67\n1c570ed1 webDocument 69 url:s access_hash:l size:i mime_type:s attributes:V39\nf9c8bcc6 webDocumentNoProxy 69 url:s size:i mime_type:s attributes:V39\n9bed434d inputWebDocument 70 url:s size:i mime_type:s attributes:V39\n5366c915 phoneCallEmpty 71 id:l\need42858 phoneCallWaiting 71 flags:# video:flags.6?t id:l access_hash:l date:i admin_id:l participant_id:l protocol:73 receive_date:flags.0?i conference_call:flags.8?110\n45361c63 phoneCallRequested 71 flags:# video:flags.6?t id:l access_hash:l date:i admin_id:l participant_id:l g_a_hash:b protocol:73 conference_call:flags.8?110\n22fd7181 phoneCallAccepted 71 flags:# video:flags.6?t id:l access_hash:l date:i admin_id:l participant_id:l g_b:b protocol:73 conference_call:flags.8?110\n3ba5940c phoneCall 71 flags:# p2p_allowed:flags.5?t video:flags.6?t id:l access_hash:l date:i admin_id:l participant_id:l g_a_or_b:b key_fingerprint:l protocol:73 connections:V72 start_date:i custom_parameters:flags.7?63 conference_call:flags.8?110\nf9d25503 phoneCallDiscarded 71 flags:# need_rating:flags.2?t need_debug:flags.3?t video:flags.6?t id:l reason:flags.0?62 duration:flags.1?i conference_call:flags.8?110\n9cc123c7 phoneConnection 72 flags:# tcp:flags.0?t id:l ip:s ipv6:s port:i peer_tag:b\n635fe375 phoneConnectionWebrtc 72 flags:# turn:flags.0?t stun:flags.1?t id:l ip:s ipv6:s port:i username:s password:s\nfc878fc8 phoneCallProtocol 73 flags:# udp_p2p:flags.0?t udp_reflector:flags.1?t min_layer:i max_layer:i library_versions:Vs\ncad181f6 langPackString 74 key:s value:s\n6c47ac9f langPackStringPluralized 74 flags:# key:s zero_value:flags.0?s one_value:flags.1?s two_value:flags.2?s few_value:flags.3?s many_value:flags.4?s other_value:s\n2979eeb2 langPackStringDeleted 74 key:s\nf385c1f6 langPackDifference 75 lang_code:s from_version:i version:i strings:V74\ne56dbf05 dialogPeer 76 peer:6\n514519e2 dialogPeerFolder 76 folder_id:i\n64199744 secureFileEmpty 77\n7d09c27e secureFile 77 id:l access_hash:l size:l dc_id:i date:i file_hash:b secret:b\n8aeabec3 secureData 78 data:b data_hash:b secret:b\n7d6099dd securePlainPhone 79 phone:s\n21ec5a5f securePlainEmail 79 email:s\n9d2a81e3 secureValueTypePersonalDetails 80\n3dac6a00 secureValueTypePassport 80\n6e425c4 secureValueTypeDriverLicense 80\na0d0744b secureValueTypeIdentityCard 80\n99a48f23 secureValueTypeInternalPassport 80\ncbe31e26 secureValueTypeAddress 80\nfc36954e secureValueTypeUtilityBill 80\n89137c0d secureValueTypeBankStatement 80\n8b883488 secureValueTypeRentalAgreement 80\n99e3806a secureValueTypePassportRegistration 80\nea02ec33 secureValueTypeTemporaryRegistration 80\nb320aadb secureValueTypePhone 80\n8e3ca7ee secureValueTypeEmail 80\n187fa0ca secureValue 81 flags:# type:80 data:flags.0?78 front_side:flags.1?77 reverse_side:flags.2?77 selfie:flags.3?77 translation:flags.6?V77 files:flags.4?V77 plain_data:flags.5?79 hash:b\n33f0ea47 secureCredentialsEncrypted 82 data:b hash:b secret:b\n34566b6a pageTableCell 83 flags:# header:flags.0?t align_center:flags.3?t align_right:flags.4?t valign_middle:flags.5?t valign_bottom:flags.6?t text:flags.7?60 colspan:flags.1?i rowspan:flags.2?i\ne0c0c5e5 pageTableRow 84 cells:V83\n6f747657 pageCaption 85 text:60 credit:60\nb92fb6cd pageListItemText 86 text:60\n25e073fc pageListItemBlocks 86 blocks:V61\n5e068047 pageListOrderedItemText 87 num:s text:60\n98dd8936 pageListOrderedItemBlocks 87 num:s blocks:V61\nb390dc08 pageRelatedArticle 88 flags:# url:s webpage_id:l title:flags.0?s description:flags.1?s photo_id:flags.2?l author:flags.3?s published_date:flags.4?i\n98657f0d page 89 flags:# part:flags.0?t rtl:flags.1?t v2:flags.2?t url:s blocks:V61 photos:V18 documents:V34 views:flags.3?i\nff16e2ca pollAnswer 90 text:127 option:b\n58747131 poll 91 id:l flags:# closed:flags.0?t public_voters:flags.1?t multiple_choice:flags.2?t quiz:flags.3?t question:127 answers:V90 close_period:flags.4?i close_date:flags.5?i\n3b6ddad2 pollAnswerVoters 92 flags:# chosen:flags.0?t correct:flags.1?t option:b voters:i\n7adf2420 pollResults 93 flags:# min:flags.0?t results:flags.1?V92 total_voters:flags.2?i recent_voters:flags.3?V6 solution:flags.4?s solution_entities:flags.4?V50\n5fb224d5 chatAdminRights 94 flags:# change_info:flags.0?t post_messages:flags.1?t edit_messages:flags.2?t delete_messages:flags.3?t ban_users:flags.4?t invite_users:flags.5?t pin_messages:flags.7?t add_admins:flags.9?t anonymous:flags.10?t manage_call:flags.11?t other:flags.12?t manage_topics:flags.13?t post_stories:flags.14?t edit_stories:flags.15?t delete_stories:flags.16?t\n9f120418 chatBannedRights 95 flags:# view_messages:flags.0?t send_messages:flags.1?t send_media:flags.2?t send_stickers:flags.3?t send_gifs:flags.4?t send_games:flags.5?t send_inline:flags.6?t embed_links:flags.7?t send_polls:flags.8?t change_info:flags.10?t invite_users:flags.15?t pin_messages:flags.17?t manage_topics:flags.18?t send_photos:flags.19?t send_videos:flags.20?t send_roundvideos:flags.21?t send_audios:flags.22?t send_voices:flags.23?t send_docs:flags.24?t send_plain:flags.25?t until_date:i\n372efcd0 wallPaperSettings 96 flags:# blur:flags.1?t motion:flags.2?t background_color:flags.0?i second_background_color:flags.4?i third_background_color:flags.5?i fourth_background_color:flags.6?i intensity:flags.3?i rotation:flags.4?i emoticon:flags.7?s\nff544e65 folder 97 flags:# autofill_new_broadcasts:flags.0?t autofill_public_groups:flags.1?t autofill_new_correspondents:flags.2?t id:i title:s photo:flags.3?13\ne9baa668 folderPeer 98 peer:6 folder_id:i\nca461b5d peerLocated 99 peer:6 expires:i distance:i\nf8ec284b peerSelfLocated 99 expires:i\nd072acb4 restrictionReason 100 platform:s reason:s text:s\na00e67d6 theme 101 flags:# creator:flags.0?t default:flags.1?t for_chat:flags.5?t id:l access_hash:l slug:s title:s document:flags.2?34 settings:flags.3?V103 emoticon:flags.6?s installs_count:flags.4?i\nc3a12462 baseThemeClassic 102\nfbd81688 baseThemeDay 102\nb7b31ea8 baseThemeNight 102\n6d5f77ee baseThemeTinted 102\n5b11125a baseThemeArctic 102\nfa58b6d4 themeSettings 103 flags:# message_colors_animated:flags.2?t base_theme:102 accent_color:i outbox_accent_color:flags.3?i message_colors:flags.0?Vi wallpaper:flags.1?23\n54b56617 webPageAttributeTheme 104 flags:# documents:flags.0?V34 settings:flags.1?103\n2e94c3e7 webPageAttributeStory 104 flags:# peer:6 id:i story:flags.0?130\n50cc03d3 webPageAttributeStickerSet 104 flags:# emojis:flags.0?t text_color:flags.1?t stickers:V34\ncf6f6db8 webPageAttributeUniqueStarGift 104 gift:147\naa472651 dialogFilter 105 flags:# contacts:flags.0?t non_contacts:flags.1?t groups:flags.2?t broadcasts:flags.3?t bots:flags.4?t exclude_muted:flags.11?t exclude_read:flags.12?t exclude_archived:flags.13?t title_noanimate:flags.28?t id:i title:127 emoticon:flags.25?s color:flags.27?i pinned_peers:V0 include_peers:V0 exclude_peers:V0\n363293ae dialogFilterDefault 105\n96537bd7 dialogFilterChatlist 105 flags:# has_my_invites:flags.26?t title_noanimate:flags.28?t id:i title:127 emoticon:flags.25?s color:flags.27?i pinned_peers:V0 include_peers:V0\nde33b094 videoSize 106 flags:# type:s w:i h:i size:i video_start_ts:flags.0?d\nf85c413c videoSizeEmojiMarkup 106 emoji_id:l background_colors:Vi\nda082fe videoSizeStickerMarkup 106 stickerset:43 sticker_id:l background_colors:Vi\nafbc09db messageReplyHeader 107 flags:# reply_to_scheduled:flags.2?t forum_topic:flags.3?t quote:flags.9?t reply_to_msg_id:flags.4?i reply_to_peer_id:flags.0?6 reply_from:flags.5?54 reply_media:flags.8?15 reply_to_top_id:flags.1?i quote_text:flags.6?s quote_entities:flags.7?V50 quote_offset:flags.10?i\ne5af939 messageReplyStoryHeader 107 peer:6 story_id:i\n83d60fc2 messageReplies 108 flags:# comments:flags.0?t replies:i replies_pts:i recent_repliers:flags.1?V6 channel_id:flags.0?l max_id:flags.2?i read_max_id:flags.3?i\n7780bcb4 groupCallDiscarded 109 id:l access_hash:l duration:i\ncdf8d3e3 groupCall 109 flags:# join_muted:flags.1?t can_change_join_muted:flags.2?t join_date_asc:flags.6?t schedule_start_subscribed:flags.8?t can_start_video:flags.9?t record_video_active:flags.11?t rtmp_stream:flags.12?t listeners_hidden:flags.13?t id:l access_hash:l participants_count:i title:flags.3?s stream_dc_id:flags.4?i record_start_date:flags.5?i schedule_date:flags.7?i unmuted_video_count:flags.10?i unmuted_video_limit:i version:i conference_from_call:flags.14?l\nd8aa840f inputGroupCall 110 id:l access_hash:l\neba636fe groupCallParticipant 111 flags:# muted:flags.0?t left:flags.1?t can_self_unmute:flags.2?t just_joined:flags.4?t versioned:flags.5?t min:flags.8?t muted_by_you:flags.9?t volume_by_admin:flags.10?t self:flags.12?t video_joined:flags.15?t peer:6 date:i active_date:flags.3?i source:i volume:flags.7?i about:flags.11?s raise_hand_rating:flags.13?l video:flags.6?114 presentation:flags.14?114\n3081ed9d inlineQueryPeerTypeSameBotPM 112\n833c0fac inlineQueryPeerTypePM 112\nd766c50a inlineQueryPeerTypeChat 112\n5ec4be43 inlineQueryPeerTypeMegagroup 112\n6334ee9a inlineQueryPeerTypeBroadcast 112\ne3b2d0c inlineQueryPeerTypeBotPM 112\ndcb118b7 groupCallParticipantVideoSourceGroup 113 semantics:s sources:Vi\n67753ac8 groupCallParticipantVideo 114 flags:# paused:flags.0?t endpoint:s source_groups:V113 audio_source:flags.1?i\na3d1cb80 reactionCount 115 flags:# chosen_order:flags.0?i reaction:121 count:i\na339f0b messageReactions 116 flags:# min:flags.0?t can_see_list:flags.2?t reactions_as_tags:flags.3?t results:V115 recent_reactions:flags.1?V117 top_reactors:flags.4?V146\n8c79b63c messagePeerReaction 117 flags:# big:flags.0?t unread:flags.1?t my:flags.2?t peer_id:6 date:i reaction:121\n7533a588 botMenuButtonDefault 118\n4258c205 botMenuButtonCommands 118\nc7b57ce6 botMenuButton 118 text:s url:s\n97e8bebe notificationSoundDefault 119\n6f0c34df notificationSoundNone 119\n830b9ae4 notificationSoundLocal 119 title:s data:s\nff6c8049 notificationSoundRingtone 119 id:l\n2de11aae emojiStatusEmpty 120\ne7ff068a emojiStatus 120 flags:# document_id:l until:flags.0?i\n7184603b emojiStatusCollectible 120 flags:# collectible_id:l document_id:l title:s slug:s pattern_document_id:l center_color:i edge_color:i pattern_color:i text_color:i until:flags.0?i\n7141dbf inputEmojiStatusCollectible 120 flags:# collectible_id:l until:flags.0?i\n79f5d419 reactionEmpty 121\n1b2286b8 reactionEmoji 121 emoticon:s\n8935fc73 reactionCustomEmoji 121 document_id:l\n523da4eb reactionPaid 121\nad628cc8 messageExtendedMediaPreview 122 flags:# w:flags.0?i h:flags.0?i thumb:flags.1?19 video_duration:flags.2?i\nee479c64 messageExtendedMedia 122 media:15\nfcfeb29c stickerKeyword 123 document_id:l keyword:Vs\nb4073647 username 124 flags:# editable:flags.0?t active:flags.1?t username:s\n23f109b forumTopicDeleted 125 id:i\n71701da9 forumTopic 125 flags:# my:flags.1?t closed:flags.2?t pinned:flags.3?t short:flags.5?t hidden:flags.6?t id:i date:i title:s icon_color:i icon_emoji_id:flags.0?l top_message:i read_inbox_max_id:i read_outbox_max_id:i unread_count:i unread_mentions_count:i unread_reactions_count:i from_id:6 notify_settings:21 draft:flags.4?56\n5f3b8a00 requestPeerTypeUser 126 flags:# bot:flags.0?B premium:flags.1?B\nc9f06e1b requestPeerTypeChat 126 flags:# creator:flags.0?t bot_participant:flags.5?t has_username:flags.3?B forum:flags.4?B user_admin_rights:flags.1?94 bot_admin_rights:flags.2?94\n339bef6c requestPeerTypeBroadcast 126 flags:# creator:flags.0?t has_username:flags.3?B user_admin_rights:flags.1?94 bot_admin_rights:flags.2?94\n751f3146 textWithEntities 127 text:s entities:V50\n5da674b7 botAppNotModified 128\n95fcd1d6 botApp 128 flags:# id:l access_hash:l short_name:s title:s description:s photo:18 document:flags.0?34 hash:l\n8d595cd6 storyViews 129 flags:# has_viewers:flags.1?t views_count:i forwards_count:flags.2?i reactions:flags.3?V115 reactions_count:flags.4?i recent_viewers:flags.0?Vl\n51e6ee4f storyItemDeleted 130 id:i\nffadc913 storyItemSkipped 130 flags:# close_friends:flags.8?t id:i date:i expire_date:i\n79b26a24 storyItem 130 flags:# pinned:flags.5?t public:flags.7?t close_friends:flags.8?t min:flags.9?t noforwards:flags.10?t edited:flags.11?t contacts:flags.12?t selected_contacts:flags.13?t out:flags.16?t id:i date:i from_id:flags.18?6 fwd_from:flags.17?136 expire_date:i caption:flags.0?s entities:flags.1?V50 media:15 media_areas:flags.14?V134 privacy:flags.2?V38 views:flags.3?129 sent_reaction:flags.15?121\n22c0f6d5 inputReplyToMessage 131 flags:# reply_to_msg_id:i top_msg_id:flags.0?i reply_to_peer_id:flags.1?0 quote_text:flags.2?s quote_entities:flags.3?V50 quote_offset:flags.4?i\n5881323a inputReplyToStory 131 peer:0 story_id:i\n712e27fd storiesStealthMode 132 flags:# active_until_date:flags.0?i cooldown_until_date:flags.1?i\ncfc9e002 mediaAreaCoordinates 133 flags:# x:d y:d w:d h:d rotation:d radius:flags.0?d\nbe82db9c mediaAreaVenue 134 coordinates:133 geo:20 title:s address:s provider:s venue_id:s venue_type:s\nb282217f inputMediaAreaVenue 134 coordinates:133 query_id:l result_id:s\ncad5452d mediaAreaGeoPoint 134 flags:# coordinates:133 geo:20 address:flags.0?143\n14455871 mediaAreaSuggestedReaction 134 flags:# dark:flags.0?t flipped:flags.1?t coordinates:133 reaction:121\n770416af mediaAreaChannelPost 134 coordinates:133 channel_id:l msg_id:i\n2271f2bf inputMediaAreaChannelPost 134 coordinates:133 channel:51 msg_id:i\n37381085 mediaAreaUrl 134 coordinates:133 url:s\n49a6549c mediaAreaWeather 134 coordinates:133 emoji:s temperature_c:d color:i\n5787686d mediaAreaStarGift 134 coordinates:133 slug:s\n4b3e14d6 boost 135 flags:# gift:flags.1?t giveaway:flags.2?t unclaimed:flags.3?t id:s user_id:flags.0?l giveaway_msg_id:flags.2?i date:i expires:i used_gift_slug:flags.4?s multiplier:flags.5?i stars:flags.6?l\nb826e150 storyFwdHeader 136 flags:# modified:flags.3?t from:flags.0?6 from_name:flags.1?s story_id:flags.2?i\nb54b5acf peerColor 137 flags:# color:flags.0?i background_emoji_id:flags.1?l\n697102b quickReply 138 shortcut_id:i shortcut:s top_message:i count:i\n896433b4 botBusinessConnection 139 flags:# can_reply:flags.0?t disabled:flags.1?t connection_id:s user_id:l dc_id:i date:i\nd62ff46a requestedPeerUser 140 flags:# user_id:l first_name:flags.0?s last_name:flags.0?s username:flags.1?s photo:flags.2?18\n7307544f requestedPeerChat 140 flags:# chat_id:l title:flags.0?s photo:flags.2?18\n8ba403e4 requestedPeerChannel 140 flags:# channel_id:l title:flags.0?s username:flags.1?s photo:flags.2?18\nc3ff71e7 broadcastRevenueBalances 141 flags:# withdrawal_enabled:flags.0?t current_balance:l available_balance:l overall_revenue:l\nb89bfccf factCheck 142 flags:# need_check:flags.0?t country:flags.1?s text:flags.1?127 hash:l\nde4c5d93 geoPointAddress 143 flags:# country_iso2:s state:flags.0?s city:flags.1?s street:flags.2?s\nfebe5491 starsRevenueStatus 144 flags:# withdrawal_enabled:flags.0?t current_balance:148 available_balance:148 overall_revenue:148 next_withdrawal_at:flags.1?i\n5416d58 starsSubscriptionPricing 145 period:i amount:l\n4ba3a95a messageReactor 146 flags:# top:flags.0?t my:flags.1?t anonymous:flags.2?t peer_id:flags.3?6 count:i\n2cc73c8 starGift 147 flags:# limited:flags.0?t sold_out:flags.1?t birthday:flags.2?t id:l sticker:34 stars:l availability_remains:flags.0?i availability_total:flags.0?i convert_stars:l first_sale_date:flags.1?i last_sale_date:flags.1?i upgrade_stars:flags.3?l\nf2fe7e4a starGiftUnique 147 flags:# id:l title:s slug:s num:i owner_id:flags.0?6 owner_name:flags.1?s owner_address:flags.2?s attributes:V149 availability_issued:i availability_total:i\nbbb6b4a3 starsAmount 148 amount:l nanos:i\n39d99013 starGiftAttributeModel 149 name:s document:34 rarity_permille:i\n13acff19 starGiftAttributePattern 149 name:s document:34 rarity_permille:i\n94271762 starGiftAttributeBackdrop 149 name:s center_color:i edge_color:i pattern_color:i text_color:i rarity_permille:i\ne0bff26c starGiftAttributeOriginalDetails 149 flags:# sender_id:flags.0?6 recipient_id:6 date:i message:flags.1?127";
+const SCHEMA_TYPES = ["InputPeer","InputUser","InputFile","InputMedia","InputGeoPoint","InputPhoto","Peer","User","UserProfilePhoto","UserStatus","Chat","ChatParticipant","ChatParticipants","ChatPhoto","Message","MessageMedia","MessageAction","Dialog","Photo","PhotoSize","GeoPoint","auth.Authorization","PeerNotifySettings","PeerSettings","WallPaper","messages.Dialogs","messages.Messages","Update","updates.State","updates.Difference","Updates","DcOption","EncryptedChat","EncryptedFile","EncryptedMessage","InputDocument","Document","NotifyPeer","SendMessageAction","PrivacyKey","PrivacyRule","DocumentAttribute","StickerPack","WebPage","account.Password","ExportedChatInvite","InputStickerSet","StickerSet","messages.StickerSet","BotCommand","KeyboardButton","KeyboardButtonRow","ReplyMarkup","MessageEntity","InputChannel","updates.ChannelDifference","ChannelParticipant","help.TermsOfService","MessageFwdHeader","InputBotInlineMessageID","DraftMessage","MaskCoords","Game","InputGame","RichText","PageBlock","PhoneCallDiscardReason","DataJSON","LabeledPrice","Invoice","PaymentCharge","PostAddress","PaymentRequestedInfo","WebDocument","InputWebDocument","PhoneCall","PhoneConnection","PhoneCallProtocol","LangPackString","LangPackDifference","DialogPeer","SecureFile","SecureData","SecurePlainData","SecureValueType","SecureValue","SecureCredentialsEncrypted","PasswordKdfAlgo","SecurePasswordKdfAlgo","PageTableCell","PageTableRow","PageCaption","PageListItem","PageListOrderedItem","PageRelatedArticle","Page","PollAnswer","Poll","PollAnswerVoters","PollResults","ChatAdminRights","ChatBannedRights","WallPaperSettings","Folder","FolderPeer","PeerLocated","RestrictionReason","Theme","auth.LoginToken","BaseTheme","ThemeSettings","WebPageAttribute","DialogFilter","VideoSize","MessageReplyHeader","MessageReplies","GroupCall","InputGroupCall","GroupCallParticipant","InlineQueryPeerType","GroupCallParticipantVideoSourceGroup","GroupCallParticipantVideo","auth.LoggedOut","ReactionCount","MessageReactions","MessagePeerReaction","BotMenuButton","NotificationSound","EmojiStatus","Reaction","MessageExtendedMedia","StickerKeyword","Username","ForumTopic","RequestPeerType","TextWithEntities","BotApp","StoryViews","StoryItem","InputReplyTo","StoriesStealthMode","MediaAreaCoordinates","MediaArea","Boost","StoryFwdHeader","PeerColor","QuickReply","BotBusinessConnection","RequestedPeer","BroadcastRevenueBalances","FactCheck","GeoPointAddress","StarsRevenueStatus","StarsSubscriptionPricing","MessageReactor","StarGift","StarsAmount","StarGiftAttribute"];
+const SCHEMA_CTORS = "7f3b18ea inputPeerEmpty 0\n7da07ec9 inputPeerSelf 0\n35a95cb9 inputPeerChat 0 chat_id:l\ndde8a54c inputPeerUser 0 user_id:l access_hash:l\n27bcbbfc inputPeerChannel 0 channel_id:l access_hash:l\na87b0a1c inputPeerUserFromMessage 0 peer:0 msg_id:i user_id:l\nbd2a0840 inputPeerChannelFromMessage 0 peer:0 msg_id:i channel_id:l\nb98886cf inputUserEmpty 1\nf7c1b13f inputUserSelf 1\nf21158c6 inputUser 1 user_id:l access_hash:l\n1da448e2 inputUserFromMessage 1 peer:0 msg_id:i user_id:l\nf52ff27f inputFile 2 id:l parts:i name:s md5_checksum:s\nfa4f0bb5 inputFileBig 2 id:l parts:i name:s\n62dc8b48 inputFileStoryDocument 2 id:35\n9664f57f inputMediaEmpty 3\n1e287d04 inputMediaUploadedPhoto 3 flags:# spoiler:flags.2?t file:2 stickers:flags.0?V35 ttl_seconds:flags.1?i\nb3ba0635 inputMediaPhoto 3 flags:# spoiler:flags.1?t id:5 ttl_seconds:flags.0?i\nf9c44144 inputMediaGeoPoint 3 geo_point:4\nf8ab7dfb inputMediaContact 3 phone_number:s first_name:s last_name:s vcard:s\n37c9330 inputMediaUploadedDocument 3 flags:# nosound_video:flags.3?t force_file:flags.4?t spoiler:flags.5?t file:2 thumb:flags.2?2 mime_type:s attributes:V41 stickers:flags.0?V35 video_cover:flags.6?5 video_timestamp:flags.7?i ttl_seconds:flags.1?i\na8763ab5 inputMediaDocument 3 flags:# spoiler:flags.2?t id:35 video_cover:flags.3?5 video_timestamp:flags.4?i ttl_seconds:flags.0?i query:flags.1?s\nc13d1c11 inputMediaVenue 3 geo_point:4 title:s address:s provider:s venue_id:s venue_type:s\ne5bbfe1a inputMediaPhotoExternal 3 flags:# spoiler:flags.1?t url:s ttl_seconds:flags.0?i\n779600f9 inputMediaDocumentExternal 3 flags:# spoiler:flags.1?t url:s ttl_seconds:flags.0?i video_cover:flags.2?5 video_timestamp:flags.3?i\nd33f43f3 inputMediaGame 3 id:63\n405fef0d inputMediaInvoice 3 flags:# title:s description:s photo:flags.0?74 invoice:69 payload:b provider:flags.3?s provider_data:67 start_param:flags.1?s extended_media:flags.2?3\n971fa843 inputMediaGeoLive 3 flags:# stopped:flags.0?t geo_point:4 heading:flags.2?i period:flags.1?i proximity_notification_radius:flags.3?i\nf94e5f1 inputMediaPoll 3 flags:# poll:97 correct_answers:flags.0?Vb solution:flags.1?s solution_entities:flags.1?V53\ne66fbf7b inputMediaDice 3 emoticon:s\n89fdd778 inputMediaStory 3 peer:0 id:i\nc21b8849 inputMediaWebPage 3 flags:# force_large_media:flags.0?t force_small_media:flags.1?t optional:flags.2?t url:s\nc4103386 inputMediaPaidMedia 3 flags:# stars_amount:l extended_media:V3 payload:flags.0?s\ne4c123d6 inputGeoPointEmpty 4\n48222faf inputGeoPoint 4 flags:# lat:d long:d accuracy_radius:flags.0?i\n1cd7bf0d inputPhotoEmpty 5\n3bb3b94a inputPhoto 5 id:l access_hash:l file_reference:b\n59511722 peerUser 6 user_id:l\n36c6019a peerChat 6 chat_id:l\na2a5371e peerChannel 6 channel_id:l\nd3bc4b7a userEmpty 7 id:l\n4b46c37e user 7 flags:# self:flags.10?t contact:flags.11?t mutual_contact:flags.12?t deleted:flags.13?t bot:flags.14?t bot_chat_history:flags.15?t bot_nochats:flags.16?t verified:flags.17?t restricted:flags.18?t min:flags.20?t bot_inline_geo:flags.21?t support:flags.23?t scam:flags.24?t apply_min_photo:flags.25?t fake:flags.26?t bot_attach_menu:flags.27?t premium:flags.28?t attach_menu_enabled:flags.29?t flags2:# bot_can_edit:flags2.1?t close_friend:flags2.2?t stories_hidden:flags2.3?t stories_unavailable:flags2.4?t contact_require_premium:flags2.10?t bot_business:flags2.11?t bot_has_main_app:flags2.13?t id:l access_hash:flags.0?l first_name:flags.1?s last_name:flags.2?s username:flags.3?s phone:flags.4?s photo:flags.5?8 status:flags.6?9 bot_info_version:flags.14?i restriction_reason:flags.18?V106 bot_inline_placeholder:flags.19?s lang_code:flags.22?s emoji_status:flags.30?128 usernames:flags2.0?V132 stories_max_id:flags2.5?i color:flags2.8?145 profile_color:flags2.9?145 bot_active_users:flags2.12?i bot_verification_icon:flags2.14?l\n4f11bae1 userProfilePhotoEmpty 8\n82d1f706 userProfilePhoto 8 flags:# has_video:flags.0?t personal:flags.2?t photo_id:l stripped_thumb:flags.1?b dc_id:i\n9d05049 userStatusEmpty 9\nedb93949 userStatusOnline 9 expires:i\n8c703f userStatusOffline 9 was_online:i\n7b197dc8 userStatusRecently 9 flags:# by_me:flags.0?t\n541a1d1a userStatusLastWeek 9 flags:# by_me:flags.0?t\n65899777 userStatusLastMonth 9 flags:# by_me:flags.0?t\n29562865 chatEmpty 10 id:l\n41cbf256 chat 10 flags:# creator:flags.0?t left:flags.2?t deactivated:flags.5?t call_active:flags.23?t call_not_empty:flags.24?t noforwards:flags.25?t id:l title:s photo:13 participants_count:i date:i version:i migrated_to:flags.6?54 admin_rights:flags.14?100 default_banned_rights:flags.18?101\n6592a1a7 chatForbidden 10 id:l title:s\ne00998b7 channel 10 flags:# creator:flags.0?t left:flags.2?t broadcast:flags.5?t verified:flags.7?t megagroup:flags.8?t restricted:flags.9?t signatures:flags.11?t min:flags.12?t scam:flags.19?t has_link:flags.20?t has_geo:flags.21?t slowmode_enabled:flags.22?t call_active:flags.23?t call_not_empty:flags.24?t fake:flags.25?t gigagroup:flags.26?t noforwards:flags.27?t join_to_send:flags.28?t join_request:flags.29?t forum:flags.30?t flags2:# stories_hidden:flags2.1?t stories_hidden_min:flags2.2?t stories_unavailable:flags2.3?t signature_profiles:flags2.12?t id:l access_hash:flags.13?l title:s username:flags.6?s photo:13 date:i restriction_reason:flags.9?V106 admin_rights:flags.14?100 banned_rights:flags.15?101 default_banned_rights:flags.18?101 participants_count:flags.17?i usernames:flags2.0?V132 stories_max_id:flags2.4?i color:flags2.7?145 profile_color:flags2.8?145 emoji_status:flags2.9?128 level:flags2.10?i subscription_until_date:flags2.11?i bot_verification_icon:flags2.13?l\n17d493d5 channelForbidden 10 flags:# broadcast:flags.5?t megagroup:flags.8?t id:l access_hash:l title:s until_date:flags.16?i\nc02d4007 chatParticipant 11 user_id:l inviter_id:l date:i\ne46bcee4 chatParticipantCreator 11 user_id:l\na0933f5b chatParticipantAdmin 11 user_id:l inviter_id:l date:i\n8763d3e1 chatParticipantsForbidden 12 flags:# chat_id:l self_participant:flags.0?11\n3cbc93f8 chatParticipants 12 chat_id:l participants:V11 version:i\n37c1011c chatPhotoEmpty 13\n1c6e1c11 chatPhoto 13 flags:# has_video:flags.0?t photo_id:l stripped_thumb:flags.1?b dc_id:i\n90a6ca84 messageEmpty 14 flags:# id:i peer_id:flags.0?6\n96fdbbe9 message 14 flags:# out:flags.1?t mentioned:flags.4?t media_unread:flags.5?t silent:flags.13?t post:flags.14?t from_scheduled:flags.18?t legacy:flags.19?t edit_hide:flags.21?t pinned:flags.24?t noforwards:flags.26?t invert_media:flags.27?t flags2:# offline:flags2.1?t video_processing_pending:flags2.4?t id:i from_id:flags.8?6 from_boosts_applied:flags.29?i peer_id:6 saved_peer_id:flags.28?6 fwd_from:flags.2?58 via_bot_id:flags.11?l via_business_bot_id:flags2.0?l reply_to:flags.3?114 date:i message:s media:flags.9?15 reply_markup:flags.6?52 entities:flags.7?V53 views:flags.10?i forwards:flags.10?i replies:flags.23?115 edit_date:flags.15?i post_author:flags.16?s grouped_id:flags.17?l reactions:flags.20?124 restriction_reason:flags.22?V106 ttl_period:flags.25?i quick_reply_shortcut_id:flags.30?i effect:flags2.2?l factcheck:flags2.3?150 report_delivery_until_date:flags2.5?i\nd3d28540 messageService 14 flags:# out:flags.1?t mentioned:flags.4?t media_unread:flags.5?t reactions_are_possible:flags.9?t silent:flags.13?t post:flags.14?t legacy:flags.19?t id:i from_id:flags.8?6 peer_id:6 reply_to:flags.3?114 date:i action:16 reactions:flags.20?124 ttl_period:flags.25?i\n3ded6320 messageMediaEmpty 15\n695150d7 messageMediaPhoto 15 flags:# spoiler:flags.3?t photo:flags.0?18 ttl_seconds:flags.2?i\n56e0d474 messageMediaGeo 15 geo:20\n70322949 messageMediaContact 15 phone_number:s first_name:s last_name:s vcard:s user_id:l\n9f84f49e messageMediaUnsupported 15\n52d8ccd9 messageMediaDocument 15 flags:# nopremium:flags.3?t spoiler:flags.4?t video:flags.6?t round:flags.7?t voice:flags.8?t document:flags.0?36 alt_documents:flags.5?V36 video_cover:flags.9?18 video_timestamp:flags.10?i ttl_seconds:flags.2?i\nddf10c3b messageMediaWebPage 15 flags:# force_large_media:flags.0?t force_small_media:flags.1?t manual:flags.3?t safe:flags.4?t webpage:43\n2ec0533f messageMediaVenue 15 geo:20 title:s address:s provider:s venue_id:s venue_type:s\nfdb19008 messageMediaGame 15 game:62\nf6a548d3 messageMediaInvoice 15 flags:# shipping_address_requested:flags.1?t test:flags.3?t title:s description:s photo:flags.0?73 receipt_msg_id:flags.2?i currency:s total_amount:l start_param:s extended_media:flags.4?130\nb940c666 messageMediaGeoLive 15 flags:# geo:20 heading:flags.0?i period:i proximity_notification_radius:flags.1?i\n4bd6e798 messageMediaPoll 15 poll:97 results:99\n3f7ee58b messageMediaDice 15 value:i emoticon:s\n68cb6283 messageMediaStory 15 flags:# via_mention:flags.1?t peer:6 id:i story:flags.0?138\naa073beb messageMediaGiveaway 15 flags:# only_new_subscribers:flags.0?t winners_are_visible:flags.2?t channels:Vl countries_iso2:flags.1?Vs prize_description:flags.3?s quantity:i months:flags.4?i stars:flags.5?l until_date:i\nceaa3ea1 messageMediaGiveawayResults 15 flags:# only_new_subscribers:flags.0?t refunded:flags.2?t channel_id:l additional_peers_count:flags.3?i launch_msg_id:i winners_count:i unclaimed_count:i winners:Vl months:flags.4?i stars:flags.5?l prize_description:flags.1?s until_date:i\na8852491 messageMediaPaidMedia 15 stars_amount:l extended_media:V130\nb6aef7b0 messageActionEmpty 16\nbd47cbad messageActionChatCreate 16 title:s users:Vl\nb5a1ce5a messageActionChatEditTitle 16 title:s\n7fcb13a8 messageActionChatEditPhoto 16 photo:18\n95e3fbef messageActionChatDeletePhoto 16\n15cefd00 messageActionChatAddUser 16 users:Vl\na43f30cc messageActionChatDeleteUser 16 user_id:l\n31224c3 messageActionChatJoinedByLink 16 inviter_id:l\n95d2ac92 messageActionChannelCreate 16 title:s\ne1037f92 messageActionChatMigrateTo 16 channel_id:l\nea3948e9 messageActionChannelMigrateFrom 16 title:s chat_id:l\n94bd38ed messageActionPinMessage 16\n9fbab604 messageActionHistoryClear 16\n92a72876 messageActionGameScore 16 game_id:l score:i\nffa00ccc messageActionPaymentSentMe 16 flags:# recurring_init:flags.2?t recurring_used:flags.3?t currency:s total_amount:l payload:b info:flags.0?72 shipping_option_id:flags.1?s charge:70 subscription_until_date:flags.4?i\nc624b16e messageActionPaymentSent 16 flags:# recurring_init:flags.2?t recurring_used:flags.3?t currency:s total_amount:l invoice_slug:flags.0?s subscription_until_date:flags.4?i\n80e11a7f messageActionPhoneCall 16 flags:# video:flags.2?t call_id:l reason:flags.0?66 duration:flags.1?i\n4792929b messageActionScreenshotTaken 16\nfae69f56 messageActionCustomAction 16 message:s\nc516d679 messageActionBotAllowed 16 flags:# attach_menu:flags.1?t from_request:flags.3?t domain:flags.0?s app:flags.2?136\n1b287353 messageActionSecureValuesSentMe 16 values:V85 credentials:86\nd95c6154 messageActionSecureValuesSent 16 types:V84\nf3f25f76 messageActionContactSignUp 16\n98e0d697 messageActionGeoProximityReached 16 from_id:6 to_id:6 distance:i\n7a0d7f42 messageActionGroupCall 16 flags:# call:117 duration:flags.0?i\n502f92f7 messageActionInviteToGroupCall 16 call:117 users:Vl\n3c134d7b messageActionSetMessagesTTL 16 flags:# period:i auto_setting_from:flags.0?l\nb3a07661 messageActionGroupCallScheduled 16 call:117 schedule_date:i\naa786345 messageActionSetChatTheme 16 emoticon:s\nebbca3cb messageActionChatJoinedByRequest 16\n47dd8079 messageActionWebViewDataSentMe 16 text:s data:s\nb4c38cb5 messageActionWebViewDataSent 16 text:s\n6c6274fa messageActionGiftPremium 16 flags:# currency:s amount:l months:i crypto_currency:flags.0?s crypto_amount:flags.0?l message:flags.1?135\nd999256 messageActionTopicCreate 16 flags:# title:s icon_color:i icon_emoji_id:flags.0?l\nc0944820 messageActionTopicEdit 16 flags:# title:flags.0?s icon_emoji_id:flags.1?l closed:flags.2?B hidden:flags.3?B\n57de635e messageActionSuggestProfilePhoto 16 photo:18\n31518e9b messageActionRequestedPeer 16 button_id:i peers:V6\n5060a3f4 messageActionSetChatWallPaper 16 flags:# same:flags.0?t for_both:flags.1?t wallpaper:24\n56d03994 messageActionGiftCode 16 flags:# via_giveaway:flags.0?t unclaimed:flags.2?t boost_peer:flags.1?6 months:i slug:s currency:flags.2?s amount:flags.2?l crypto_currency:flags.3?s crypto_amount:flags.3?l message:flags.4?135\na80f51e4 messageActionGiveawayLaunch 16 flags:# stars:flags.0?l\n87e2f155 messageActionGiveawayResults 16 flags:# stars:flags.0?t winners_count:i unclaimed_count:i\ncc02aa6d messageActionBoostApply 16 boosts:i\n93b31848 messageActionRequestedPeerSentMe 16 button_id:i peers:V148\n41b3e202 messageActionPaymentRefunded 16 flags:# peer:6 currency:s total_amount:l payload:flags.0?b charge:70\n45d5b021 messageActionGiftStars 16 flags:# currency:s amount:l stars:l crypto_currency:flags.0?s crypto_amount:flags.0?l transaction_id:flags.1?s\nb00c47a2 messageActionPrizeStars 16 flags:# unclaimed:flags.0?t stars:l transaction_id:s boost_peer:6 giveaway_msg_id:i\n4717e8a4 messageActionStarGift 16 flags:# name_hidden:flags.0?t saved:flags.2?t converted:flags.3?t upgraded:flags.5?t refunded:flags.9?t can_upgrade:flags.10?t gift:155 message:flags.1?135 convert_stars:flags.4?l upgrade_msg_id:flags.5?i upgrade_stars:flags.8?l from_id:flags.11?6 peer:flags.12?6 saved_id:flags.12?l\nacdfcb81 messageActionStarGiftUnique 16 flags:# upgrade:flags.0?t transferred:flags.1?t saved:flags.2?t refunded:flags.5?t gift:155 can_export_at:flags.3?i transfer_stars:flags.4?l from_id:flags.6?6 peer:flags.7?6 saved_id:flags.7?l\nd58a08c6 dialog 17 flags:# pinned:flags.2?t unread_mark:flags.3?t view_forum_as_messages:flags.6?t peer:6 top_message:i read_inbox_max_id:i read_outbox_max_id:i unread_count:i unread_mentions_count:i unread_reactions_count:i notify_settings:22 pts:flags.0?i draft:flags.1?60 folder_id:flags.4?i ttl_period:flags.5?i\n71bd134c dialogFolder 17 flags:# pinned:flags.2?t folder:103 peer:6 top_message:i unread_muted_peers_count:i unread_unmuted_peers_count:i unread_muted_messages_count:i unread_unmuted_messages_count:i\n2331b22d photoEmpty 18 id:l\nfb197a65 photo 18 flags:# has_stickers:flags.0?t id:l access_hash:l file_reference:b date:i sizes:V19 video_sizes:flags.1?V113 dc_id:i\ne17e23c photoSizeEmpty 19 type:s\n75c78e60 photoSize 19 type:s w:i h:i size:i\n21e1ad6 photoCachedSize 19 type:s w:i h:i bytes:b\ne0b0bc2e photoStrippedSize 19 type:s bytes:b\nfa3efb95 photoSizeProgressive 19 type:s w:i h:i sizes:Vi\nd8214d41 photoPathSize 19 type:s bytes:b\n1117dd5f geoPointEmpty 20\nb2a2f663 geoPoint 20 flags:# long:d lat:d access_hash:l accuracy_radius:flags.0?i\n2ea2c0d4 auth.authorization 21 flags:# setup_password_required:flags.1?t otherwise_relogin_days:flags.1?i tmp_sessions:flags.0?i future_auth_token:flags.2?b user:7\n44747e9a auth.authorizationSignUpRequired 21 flags:# terms_of_service:flags.0?57\n99622c0c peerNotifySettings 22 flags:# show_previews:flags.0?B silent:flags.1?B mute_until:flags.2?i ios_sound:flags.3?127 android_sound:flags.4?127 other_sound:flags.5?127 stories_muted:flags.6?B stories_hide_sender:flags.7?B stories_ios_sound:flags.8?127 stories_android_sound:flags.9?127 stories_other_sound:flags.10?127\nacd66c5e peerSettings 23 flags:# report_spam:flags.0?t add_contact:flags.1?t block_contact:flags.2?t share_contact:flags.3?t need_contacts_exception:flags.4?t report_geo:flags.5?t autoarchived:flags.7?t invite_members:flags.8?t request_chat_broadcast:flags.10?t business_bot_paused:flags.11?t business_bot_can_reply:flags.12?t geo_distance:flags.6?i request_chat_title:flags.9?s request_chat_date:flags.9?i business_bot_id:flags.13?l business_bot_manage_url:flags.13?s\na437c3ed wallPaper 24 id:l flags:# creator:flags.0?t default:flags.1?t pattern:flags.3?t dark:flags.4?t access_hash:l slug:s document:36 settings:flags.2?102\ne0804116 wallPaperNoFile 24 id:l flags:# default:flags.1?t dark:flags.4?t settings:flags.2?102\n15ba6c40 messages.dialogs 25 dialogs:V17 messages:V14 chats:V10 users:V7\n71e094f3 messages.dialogsSlice 25 count:i dialogs:V17 messages:V14 chats:V10 users:V7\nf0e3e596 messages.dialogsNotModified 25 count:i\n8c718e87 messages.messages 26 messages:V14 chats:V10 users:V7\n3a54685e messages.messagesSlice 26 flags:# inexact:flags.1?t count:i next_rate:flags.0?i offset_id_offset:flags.2?i messages:V14 chats:V10 users:V7\nc776ba4e messages.channelMessages 26 flags:# inexact:flags.1?t pts:i count:i offset_id_offset:flags.2?i messages:V14 topics:V133 chats:V10 users:V7\n74535f21 messages.messagesNotModified 26 count:i\n1f2b0afd updateNewMessage 27 message:14 pts:i pts_count:i\n4e90bfd6 updateMessageID 27 id:i random_id:l\na20db0e5 updateDeleteMessages 27 messages:Vi pts:i pts_count:i\nc01e857f updateUserTyping 27 user_id:l action:38\n83487af0 updateChatUserTyping 27 chat_id:l from_id:6 action:38\n7761198 updateChatParticipants 27 participants:12\ne5bdf8de updateUserStatus 27 user_id:l status:9\na7848924 updateUserName 27 user_id:l first_name:s last_name:s usernames:V132\n8951abef updateNewAuthorization 27 flags:# unconfirmed:flags.0?t hash:l date:flags.0?i device:flags.0?s location:flags.0?s\n12bcbd9a updateNewEncryptedMessage 27 message:34 qts:i\n1710f156 updateEncryptedChatTyping 27 chat_id:i\nb4a2e88d updateEncryption 27 chat:32 date:i\n38fe25b7 updateEncryptedMessagesRead 27 chat_id:i max_date:i date:i\n3dda5451 updateChatParticipantAdd 27 chat_id:l user_id:l inviter_id:l date:i version:i\ne32f3d77 updateChatParticipantDelete 27 chat_id:l user_id:l version:i\n8e5e9873 updateDcOptions 27 dc_options:V31\nbec268ef updateNotifySettings 27 peer:37 notify_settings:22\nebe46819 updateServiceNotification 27 flags:# popup:flags.0?t invert_media:flags.2?t inbox_date:flags.1?i type:s message:s media:15 entities:V53\nee3b272a updatePrivacy 27 key:39 rules:V40\n5492a13 updateUserPhone 27 user_id:l phone:s\n9c974fdf updateReadHistoryInbox 27 flags:# folder_id:flags.0?i peer:6 max_id:i still_unread_count:i pts:i pts_count:i\n2f2f21bf updateReadHistoryOutbox 27 peer:6 max_id:i pts:i pts_count:i\n7f891213 updateWebPage 27 webpage:43 pts:i pts_count:i\nf8227181 updateReadMessagesContents 27 flags:# messages:Vi pts:i pts_count:i date:flags.0?i\n108d941f updateChannelTooLong 27 flags:# channel_id:l pts:flags.0?i\n635b4c09 updateChannel 27 channel_id:l\n62ba04d9 updateNewChannelMessage 27 message:14 pts:i pts_count:i\n922e6e10 updateReadChannelInbox 27 flags:# folder_id:flags.0?i channel_id:l max_id:i still_unread_count:i pts:i\nc32d5b12 updateDeleteChannelMessages 27 channel_id:l messages:Vi pts:i pts_count:i\nf226ac08 updateChannelMessageViews 27 channel_id:l id:i views:i\nd7ca61a2 updateChatParticipantAdmin 27 chat_id:l user_id:l is_admin:B version:i\n688a30aa updateNewStickerSet 27 stickerset:48\nbb2d201 updateStickerSetsOrder 27 flags:# masks:flags.0?t emojis:flags.1?t order:Vl\n31c24808 updateStickerSets 27 flags:# masks:flags.0?t emojis:flags.1?t\n9375341e updateSavedGifs 27\n496f379c updateBotInlineQuery 27 flags:# query_id:l user_id:l query:s geo:flags.0?20 peer_type:flags.1?119 offset:s\n12f12a07 updateBotInlineSend 27 flags:# user_id:l query:s geo:flags.0?20 id:s msg_id:flags.1?59\n1b3f4df7 updateEditChannelMessage 27 message:14 pts:i pts_count:i\nb9cfc48d updateBotCallbackQuery 27 flags:# query_id:l user_id:l peer:6 msg_id:i chat_instance:l data:flags.0?b game_short_name:flags.1?s\ne40370a3 updateEditMessage 27 message:14 pts:i pts_count:i\n691e9052 updateInlineBotCallbackQuery 27 flags:# query_id:l user_id:l msg_id:59 chat_instance:l data:flags.0?b game_short_name:flags.1?s\nb75f99a9 updateReadChannelOutbox 27 channel_id:l max_id:i\n1b49ec6d updateDraftMessage 27 flags:# peer:6 top_msg_id:flags.0?i draft:60\n571d2742 updateReadFeaturedStickers 27\n9a422c20 updateRecentStickers 27\na229dd06 updateConfig 27\n3354678f updatePtsChanged 27\n2f2ba99f updateChannelWebPage 27 channel_id:l webpage:43 pts:i pts_count:i\n6e6fe51c updateDialogPinned 27 flags:# pinned:flags.0?t folder_id:flags.1?i peer:80\nfa0f3ca2 updatePinnedDialogs 27 flags:# folder_id:flags.1?i order:flags.0?V80\n8317c0c3 updateBotWebhookJSON 27 data:67\n9b9240a6 updateBotWebhookJSONQuery 27 query_id:l data:67 timeout:i\nb5aefd7d updateBotShippingQuery 27 query_id:l user_id:l payload:b shipping_address:71\n8caa9a96 updateBotPrecheckoutQuery 27 flags:# query_id:l user_id:l payload:b info:flags.0?72 shipping_option_id:flags.1?s currency:s total_amount:l\nab0f6b1e updatePhoneCall 27 phone_call:75\n46560264 updateLangPackTooLong 27 lang_code:s\n56022f4d updateLangPack 27 difference:79\ne511996d updateFavedStickers 27\nea29055d updateChannelReadMessagesContents 27 flags:# channel_id:l top_msg_id:flags.0?i messages:Vi\n7084a7be updateContactsReset 27\nb23fc698 updateChannelAvailableMessages 27 channel_id:l available_min_id:i\ne16459c3 updateDialogUnreadMark 27 flags:# unread:flags.0?t peer:80\naca1657b updateMessagePoll 27 flags:# poll_id:l poll:flags.0?97 results:99\n54c01850 updateChatDefaultBannedRights 27 peer:6 default_banned_rights:101 version:i\n19360dc0 updateFolderPeers 27 folder_peers:V104 pts:i pts_count:i\n6a7e7366 updatePeerSettings 27 peer:6 settings:23\nb4afcfb0 updatePeerLocated 27 peers:V105\n39a51dfb updateNewScheduledMessage 27 message:14\nf2a71983 updateDeleteScheduledMessages 27 flags:# peer:6 messages:Vi sent_messages:flags.0?Vi\n8216fba3 updateTheme 27 theme:107\n871fb939 updateGeoLiveViewed 27 peer:6 msg_id:i\n564fe691 updateLoginToken 27\n24f40e77 updateMessagePollVote 27 poll_id:l peer:6 options:Vb qts:i\n26ffde7d updateDialogFilter 27 flags:# id:i filter:flags.0?112\na5d72105 updateDialogFilterOrder 27 order:Vi\n3504914f updateDialogFilters 27\n2661bf09 updatePhoneCallSignalingData 27 phone_call_id:l data:b\nd29a27f4 updateChannelMessageForwards 27 channel_id:l id:i forwards:i\nd6b19546 updateReadChannelDiscussionInbox 27 flags:# channel_id:l top_msg_id:i read_max_id:i broadcast_id:flags.0?l broadcast_post:flags.0?i\n695c9e7c updateReadChannelDiscussionOutbox 27 channel_id:l top_msg_id:i read_max_id:i\nebe07752 updatePeerBlocked 27 flags:# blocked:flags.0?t blocked_my_stories_from:flags.1?t peer_id:6\n8c88c923 updateChannelUserTyping 27 flags:# channel_id:l top_msg_id:flags.0?i from_id:6 action:38\ned85eab5 updatePinnedMessages 27 flags:# pinned:flags.0?t peer:6 messages:Vi pts:i pts_count:i\n5bb98608 updatePinnedChannelMessages 27 flags:# pinned:flags.0?t channel_id:l messages:Vi pts:i pts_count:i\nf89a6a4e updateChat 27 chat_id:l\nf2ebdb4e updateGroupCallParticipants 27 call:117 participants:V118 version:i\n97d64341 updateGroupCall 27 flags:# chat_id:flags.0?l call:116\nbb9bb9a5 updatePeerHistoryTTL 27 flags:# peer:6 ttl_period:flags.0?i\nd087663a updateChatParticipant 27 flags:# chat_id:l date:i actor_id:l user_id:l prev_participant:flags.0?11 new_participant:flags.1?11 invite:flags.2?45 qts:i\n985d3abb updateChannelParticipant 27 flags:# via_chatlist:flags.3?t channel_id:l date:i actor_id:l user_id:l prev_participant:flags.0?56 new_participant:flags.1?56 invite:flags.2?45 qts:i\nc4870a49 updateBotStopped 27 user_id:l date:i stopped:B qts:i\nb783982 updateGroupCallConnection 27 flags:# presentation:flags.0?t params:67\n4d712f2e updateBotCommands 27 peer:6 bot_id:l commands:V49\n7063c3db updatePendingJoinRequests 27 peer:6 requests_pending:i recent_requesters:Vl\n11dfa986 updateBotChatInviteRequester 27 peer:6 date:i user_id:l about:s invite:45 qts:i\n5e1b3cb8 updateMessageReactions 27 flags:# peer:6 msg_id:i top_msg_id:flags.0?i reactions:124\n17b7a20b updateAttachMenuBots 27\n1592b79d updateWebViewResultSent 27 query_id:l\n14b85813 updateBotMenuButton 27 bot_id:l button:126\n74d8be99 updateSavedRingtones 27\n84cd5a updateTranscribedAudio 27 flags:# pending:flags.0?t peer:6 msg_id:i transcription_id:l text:s\nfb4c496c updateReadFeaturedEmojiStickers 27\n28373599 updateUserEmojiStatus 27 user_id:l emoji_status:128\n30f443db updateRecentEmojiStatuses 27\n6f7863f4 updateRecentReactions 27\n86fccf85 updateMoveStickerSetToTop 27 flags:# masks:flags.0?t emojis:flags.1?t stickerset:l\nd5a41724 updateMessageExtendedMedia 27 peer:6 msg_id:i extended_media:V130\n192efbe3 updateChannelPinnedTopic 27 flags:# pinned:flags.0?t channel_id:l topic_id:i\nfe198602 updateChannelPinnedTopics 27 flags:# channel_id:l order:flags.0?Vi\n20529438 updateUser 27 user_id:l\nec05b097 updateAutoSaveSettings 27\n75b3b798 updateStory 27 peer:6 story:138\nf74e932b updateReadStories 27 peer:6 max_id:i\n1bf335b9 updateStoryID 27 id:i random_id:l\n2c084dc1 updateStoriesStealthMode 27 stealth_mode:140\n7d627683 updateSentStoryReaction 27 peer:6 story_id:i reaction:129\n904dd49c updateBotChatBoost 27 peer:6 boost:143 qts:i\n7b68920 updateChannelViewForumAsMessages 27 channel_id:l enabled:B\nae3f101d updatePeerWallpaper 27 flags:# wallpaper_overridden:flags.1?t peer:6 wallpaper:flags.0?24\nac21d3ce updateBotMessageReaction 27 peer:6 msg_id:i date:i actor:6 old_reactions:V129 new_reactions:V129 qts:i\n9cb7759 updateBotMessageReactions 27 peer:6 msg_id:i date:i reactions:V123 qts:i\naeaf9e74 updateSavedDialogPinned 27 flags:# pinned:flags.0?t peer:80\n686c85a6 updatePinnedSavedDialogs 27 flags:# order:flags.0?V80\n39c67432 updateSavedReactionTags 27\nf16269d4 updateSmsJob 27 job_id:s\nf9470ab2 updateQuickReplies 27 quick_replies:V146\nf53da717 updateNewQuickReply 27 quick_reply:146\n53e6f1ec updateDeleteQuickReply 27 shortcut_id:i\n3e050d0f updateQuickReplyMessage 27 message:14\n566fe7cd updateDeleteQuickReplyMessages 27 shortcut_id:i messages:Vi\n8ae5c97a updateBotBusinessConnect 27 connection:147 qts:i\n9ddb347c updateBotNewBusinessMessage 27 flags:# connection_id:s message:14 reply_to_message:flags.0?14 qts:i\n7df587c updateBotEditBusinessMessage 27 flags:# connection_id:s message:14 reply_to_message:flags.0?14 qts:i\na02a982e updateBotDeleteBusinessMessage 27 connection_id:s peer:6 messages:Vi qts:i\n1824e40b updateNewStoryReaction 27 story_id:i peer:6 reaction:129\ndfd961f5 updateBroadcastRevenueTransactions 27 peer:6 balances:149\n4e80a379 updateStarsBalance 27 balance:156\n1ea2fda7 updateBusinessBotCallbackQuery 27 flags:# query_id:l user_id:l connection_id:s message:14 reply_to_message:flags.2?14 chat_instance:l data:flags.0?b\na584b019 updateStarsRevenueStatus 27 peer:6 status:152\n283bd312 updateBotPurchasedPaidMedia 27 user_id:l payload:s qts:i\n51ca7aec updatePaidReactionPrivacy 27 private:B\na56c2a3e updates.state 28 pts:i qts:i date:i seq:i unread_count:i\n5d75a138 updates.differenceEmpty 29 date:i seq:i\nf49ca0 updates.difference 29 new_messages:V14 new_encrypted_messages:V34 other_updates:V27 chats:V10 users:V7 state:28\na8fb1981 updates.differenceSlice 29 new_messages:V14 new_encrypted_messages:V34 other_updates:V27 chats:V10 users:V7 intermediate_state:28\n4afe8f6d updates.differenceTooLong 29 pts:i\ne317af7e updatesTooLong 30\n313bc7f8 updateShortMessage 30 flags:# out:flags.1?t mentioned:flags.4?t media_unread:flags.5?t silent:flags.13?t id:i user_id:l message:s pts:i pts_count:i date:i fwd_from:flags.2?58 via_bot_id:flags.11?l reply_to:flags.3?114 entities:flags.7?V53 ttl_period:flags.25?i\n4d6deea5 updateShortChatMessage 30 flags:# out:flags.1?t mentioned:flags.4?t media_unread:flags.5?t silent:flags.13?t id:i from_id:l chat_id:l message:s pts:i pts_count:i date:i fwd_from:flags.2?58 via_bot_id:flags.11?l reply_to:flags.3?114 entities:flags.7?V53 ttl_period:flags.25?i\n78d4dec1 updateShort 30 update:27 date:i\n725b04c3 updatesCombined 30 updates:V27 users:V7 chats:V10 date:i seq_start:i seq:i\n74ae4240 updates 30 updates:V27 users:V7 chats:V10 date:i seq:i\n9015e101 updateShortSentMessage 30 flags:# out:flags.1?t id:i pts:i pts_count:i date:i media:flags.9?15 entities:flags.7?V53 ttl_period:flags.25?i\n18b7a10d dcOption 31 flags:# ipv6:flags.0?t media_only:flags.1?t tcpo_only:flags.2?t cdn:flags.3?t static:flags.4?t this_port_only:flags.5?t id:i ip_address:s port:i secret:flags.10?b\nab7ec0a0 encryptedChatEmpty 32 id:i\n66b25953 encryptedChatWaiting 32 id:i access_hash:l date:i admin_id:l participant_id:l\n48f1d94c encryptedChatRequested 32 flags:# folder_id:flags.0?i id:i access_hash:l date:i admin_id:l participant_id:l g_a:b\n61f0d4c7 encryptedChat 32 id:i access_hash:l date:i admin_id:l participant_id:l g_a_or_b:b key_fingerprint:l\n1e1c7c45 encryptedChatDiscarded 32 flags:# history_deleted:flags.0?t id:i\nc21f497e encryptedFileEmpty 33\na8008cd8 encryptedFile 33 id:l access_hash:l size:l dc_id:i key_fingerprint:i\ned18c118 encryptedMessage 34 random_id:l chat_id:i date:i bytes:b file:33\n23734b06 encryptedMessageService 34 random_id:l chat_id:i date:i bytes:b\n72f0eaae inputDocumentEmpty 35\n1abfb575 inputDocument 35 id:l access_hash:l file_reference:b\n36f8c871 documentEmpty 36 id:l\n8fd4c4d8 document 36 flags:# id:l access_hash:l file_reference:b date:i mime_type:s size:l thumbs:flags.0?V19 video_thumbs:flags.1?V113 dc_id:i attributes:V41\n9fd40bd8 notifyPeer 37 peer:6\nb4c83b4c notifyUsers 37\nc007cec3 notifyChats 37\nd612e8ef notifyBroadcasts 37\n226e6308 notifyForumTopic 37 peer:6 top_msg_id:i\n16bf744e sendMessageTypingAction 38\nfd5ec8f5 sendMessageCancelAction 38\na187d66f sendMessageRecordVideoAction 38\ne9763aec sendMessageUploadVideoAction 38 progress:i\nd52f73f7 sendMessageRecordAudioAction 38\nf351d7ab sendMessageUploadAudioAction 38 progress:i\nd1d34a26 sendMessageUploadPhotoAction 38 progress:i\naa0cd9e4 sendMessageUploadDocumentAction 38 progress:i\n176f8ba1 sendMessageGeoLocationAction 38\n628cbc6f sendMessageChooseContactAction 38\ndd6a8f48 sendMessageGamePlayAction 38\n88f27fbc sendMessageRecordRoundAction 38\n243e1c66 sendMessageUploadRoundAction 38 progress:i\nd92c2285 speakingInGroupCallAction 38\ndbda9246 sendMessageHistoryImportAction 38 progress:i\nb05ac6b1 sendMessageChooseStickerAction 38\n25972bcb sendMessageEmojiInteraction 38 emoticon:s msg_id:i interaction:67\nb665902e sendMessageEmojiInteractionSeen 38 emoticon:s\nbc2eab30 privacyKeyStatusTimestamp 39\n500e6dfa privacyKeyChatInvite 39\n3d662b7b privacyKeyPhoneCall 39\n39491cc8 privacyKeyPhoneP2P 39\n69ec56a3 privacyKeyForwards 39\n96151fed privacyKeyProfilePhoto 39\nd19ae46d privacyKeyPhoneNumber 39\n42ffd42b privacyKeyAddedByPhone 39\n697f414 privacyKeyVoiceMessages 39\na486b761 privacyKeyAbout 39\n2000a518 privacyKeyBirthday 39\n2ca4fdf8 privacyKeyStarGiftsAutoSave 39\nfffe1bac privacyValueAllowContacts 40\n65427b82 privacyValueAllowAll 40\nb8905fb2 privacyValueAllowUsers 40 users:Vl\nf888fa1a privacyValueDisallowContacts 40\n8b73e763 privacyValueDisallowAll 40\ne4621141 privacyValueDisallowUsers 40 users:Vl\n6b134e8e privacyValueAllowChatParticipants 40 chats:Vl\n41c87565 privacyValueDisallowChatParticipants 40 chats:Vl\nf7e8d89b privacyValueAllowCloseFriends 40\nece9814b privacyValueAllowPremium 40\n21461b5d privacyValueAllowBots 40\nf6a5f82f privacyValueDisallowBots 40\n6c37c15c documentAttributeImageSize 41 w:i h:i\n11b58939 documentAttributeAnimated 41\n6319d612 documentAttributeSticker 41 flags:# mask:flags.1?t alt:s stickerset:46 mask_coords:flags.0?61\n43c57c48 documentAttributeVideo 41 flags:# round_message:flags.0?t supports_streaming:flags.1?t nosound:flags.3?t duration:d w:i h:i preload_prefix_size:flags.2?i video_start_ts:flags.4?d video_codec:flags.5?s\n9852f9c6 documentAttributeAudio 41 flags:# voice:flags.10?t duration:i title:flags.0?s performer:flags.1?s waveform:flags.2?b\n15590068 documentAttributeFilename 41 file_name:s\n9801d2f7 documentAttributeHasStickers 41\nfd149899 documentAttributeCustomEmoji 41 flags:# free:flags.0?t text_color:flags.1?t alt:s stickerset:46\n12b299d4 stickerPack 42 emoticon:s documents:Vl\n211a1788 webPageEmpty 43 flags:# id:l url:flags.0?s\nb0d13e47 webPagePending 43 flags:# id:l url:flags.0?s date:i\ne89c45b2 webPage 43 flags:# has_large_media:flags.13?t id:l url:s display_url:s hash:i type:flags.0?s site_name:flags.1?s title:flags.2?s description:flags.3?s photo:flags.4?18 embed_url:flags.5?s embed_type:flags.5?s embed_width:flags.6?i embed_height:flags.6?i duration:flags.7?i author:flags.8?s document:flags.9?36 cached_page:flags.10?95 attributes:flags.12?V111\n7311ca11 webPageNotModified 43 flags:# cached_page_views:flags.0?i\n957b50fb account.password 44 flags:# has_recovery:flags.0?t has_secure_values:flags.1?t has_password:flags.2?t current_algo:flags.2?87 srp_B:flags.2?b srp_id:flags.2?l hint:flags.3?s email_unconfirmed_pattern:flags.4?s new_algo:87 new_secure_algo:88 secure_random:b pending_reset_date:flags.5?i login_email_pattern:flags.6?s\na22cbd96 chatInviteExported 45 flags:# revoked:flags.0?t permanent:flags.5?t request_needed:flags.6?t link:s admin_id:l date:i start_date:flags.4?i expire_date:flags.1?i usage_limit:flags.2?i usage:flags.3?i requested:flags.7?i subscription_expired:flags.10?i title:flags.8?s subscription_pricing:flags.9?153\ned107ab7 chatInvitePublicJoinRequests 45\nffb62b95 inputStickerSetEmpty 46\n9de7a269 inputStickerSetID 46 id:l access_hash:l\n861cc8a0 inputStickerSetShortName 46 short_name:s\n28703c8 inputStickerSetAnimatedEmoji 46\ne67f520e inputStickerSetDice 46 emoticon:s\ncde3739 inputStickerSetAnimatedEmojiAnimations 46\nc88b3b02 inputStickerSetPremiumGifts 46\n4c4d4ce inputStickerSetEmojiGenericAnimations 46\n29d0f5ee inputStickerSetEmojiDefaultStatuses 46\n44c1f8e9 inputStickerSetEmojiDefaultTopicIcons 46\n49748553 inputStickerSetEmojiChannelDefaultStatuses 46\n2dd14edc stickerSet 47 flags:# archived:flags.1?t official:flags.2?t masks:flags.3?t emojis:flags.7?t text_color:flags.9?t channel_emoji_status:flags.10?t creator:flags.11?t installed_date:flags.0?i id:l access_hash:l title:s short_name:s thumbs:flags.4?V19 thumb_dc_id:flags.4?i thumb_version:flags.4?i thumb_document_id:flags.8?l count:i hash:i\n6e153f16 messages.stickerSet 48 set:47 packs:V42 keywords:V131 documents:V36\nd3f924eb messages.stickerSetNotModified 48\nc27ac8c7 botCommand 49 command:s description:s\na2fa4880 keyboardButton 50 text:s\n258aff05 keyboardButtonUrl 50 text:s url:s\n35bbdb6b keyboardButtonCallback 50 flags:# requires_password:flags.0?t text:s data:b\nb16a6c29 keyboardButtonRequestPhone 50 text:s\nfc796b3f keyboardButtonRequestGeoLocation 50 text:s\n93b9fbb5 keyboardButtonSwitchInline 50 flags:# same_peer:flags.0?t text:s query:s peer_types:flags.1?V119\n50f41ccf keyboardButtonGame 50 text:s\nafd93fbb keyboardButtonBuy 50 text:s\n10b78d29 keyboardButtonUrlAuth 50 flags:# text:s fwd_text:flags.0?s url:s button_id:i\nd02e7fd4 inputKeyboardButtonUrlAuth 50 flags:# request_write_access:flags.0?t text:s fwd_text:flags.1?s url:s bot:1\nbbc7515d keyboardButtonRequestPoll 50 flags:# quiz:flags.0?B text:s\ne988037b inputKeyboardButtonUserProfile 50 text:s user_id:1\n308660c1 keyboardButtonUserProfile 50 text:s user_id:l\n13767230 keyboardButtonWebView 50 text:s url:s\na0c0505c keyboardButtonSimpleWebView 50 text:s url:s\n53d7bfd8 keyboardButtonRequestPeer 50 text:s button_id:i peer_type:134 max_quantity:i\nc9662d05 inputKeyboardButtonRequestPeer 50 flags:# name_requested:flags.0?t username_requested:flags.1?t photo_requested:flags.2?t text:s button_id:i peer_type:134 max_quantity:i\n75d2698e keyboardButtonCopy 50 text:s copy_text:s\n77608b83 keyboardButtonRow 51 buttons:V50\na03e5b85 replyKeyboardHide 52 flags:# selective:flags.2?t\n86b40b08 replyKeyboardForceReply 52 flags:# single_use:flags.1?t selective:flags.2?t placeholder:flags.3?s\n85dd99d1 replyKeyboardMarkup 52 flags:# resize:flags.0?t single_use:flags.1?t selective:flags.2?t persistent:flags.4?t rows:V51 placeholder:flags.3?s\n48a30254 replyInlineMarkup 52 rows:V51\nbb92ba95 messageEntityUnknown 53 offset:i length:i\nfa04579d messageEntityMention 53 offset:i length:i\n6f635b0d messageEntityHashtag 53 offset:i length:i\n6cef8ac7 messageEntityBotCommand 53 offset:i length:i\n6ed02538 messageEntityUrl 53 offset:i length:i\n64e475c2 messageEntityEmail 53 offset:i length:i\nbd610bc9 messageEntityBold 53 offset:i length:i\n826f8b60 messageEntityItalic 53 offset:i length:i\n28a20571 messageEntityCode 53 offset:i length:i\n73924be0 messageEntityPre 53 offset:i length:i language:s\n76a6d327 messageEntityTextUrl 53 offset:i length:i url:s\ndc7b1140 messageEntityMentionName 53 offset:i length:i user_id:l\n208e68c9 inputMessageEntityMentionName 53 offset:i length:i user_id:1\n9b69e34b messageEntityPhone 53 offset:i length:i\n4c4e743f messageEntityCashtag 53 offset:i length:i\n9c4e7e8b messageEntityUnderline 53 offset:i length:i\nbf0693d4 messageEntityStrike 53 offset:i length:i\n761e6af4 messageEntityBankCard 53 offset:i length:i\n32ca960f messageEntitySpoiler 53 offset:i length:i\nc8cf05f8 messageEntityCustomEmoji 53 offset:i length:i document_id:l\nf1ccaaac messageEntityBlockquote 53 flags:# collapsed:flags.0?t offset:i length:i\nee8c1e86 inputChannelEmpty 54\nf35aec28 inputChannel 54 channel_id:l access_hash:l\n5b934f9d inputChannelFromMessage 54 peer:0 msg_id:i channel_id:l\n3e11affb updates.channelDifferenceEmpty 55 flags:# final:flags.0?t pts:i timeout:flags.1?i\na4bcc6fe updates.channelDifferenceTooLong 55 flags:# final:flags.0?t timeout:flags.1?i dialog:17 messages:V14 chats:V10 users:V7\n2064674e updates.channelDifference 55 flags:# final:flags.0?t pts:i timeout:flags.1?i new_messages:V14 other_updates:V27 chats:V10 users:V7\ncb397619 channelParticipant 56 flags:# user_id:l date:i subscription_until_date:flags.0?i\n4f607bef channelParticipantSelf 56 flags:# via_request:flags.0?t user_id:l inviter_id:l date:i subscription_until_date:flags.1?i\n2fe601d3 channelParticipantCreator 56 flags:# user_id:l admin_rights:100 rank:flags.0?s\n34c3bb53 channelParticipantAdmin 56 flags:# can_edit:flags.0?t self:flags.1?t user_id:l inviter_id:flags.1?l promoted_by:l date:i admin_rights:100 rank:flags.2?s\n6df8014e channelParticipantBanned 56 flags:# left:flags.0?t peer:6 kicked_by:l date:i banned_rights:101\n1b03f006 channelParticipantLeft 56 peer:6\n780a0310 help.termsOfService 57 flags:# popup:flags.0?t id:67 text:s entities:V53 min_age_confirm:flags.1?i\n4e4df4bb messageFwdHeader 58 flags:# imported:flags.7?t saved_out:flags.11?t from_id:flags.0?6 from_name:flags.5?s date:i channel_post:flags.2?i post_author:flags.3?s saved_from_peer:flags.4?6 saved_from_msg_id:flags.4?i saved_from_id:flags.8?6 saved_from_name:flags.9?s saved_date:flags.10?i psa_type:flags.6?s\n890c3d89 inputBotInlineMessageID 59 dc_id:i id:l access_hash:l\nb6d915d7 inputBotInlineMessageID64 59 dc_id:i owner_id:l id:i access_hash:l\n1b0c841a draftMessageEmpty 60 flags:# date:flags.0?i\n2d65321f draftMessage 60 flags:# no_webpage:flags.1?t invert_media:flags.6?t reply_to:flags.4?139 message:s entities:flags.3?V53 media:flags.5?3 date:i effect:flags.7?l\naed6dbb2 maskCoords 61 n:i x:d y:d zoom:d\nbdf9653b game 62 flags:# id:l access_hash:l short_name:s title:s description:s photo:18 document:flags.0?36\n32c3e77 inputGameID 63 id:l access_hash:l\nc331e80a inputGameShortName 63 bot_id:1 short_name:s\ndc3d824f textEmpty 64\n744694e0 textPlain 64 text:s\n6724abc4 textBold 64 text:64\nd912a59c textItalic 64 text:64\nc12622c4 textUnderline 64 text:64\n9bf8bb95 textStrike 64 text:64\n6c3f19b9 textFixed 64 text:64\n3c2884c1 textUrl 64 text:64 url:s webpage_id:l\nde5a0dd6 textEmail 64 text:64 email:s\n7e6260d7 textConcat 64 texts:V64\ned6a8504 textSubscript 64 text:64\nc7fb5e01 textSuperscript 64 text:64\n34b8621 textMarked 64 text:64\n1ccb966a textPhone 64 text:64 phone:s\n81ccf4f textImage 64 document_id:l w:i h:i\n35553762 textAnchor 64 text:64 name:s\n13567e8a pageBlockUnsupported 65\n70abc3fd pageBlockTitle 65 text:64\n8ffa9a1f pageBlockSubtitle 65 text:64\nbaafe5e0 pageBlockAuthorDate 65 author:64 published_date:i\nbfd064ec pageBlockHeader 65 text:64\nf12bb6e1 pageBlockSubheader 65 text:64\n467a0766 pageBlockParagraph 65 text:64\nc070d93e pageBlockPreformatted 65 text:64 language:s\n48870999 pageBlockFooter 65 text:64\ndb20b188 pageBlockDivider 65\nce0d37b0 pageBlockAnchor 65 name:s\ne4e88011 pageBlockList 65 items:V92\n263d7c26 pageBlockBlockquote 65 text:64 caption:64\n4f4456d3 pageBlockPullquote 65 text:64 caption:64\n1759c560 pageBlockPhoto 65 flags:# photo_id:l caption:91 url:flags.0?s webpage_id:flags.0?l\n7c8fe7b6 pageBlockVideo 65 flags:# autoplay:flags.0?t loop:flags.1?t video_id:l caption:91\n39f23300 pageBlockCover 65 cover:65\na8718dc5 pageBlockEmbed 65 flags:# full_width:flags.0?t allow_scrolling:flags.3?t url:flags.1?s html:flags.2?s poster_photo_id:flags.4?l w:flags.5?i h:flags.5?i caption:91\nf259a80b pageBlockEmbedPost 65 url:s webpage_id:l author_photo_id:l author:s date:i blocks:V65 caption:91\n65a0fa4d pageBlockCollage 65 items:V65 caption:91\n31f9590 pageBlockSlideshow 65 items:V65 caption:91\nef1751b5 pageBlockChannel 65 channel:10\n804361ea pageBlockAudio 65 audio_id:l caption:91\n1e148390 pageBlockKicker 65 text:64\nbf4dea82 pageBlockTable 65 flags:# bordered:flags.0?t striped:flags.1?t title:64 rows:V90\n9a8ae1e1 pageBlockOrderedList 65 items:V93\n76768bed pageBlockDetails 65 flags:# open:flags.0?t blocks:V65 title:64\n16115a96 pageBlockRelatedArticles 65 title:64 articles:V94\na44f3ef6 pageBlockMap 65 geo:20 zoom:i w:i h:i caption:91\n85e42301 phoneCallDiscardReasonMissed 66\ne095c1a0 phoneCallDiscardReasonDisconnect 66\n57adc690 phoneCallDiscardReasonHangup 66\nfaf7e8c9 phoneCallDiscardReasonBusy 66\nafe2b839 phoneCallDiscardReasonAllowGroupCall 66 encrypted_key:b\n7d748d04 dataJSON 67 data:s\ncb296bf8 labeledPrice 68 label:s amount:l\n49ee584 invoice 69 flags:# test:flags.0?t name_requested:flags.1?t phone_requested:flags.2?t email_requested:flags.3?t shipping_address_requested:flags.4?t flexible:flags.5?t phone_to_provider:flags.6?t email_to_provider:flags.7?t recurring:flags.9?t currency:s prices:V68 max_tip_amount:flags.8?l suggested_tip_amounts:flags.8?Vl terms_url:flags.10?s subscription_period:flags.11?i\nea02c27e paymentCharge 70 id:s provider_charge_id:s\n1e8caaeb postAddress 71 street_line1:s street_line2:s city:s state:s country_iso2:s post_code:s\n909c3f94 paymentRequestedInfo 72 flags:# name:flags.0?s phone:flags.1?s email:flags.2?s shipping_address:flags.3?71\n1c570ed1 webDocument 73 url:s access_hash:l size:i mime_type:s attributes:V41\nf9c8bcc6 webDocumentNoProxy 73 url:s size:i mime_type:s attributes:V41\n9bed434d inputWebDocument 74 url:s size:i mime_type:s attributes:V41\n5366c915 phoneCallEmpty 75 id:l\need42858 phoneCallWaiting 75 flags:# video:flags.6?t id:l access_hash:l date:i admin_id:l participant_id:l protocol:77 receive_date:flags.0?i conference_call:flags.8?117\n45361c63 phoneCallRequested 75 flags:# video:flags.6?t id:l access_hash:l date:i admin_id:l participant_id:l g_a_hash:b protocol:77 conference_call:flags.8?117\n22fd7181 phoneCallAccepted 75 flags:# video:flags.6?t id:l access_hash:l date:i admin_id:l participant_id:l g_b:b protocol:77 conference_call:flags.8?117\n3ba5940c phoneCall 75 flags:# p2p_allowed:flags.5?t video:flags.6?t id:l access_hash:l date:i admin_id:l participant_id:l g_a_or_b:b key_fingerprint:l protocol:77 connections:V76 start_date:i custom_parameters:flags.7?67 conference_call:flags.8?117\nf9d25503 phoneCallDiscarded 75 flags:# need_rating:flags.2?t need_debug:flags.3?t video:flags.6?t id:l reason:flags.0?66 duration:flags.1?i conference_call:flags.8?117\n9cc123c7 phoneConnection 76 flags:# tcp:flags.0?t id:l ip:s ipv6:s port:i peer_tag:b\n635fe375 phoneConnectionWebrtc 76 flags:# turn:flags.0?t stun:flags.1?t id:l ip:s ipv6:s port:i username:s password:s\nfc878fc8 phoneCallProtocol 77 flags:# udp_p2p:flags.0?t udp_reflector:flags.1?t min_layer:i max_layer:i library_versions:Vs\ncad181f6 langPackString 78 key:s value:s\n6c47ac9f langPackStringPluralized 78 flags:# key:s zero_value:flags.0?s one_value:flags.1?s two_value:flags.2?s few_value:flags.3?s many_value:flags.4?s other_value:s\n2979eeb2 langPackStringDeleted 78 key:s\nf385c1f6 langPackDifference 79 lang_code:s from_version:i version:i strings:V78\ne56dbf05 dialogPeer 80 peer:6\n514519e2 dialogPeerFolder 80 folder_id:i\n64199744 secureFileEmpty 81\n7d09c27e secureFile 81 id:l access_hash:l size:l dc_id:i date:i file_hash:b secret:b\n8aeabec3 secureData 82 data:b data_hash:b secret:b\n7d6099dd securePlainPhone 83 phone:s\n21ec5a5f securePlainEmail 83 email:s\n9d2a81e3 secureValueTypePersonalDetails 84\n3dac6a00 secureValueTypePassport 84\n6e425c4 secureValueTypeDriverLicense 84\na0d0744b secureValueTypeIdentityCard 84\n99a48f23 secureValueTypeInternalPassport 84\ncbe31e26 secureValueTypeAddress 84\nfc36954e secureValueTypeUtilityBill 84\n89137c0d secureValueTypeBankStatement 84\n8b883488 secureValueTypeRentalAgreement 84\n99e3806a secureValueTypePassportRegistration 84\nea02ec33 secureValueTypeTemporaryRegistration 84\nb320aadb secureValueTypePhone 84\n8e3ca7ee secureValueTypeEmail 84\n187fa0ca secureValue 85 flags:# type:84 data:flags.0?82 front_side:flags.1?81 reverse_side:flags.2?81 selfie:flags.3?81 translation:flags.6?V81 files:flags.4?V81 plain_data:flags.5?83 hash:b\n33f0ea47 secureCredentialsEncrypted 86 data:b hash:b secret:b\nd45ab096 passwordKdfAlgoUnknown 87\n3a912d4a passwordKdfAlgoSHA256SHA256PBKDF2HMACSHA512iter100000SHA256ModPow 87 salt1:b salt2:b g:i p:b\n4a8537 securePasswordKdfAlgoUnknown 88\nbbf2dda0 securePasswordKdfAlgoPBKDF2HMACSHA512iter100000 88 salt:b\n86471d92 securePasswordKdfAlgoSHA512 88 salt:b\n34566b6a pageTableCell 89 flags:# header:flags.0?t align_center:flags.3?t align_right:flags.4?t valign_middle:flags.5?t valign_bottom:flags.6?t text:flags.7?64 colspan:flags.1?i rowspan:flags.2?i\ne0c0c5e5 pageTableRow 90 cells:V89\n6f747657 pageCaption 91 text:64 credit:64\nb92fb6cd pageListItemText 92 text:64\n25e073fc pageListItemBlocks 92 blocks:V65\n5e068047 pageListOrderedItemText 93 num:s text:64\n98dd8936 pageListOrderedItemBlocks 93 num:s blocks:V65\nb390dc08 pageRelatedArticle 94 flags:# url:s webpage_id:l title:flags.0?s description:flags.1?s photo_id:flags.2?l author:flags.3?s published_date:flags.4?i\n98657f0d page 95 flags:# part:flags.0?t rtl:flags.1?t v2:flags.2?t url:s blocks:V65 photos:V18 documents:V36 views:flags.3?i\nff16e2ca pollAnswer 96 text:135 option:b\n58747131 poll 97 id:l flags:# closed:flags.0?t public_voters:flags.1?t multiple_choice:flags.2?t quiz:flags.3?t question:135 answers:V96 close_period:flags.4?i close_date:flags.5?i\n3b6ddad2 pollAnswerVoters 98 flags:# chosen:flags.0?t correct:flags.1?t option:b voters:i\n7adf2420 pollResults 99 flags:# min:flags.0?t results:flags.1?V98 total_voters:flags.2?i recent_voters:flags.3?V6 solution:flags.4?s solution_entities:flags.4?V53\n5fb224d5 chatAdminRights 100 flags:# change_info:flags.0?t post_messages:flags.1?t edit_messages:flags.2?t delete_messages:flags.3?t ban_users:flags.4?t invite_users:flags.5?t pin_messages:flags.7?t add_admins:flags.9?t anonymous:flags.10?t manage_call:flags.11?t other:flags.12?t manage_topics:flags.13?t post_stories:flags.14?t edit_stories:flags.15?t delete_stories:flags.16?t\n9f120418 chatBannedRights 101 flags:# view_messages:flags.0?t send_messages:flags.1?t send_media:flags.2?t send_stickers:flags.3?t send_gifs:flags.4?t send_games:flags.5?t send_inline:flags.6?t embed_links:flags.7?t send_polls:flags.8?t change_info:flags.10?t invite_users:flags.15?t pin_messages:flags.17?t manage_topics:flags.18?t send_photos:flags.19?t send_videos:flags.20?t send_roundvideos:flags.21?t send_audios:flags.22?t send_voices:flags.23?t send_docs:flags.24?t send_plain:flags.25?t until_date:i\n372efcd0 wallPaperSettings 102 flags:# blur:flags.1?t motion:flags.2?t background_color:flags.0?i second_background_color:flags.4?i third_background_color:flags.5?i fourth_background_color:flags.6?i intensity:flags.3?i rotation:flags.4?i emoticon:flags.7?s\nff544e65 folder 103 flags:# autofill_new_broadcasts:flags.0?t autofill_public_groups:flags.1?t autofill_new_correspondents:flags.2?t id:i title:s photo:flags.3?13\ne9baa668 folderPeer 104 peer:6 folder_id:i\nca461b5d peerLocated 105 peer:6 expires:i distance:i\nf8ec284b peerSelfLocated 105 expires:i\nd072acb4 restrictionReason 106 platform:s reason:s text:s\na00e67d6 theme 107 flags:# creator:flags.0?t default:flags.1?t for_chat:flags.5?t id:l access_hash:l slug:s title:s document:flags.2?36 settings:flags.3?V110 emoticon:flags.6?s installs_count:flags.4?i\n629f1980 auth.loginToken 108 expires:i token:b\n68e9916 auth.loginTokenMigrateTo 108 dc_id:i token:b\n390d5c5e auth.loginTokenSuccess 108 authorization:21\nc3a12462 baseThemeClassic 109\nfbd81688 baseThemeDay 109\nb7b31ea8 baseThemeNight 109\n6d5f77ee baseThemeTinted 109\n5b11125a baseThemeArctic 109\nfa58b6d4 themeSettings 110 flags:# message_colors_animated:flags.2?t base_theme:109 accent_color:i outbox_accent_color:flags.3?i message_colors:flags.0?Vi wallpaper:flags.1?24\n54b56617 webPageAttributeTheme 111 flags:# documents:flags.0?V36 settings:flags.1?110\n2e94c3e7 webPageAttributeStory 111 flags:# peer:6 id:i story:flags.0?138\n50cc03d3 webPageAttributeStickerSet 111 flags:# emojis:flags.0?t text_color:flags.1?t stickers:V36\ncf6f6db8 webPageAttributeUniqueStarGift 111 gift:155\naa472651 dialogFilter 112 flags:# contacts:flags.0?t non_contacts:flags.1?t groups:flags.2?t broadcasts:flags.3?t bots:flags.4?t exclude_muted:flags.11?t exclude_read:flags.12?t exclude_archived:flags.13?t title_noanimate:flags.28?t id:i title:135 emoticon:flags.25?s color:flags.27?i pinned_peers:V0 include_peers:V0 exclude_peers:V0\n363293ae dialogFilterDefault 112\n96537bd7 dialogFilterChatlist 112 flags:# has_my_invites:flags.26?t title_noanimate:flags.28?t id:i title:135 emoticon:flags.25?s color:flags.27?i pinned_peers:V0 include_peers:V0\nde33b094 videoSize 113 flags:# type:s w:i h:i size:i video_start_ts:flags.0?d\nf85c413c videoSizeEmojiMarkup 113 emoji_id:l background_colors:Vi\nda082fe videoSizeStickerMarkup 113 stickerset:46 sticker_id:l background_colors:Vi\nafbc09db messageReplyHeader 114 flags:# reply_to_scheduled:flags.2?t forum_topic:flags.3?t quote:flags.9?t reply_to_msg_id:flags.4?i reply_to_peer_id:flags.0?6 reply_from:flags.5?58 reply_media:flags.8?15 reply_to_top_id:flags.1?i quote_text:flags.6?s quote_entities:flags.7?V53 quote_offset:flags.10?i\ne5af939 messageReplyStoryHeader 114 peer:6 story_id:i\n83d60fc2 messageReplies 115 flags:# comments:flags.0?t replies:i replies_pts:i recent_repliers:flags.1?V6 channel_id:flags.0?l max_id:flags.2?i read_max_id:flags.3?i\n7780bcb4 groupCallDiscarded 116 id:l access_hash:l duration:i\ncdf8d3e3 groupCall 116 flags:# join_muted:flags.1?t can_change_join_muted:flags.2?t join_date_asc:flags.6?t schedule_start_subscribed:flags.8?t can_start_video:flags.9?t record_video_active:flags.11?t rtmp_stream:flags.12?t listeners_hidden:flags.13?t id:l access_hash:l participants_count:i title:flags.3?s stream_dc_id:flags.4?i record_start_date:flags.5?i schedule_date:flags.7?i unmuted_video_count:flags.10?i unmuted_video_limit:i version:i conference_from_call:flags.14?l\nd8aa840f inputGroupCall 117 id:l access_hash:l\neba636fe groupCallParticipant 118 flags:# muted:flags.0?t left:flags.1?t can_self_unmute:flags.2?t just_joined:flags.4?t versioned:flags.5?t min:flags.8?t muted_by_you:flags.9?t volume_by_admin:flags.10?t self:flags.12?t video_joined:flags.15?t peer:6 date:i active_date:flags.3?i source:i volume:flags.7?i about:flags.11?s raise_hand_rating:flags.13?l video:flags.6?121 presentation:flags.14?121\n3081ed9d inlineQueryPeerTypeSameBotPM 119\n833c0fac inlineQueryPeerTypePM 119\nd766c50a inlineQueryPeerTypeChat 119\n5ec4be43 inlineQueryPeerTypeMegagroup 119\n6334ee9a inlineQueryPeerTypeBroadcast 119\ne3b2d0c inlineQueryPeerTypeBotPM 119\ndcb118b7 groupCallParticipantVideoSourceGroup 120 semantics:s sources:Vi\n67753ac8 groupCallParticipantVideo 121 flags:# paused:flags.0?t endpoint:s source_groups:V120 audio_source:flags.1?i\nc3a2835f auth.loggedOut 122 flags:# future_auth_token:flags.0?b\na3d1cb80 reactionCount 123 flags:# chosen_order:flags.0?i reaction:129 count:i\na339f0b messageReactions 124 flags:# min:flags.0?t can_see_list:flags.2?t reactions_as_tags:flags.3?t results:V123 recent_reactions:flags.1?V125 top_reactors:flags.4?V154\n8c79b63c messagePeerReaction 125 flags:# big:flags.0?t unread:flags.1?t my:flags.2?t peer_id:6 date:i reaction:129\n7533a588 botMenuButtonDefault 126\n4258c205 botMenuButtonCommands 126\nc7b57ce6 botMenuButton 126 text:s url:s\n97e8bebe notificationSoundDefault 127\n6f0c34df notificationSoundNone 127\n830b9ae4 notificationSoundLocal 127 title:s data:s\nff6c8049 notificationSoundRingtone 127 id:l\n2de11aae emojiStatusEmpty 128\ne7ff068a emojiStatus 128 flags:# document_id:l until:flags.0?i\n7184603b emojiStatusCollectible 128 flags:# collectible_id:l document_id:l title:s slug:s pattern_document_id:l center_color:i edge_color:i pattern_color:i text_color:i until:flags.0?i\n7141dbf inputEmojiStatusCollectible 128 flags:# collectible_id:l until:flags.0?i\n79f5d419 reactionEmpty 129\n1b2286b8 reactionEmoji 129 emoticon:s\n8935fc73 reactionCustomEmoji 129 document_id:l\n523da4eb reactionPaid 129\nad628cc8 messageExtendedMediaPreview 130 flags:# w:flags.0?i h:flags.0?i thumb:flags.1?19 video_duration:flags.2?i\nee479c64 messageExtendedMedia 130 media:15\nfcfeb29c stickerKeyword 131 document_id:l keyword:Vs\nb4073647 username 132 flags:# editable:flags.0?t active:flags.1?t username:s\n23f109b forumTopicDeleted 133 id:i\n71701da9 forumTopic 133 flags:# my:flags.1?t closed:flags.2?t pinned:flags.3?t short:flags.5?t hidden:flags.6?t id:i date:i title:s icon_color:i icon_emoji_id:flags.0?l top_message:i read_inbox_max_id:i read_outbox_max_id:i unread_count:i unread_mentions_count:i unread_reactions_count:i from_id:6 notify_settings:22 draft:flags.4?60\n5f3b8a00 requestPeerTypeUser 134 flags:# bot:flags.0?B premium:flags.1?B\nc9f06e1b requestPeerTypeChat 134 flags:# creator:flags.0?t bot_participant:flags.5?t has_username:flags.3?B forum:flags.4?B user_admin_rights:flags.1?100 bot_admin_rights:flags.2?100\n339bef6c requestPeerTypeBroadcast 134 flags:# creator:flags.0?t has_username:flags.3?B user_admin_rights:flags.1?100 bot_admin_rights:flags.2?100\n751f3146 textWithEntities 135 text:s entities:V53\n5da674b7 botAppNotModified 136\n95fcd1d6 botApp 136 flags:# id:l access_hash:l short_name:s title:s description:s photo:18 document:flags.0?36 hash:l\n8d595cd6 storyViews 137 flags:# has_viewers:flags.1?t views_count:i forwards_count:flags.2?i reactions:flags.3?V123 reactions_count:flags.4?i recent_viewers:flags.0?Vl\n51e6ee4f storyItemDeleted 138 id:i\nffadc913 storyItemSkipped 138 flags:# close_friends:flags.8?t id:i date:i expire_date:i\n79b26a24 storyItem 138 flags:# pinned:flags.5?t public:flags.7?t close_friends:flags.8?t min:flags.9?t noforwards:flags.10?t edited:flags.11?t contacts:flags.12?t selected_contacts:flags.13?t out:flags.16?t id:i date:i from_id:flags.18?6 fwd_from:flags.17?144 expire_date:i caption:flags.0?s entities:flags.1?V53 media:15 media_areas:flags.14?V142 privacy:flags.2?V40 views:flags.3?137 sent_reaction:flags.15?129\n22c0f6d5 inputReplyToMessage 139 flags:# reply_to_msg_id:i top_msg_id:flags.0?i reply_to_peer_id:flags.1?0 quote_text:flags.2?s quote_entities:flags.3?V53 quote_offset:flags.4?i\n5881323a inputReplyToStory 139 peer:0 story_id:i\n712e27fd storiesStealthMode 140 flags:# active_until_date:flags.0?i cooldown_until_date:flags.1?i\ncfc9e002 mediaAreaCoordinates 141 flags:# x:d y:d w:d h:d rotation:d radius:flags.0?d\nbe82db9c mediaAreaVenue 142 coordinates:141 geo:20 title:s address:s provider:s venue_id:s venue_type:s\nb282217f inputMediaAreaVenue 142 coordinates:141 query_id:l result_id:s\ncad5452d mediaAreaGeoPoint 142 flags:# coordinates:141 geo:20 address:flags.0?151\n14455871 mediaAreaSuggestedReaction 142 flags:# dark:flags.0?t flipped:flags.1?t coordinates:141 reaction:129\n770416af mediaAreaChannelPost 142 coordinates:141 channel_id:l msg_id:i\n2271f2bf inputMediaAreaChannelPost 142 coordinates:141 channel:54 msg_id:i\n37381085 mediaAreaUrl 142 coordinates:141 url:s\n49a6549c mediaAreaWeather 142 coordinates:141 emoji:s temperature_c:d color:i\n5787686d mediaAreaStarGift 142 coordinates:141 slug:s\n4b3e14d6 boost 143 flags:# gift:flags.1?t giveaway:flags.2?t unclaimed:flags.3?t id:s user_id:flags.0?l giveaway_msg_id:flags.2?i date:i expires:i used_gift_slug:flags.4?s multiplier:flags.5?i stars:flags.6?l\nb826e150 storyFwdHeader 144 flags:# modified:flags.3?t from:flags.0?6 from_name:flags.1?s story_id:flags.2?i\nb54b5acf peerColor 145 flags:# color:flags.0?i background_emoji_id:flags.1?l\n697102b quickReply 146 shortcut_id:i shortcut:s top_message:i count:i\n896433b4 botBusinessConnection 147 flags:# can_reply:flags.0?t disabled:flags.1?t connection_id:s user_id:l dc_id:i date:i\nd62ff46a requestedPeerUser 148 flags:# user_id:l first_name:flags.0?s last_name:flags.0?s username:flags.1?s photo:flags.2?18\n7307544f requestedPeerChat 148 flags:# chat_id:l title:flags.0?s photo:flags.2?18\n8ba403e4 requestedPeerChannel 148 flags:# channel_id:l title:flags.0?s username:flags.1?s photo:flags.2?18\nc3ff71e7 broadcastRevenueBalances 149 flags:# withdrawal_enabled:flags.0?t current_balance:l available_balance:l overall_revenue:l\nb89bfccf factCheck 150 flags:# need_check:flags.0?t country:flags.1?s text:flags.1?135 hash:l\nde4c5d93 geoPointAddress 151 flags:# country_iso2:s state:flags.0?s city:flags.1?s street:flags.2?s\nfebe5491 starsRevenueStatus 152 flags:# withdrawal_enabled:flags.0?t current_balance:156 available_balance:156 overall_revenue:156 next_withdrawal_at:flags.1?i\n5416d58 starsSubscriptionPricing 153 period:i amount:l\n4ba3a95a messageReactor 154 flags:# top:flags.0?t my:flags.1?t anonymous:flags.2?t peer_id:flags.3?6 count:i\n2cc73c8 starGift 155 flags:# limited:flags.0?t sold_out:flags.1?t birthday:flags.2?t id:l sticker:36 stars:l availability_remains:flags.0?i availability_total:flags.0?i convert_stars:l first_sale_date:flags.1?i last_sale_date:flags.1?i upgrade_stars:flags.3?l\nf2fe7e4a starGiftUnique 155 flags:# id:l title:s slug:s num:i owner_id:flags.0?6 owner_name:flags.1?s owner_address:flags.2?s attributes:V157 availability_issued:i availability_total:i\nbbb6b4a3 starsAmount 156 amount:l nanos:i\n39d99013 starGiftAttributeModel 157 name:s document:36 rarity_permille:i\n13acff19 starGiftAttributePattern 157 name:s document:36 rarity_permille:i\n94271762 starGiftAttributeBackdrop 157 name:s center_color:i edge_color:i pattern_color:i text_color:i rarity_permille:i\ne0bff26c starGiftAttributeOriginalDetails 157 flags:# sender_id:flags.0?6 recipient_id:6 date:i message:flags.1?135";
 return { SCHEMA_LAYER, SCHEMA_TYPES, SCHEMA_CTORS };
 })();
 
@@ -2582,6 +2122,789 @@ function readBool(r) {
 return { createDecoder, decode, schemaStats };
 })();
 
+// ---- src/mtproto/srp.js ----
+const __mod_src_mtproto_srp = (() => {
+// The 2FA password check (SRP, "Two-factor authentication" in Telegram's docs) for the one algorithm Telegram uses,
+// passwordKdfAlgoSHA256SHA256PBKDF2HMACSHA512iter100000SHA256ModPow:
+//   SH(data, salt) = H(salt | data | salt)            H = SHA-256
+//   PH1 = SH(SH(password, salt1), salt2)
+//   PH2 = SH(pbkdf2(sha512, PH1, salt1, 100000), salt2)        x = PH2 as a big number
+//   k = H(p | g)   v = g^x   A = g^a   u = H(A | B)   t = (B - k v) mod p   S = t^(a + u x)   K = H(S)
+//   M1 = H(H(p) xor H(g) | H(salt1) | H(salt2) | A | B | K)
+// Numbers are hashed as 256 big-endian bytes. Powers go to kino.crypto.modPow (native); PBKDF2 to kino.crypto.pbkdf2.
+// The server's p and g pass the same checks as the DH exchange's (2048-bit safe prime, g generating the right subgroup),
+// and B, A and t the range checks of the docs. The password is only an argument here: never kept, never logged.
+const { toHex, fromHex, xor, random, bigFromBytes, bigToBytes, utf8 } = __mod_src_mtproto_bytes;
+const { sha256, modPowHex } = __mod_src_mtproto_crypto;
+const { checkDhPrime } = __mod_src_mtproto_authkey;
+const { mtError } = __mod_src_mtproto_errors;
+
+const SRP_ALGO = "passwordKdfAlgoSHA256SHA256PBKDF2HMACSHA512iter100000SHA256ModPow";
+const SIZE = 256;
+const protocol = (m) => mtError("protocol", m);
+const evenHex = (n) => { const h = n.toString(16); return h.length % 2 ? "0" + h : h; };
+const pow = (b, e, m) => BigInt("0x" + modPowHex(evenHex(b), evenHex(e), evenHex(m)));
+const pad = (n) => bigToBytes(n, SIZE);
+const bits = (n) => (n === 0n ? 0 : n.toString(2).length);
+
+/** The docs' range check for g^a and g^b style values: 2^(2048-64) <= x <= p - 2^(2048-64). */
+function goodModExp(x, p) {
+  const diff = p - x;
+  return diff > 0n && bits(diff) >= 2048 - 64 && bits(x) >= 2048 - 64 && Math.ceil(bits(x) / 8) <= SIZE;
+}
+
+/** PH2(password): the password's hash for the verifier, from the algorithm's two salts. */
+function passwordHash(password, salt1, salt2) {
+  const sh = (data, salt) => sha256(salt, data, salt);
+  const ph1 = sh(sh(utf8(password), salt1), salt2);
+  const k = kino.crypto.pbkdf2("sha512", toHex(ph1), toHex(salt1), 100000, 64, { keyEncoding: "hex", inputEncoding: "hex", outputEncoding: "hex" });
+  return sh(fromHex(k), salt2);
+}
+
+/**
+ * The InputCheckPasswordSRP for `password` against account.getPassword's answer: `{ algo: { _, salt1, salt2, g, p },
+ * srpB, srpId }` (bytes as Uint8Array) -> `{ srpId, A, M1 }`. `aBytes` (256 bytes) is for the test vector only; in use
+ * `a` is random. Throws `protocol` when the server's numbers fail a check (nothing is sent then).
+ */
+function srpCheck({ algo, srpB, srpId }, password, { aBytes } = {}) {
+  if (!algo || algo._ !== SRP_ALGO) throw mtError("invalid_request", "unsupported 2FA password algorithm");
+  if (typeof password !== "string" || !password) throw mtError("invalid_request", "the password is empty");
+  if (!(algo.p instanceof Uint8Array) || algo.p.length !== SIZE) throw protocol("2FA p is not 2048 bits");
+  if (!(srpB instanceof Uint8Array) || srpB.length === 0 || srpB.length > SIZE) throw protocol("2FA srp_B has a bad length");
+  const p = bigFromBytes(algo.p);
+  const g = Number(algo.g);
+  checkDhPrime(p, g); // a 2048-bit safe prime with a good g, as for the auth key
+  const B = bigFromBytes(srpB);
+  if (!(B > 1n && B < p - 1n)) throw protocol("2FA srp_B out of range");
+  const x = bigFromBytes(passwordHash(password, algo.salt1, algo.salt2));
+  const pBytes = pad(p), gBytes = pad(BigInt(g)), bBytes = pad(B);
+  const k = bigFromBytes(sha256(pBytes, gBytes));
+  const v = pow(BigInt(g), x, p);
+  const t = (((B - ((k * v) % p)) % p) + p) % p;
+  if (!goodModExp(t, p)) throw protocol("2FA srp_B is not a good value");
+  let a, A, u;
+  for (let tries = 0; ; tries++) {
+    if (tries >= 8) throw protocol("2FA: no good random value");
+    a = bigFromBytes(aBytes && tries === 0 ? aBytes : random(SIZE));
+    A = pow(BigInt(g), a, p);
+    if (!goodModExp(A, p)) { if (aBytes) throw protocol("2FA: the given a is not good"); continue; }
+    u = bigFromBytes(sha256(pad(A), bBytes));
+    if (u > 0n) break;
+  }
+  const S = pow(t, a + u * x, p);
+  const K = sha256(pad(S));
+  const M1 = sha256(xor(sha256(pBytes), sha256(gBytes)), sha256(algo.salt1), sha256(algo.salt2), pad(A), bBytes, K);
+  return { srpId, A: pad(A), M1 };
+}
+return { SRP_ALGO, passwordHash, srpCheck };
+})();
+
+// ---- src/mtproto/requests.js ----
+const __mod_src_mtproto_requests = (() => {
+// Serialized API methods for the discovery (layer 198), written field by field from their TL lines:
+// updates.getState#edd4882a = updates.State
+// updates.getDifference#19c2f763 flags:# pts:int pts_limit:flags.1?int pts_total_limit:flags.0?int date:int qts:int qts_limit:flags.2?int
+// updates.getChannelDifference#3173d78 flags:# force:flags.0?true channel:InputChannel filter:ChannelMessagesFilter pts:int limit:int
+// channels.getMessages#ad8c9a23 channel:InputChannel id:Vector<InputMessage>
+// messages.getMessages#63c66506 id:Vector<InputMessage>
+// inputChannel#f35aec28 channel_id:long access_hash:long   inputMessageID#a676a322 id:int   channelMessagesFilterEmpty#94d42ee7
+const { Writer, CTOR } = __mod_src_mtproto_tl;
+
+/**
+ * The ONLY methods TelegramClient.call sends: the five the discovery needs. A new method for the plugin shell is added
+ * here, in this one list, never per call site. Anything else (auth methods, the invoke and initConnection wrappers, gzip_packed,
+ * msg_container, destructive methods) is refused by the client before a byte goes out.
+ */
+const BOT_CALLS = Object.freeze([
+  0xedd4882a, // updates.getState
+  0x19c2f763, // updates.getDifference
+  0x03173d78, // updates.getChannelDifference
+  0xad8c9a23, // channels.getMessages
+  0x63c66506, // messages.getMessages
+]);
+/** Kept for the bot path's callers and tests: the bot's list. */
+const ALLOWED_CALLS = BOT_CALLS;
+
+/**
+ * Account mode (0.3.0, the person's own Telegram account) is READ ONLY: a closed list of reading methods, nothing that
+ * sends, edits, deletes, forwards, marks read, joins, leaves or changes anything. updates.* are not needed (the account's
+ * chats are read by search, not by the update boxes).
+ */
+const ACCOUNT_CALLS = Object.freeze([
+  0xa0f4cb4f, // messages.getDialogs: which chats there are
+  0x29ee847a, // messages.search: a chat's videos (inputMessagesFilterVideo / inputMessagesFilterDocument, empty q)
+  0x63c66506, // messages.getMessages: re-read a message (a fresh file_reference) in a basic group or Saved Messages
+  0xad8c9a23, // channels.getMessages: the same in a channel or supergroup
+]);
+/** The account's login and logout methods: only through the client's own login calls, never through `call`. */
+const ACCOUNT_AUTH_CALLS = Object.freeze([
+  0xb7e085fe, // auth.exportLoginToken
+  0x95ac5ce4, // auth.importLoginToken
+  0x548a30f5, // account.getPassword
+  0xd18b4d16, // auth.checkPassword
+  0x3e72ba19, // auth.logOut
+]);
+
+const big = (v) => (typeof v === "bigint" ? v : BigInt(v));
+const inputChannel = (w, channelId, accessHash) => w.int(0xf35aec28).long(big(channelId)).long(big(accessHash));
+const inputMessageIds = (w, ids) => { w.int(CTOR.vector).int(ids.length); for (const id of ids) w.int(0xa676a322).int(id); return w; };
+
+const getState = () => new Writer().int(0xedd4882a).done();
+
+const getDifference = ({ pts, date, qts }) => new Writer().int(0x19c2f763).int(0).int(pts).int(date).int(qts).done();
+
+const getChannelDifference = ({ channelId, accessHash, pts, limit = 100, force = false }) =>
+  inputChannel(new Writer().int(0x03173d78).int(force ? 1 : 0), channelId, accessHash).int(0x94d42ee7).int(pts).int(limit).done();
+
+const channelsGetMessages = ({ channelId, accessHash, ids }) =>
+  inputMessageIds(inputChannel(new Writer().int(0xad8c9a23), channelId, accessHash), ids).done();
+
+const messagesGetMessages = (ids) => inputMessageIds(new Writer().int(0x63c66506), ids).done();
+
+// ---- account mode (read only) ----
+// inputPeerSelf#7da07ec9  inputPeerChat#35a95cb9 chat_id:long  inputPeerChannel#27bcbbfc channel_id:long access_hash:long
+// inputPeerUser#dde8a54c user_id:long access_hash:long
+// inputPeerEmpty#7f3b18ea  inputMessagesFilterVideo#9fc00e65  inputMessagesFilterDocument#9eddf188
+// messages.getDialogs#a0f4cb4f flags:# exclude_pinned:flags.0?true folder_id:flags.1?int offset_date:int offset_id:int
+//   offset_peer:InputPeer limit:int hash:long
+// messages.search#29ee847a flags:# peer:InputPeer q:string from_id:flags.0?InputPeer saved_peer_id:flags.2?InputPeer
+//   saved_reaction:flags.3?Vector<Reaction> top_msg_id:flags.1?int filter:MessagesFilter min_date:int max_date:int
+//   offset_id:int add_offset:int limit:int max_id:int min_id:int hash:long
+const FILTER = Object.freeze({ video: 0x9fc00e65, document: 0x9eddf188 });
+
+/** An InputPeer: { kind: "self" } | { kind: "chat", id } | { kind: "channel" | "user", id, accessHash } | { kind: "empty" }. */
+function inputPeer(w, peer) {
+  if (!peer || peer.kind === "empty") return w.int(0x7f3b18ea);
+  if (peer.kind === "self") return w.int(0x7da07ec9);
+  if (peer.kind === "chat") return w.int(0x35a95cb9).long(big(peer.id));
+  if (peer.kind === "channel") return w.int(0x27bcbbfc).long(big(peer.id)).long(big(peer.accessHash));
+  if (peer.kind === "user") return w.int(0xdde8a54c).long(big(peer.id)).long(big(peer.accessHash)); // a dialog cursor only
+  throw new Error("unknown peer kind");
+}
+
+const getDialogs = ({ offsetDate = 0, offsetId = 0, offsetPeer = null, limit = 100 } = {}) =>
+  inputPeer(new Writer().int(0xa0f4cb4f).int(0).int(offsetDate).int(offsetId), offsetPeer).int(limit).long(0n).done();
+
+const searchMessages = ({ peer, filter, offsetId = 0, minId = 0, limit = 100 }) =>
+  inputPeer(new Writer().int(0x29ee847a).int(0), peer).string("").int(filter).int(0).int(0).int(offsetId).int(0).int(limit).int(0).int(minId).long(0n).done();
+return { BOT_CALLS, ALLOWED_CALLS, ACCOUNT_CALLS, ACCOUNT_AUTH_CALLS, getState, getDifference, getChannelDifference, channelsGetMessages, messagesGetMessages, FILTER, inputPeer, getDialogs, searchMessages };
+})();
+
+// ---- src/mtproto/keys.js ----
+const __mod_src_mtproto_keys = (() => {
+// Telegram's PUBLIC RSA server keys (from tg-public-keys.json, as used by the verified-live spike), keyed by the
+// signed decimal fingerprint the server lists in resPQ. n is big-endian hex, e decimal.
+const TELEGRAM_PUBLIC_KEYS = Object.freeze({
+  "-3414540481677951611": {
+    "n": "e8bb3305c0b52c6cf2afdf7637313489e63e05268e5badb601af417786472e5f93b85438968e20e6729a301c0afc121bf7151f834436f7fda680847a66bf64accec78ee21c0b316f0edafe2f41908da7bd1f4a5107638eeb67040ace472a14f90d9f7c2b7def99688ba3073adb5750bb02964902a359fe745d8170e36876d4fd8a5d41b2a76cbff9a13267eb9580b2d06d10357448d20d9da2191cb5d8c93982961cdfdeda629e37f1fb09a0722027696032fe61ed663db7a37f6f263d370f69db53a0dc0a1748bdaaff6209d5645485e6e001d1953255757e4b8e42813347b11da6ab500fd0ace7e6dfa3736199ccaf9397ed0745a427dcfa6cd67bcb1acff3",
+    "e": 65537
+  },
+  "-5595554452916591101": {
+    "n": "c8c11d635691fac091dd9489aedced2932aa8a0bcefef05fa800892d9b52ed03200865c9e97211cb2ee6c7ae96d3fb0e15aeffd66019b44a08a240cfdd2868a85e1f54d6fa5deaa041f6941ddf302690d61dc476385c2fa655142353cb4e4b59f6e5b6584db76fe8b1370263246c010c93d011014113ebdf987d093f9d37c2be48352d69a1683f8f6e6c2167983c761e3ab169fde5daaa12123fa1beab621e4da5935e9c198f82f35eae583a99386d8110ea6bd1abb0f568759f62694419ea5f69847c43462abef858b4cb5edc84e7b9226cd7bd7e183aa974a712c079dde85b9dc063b8a5c08e8f859c0ee5dcd824c7807f20153361a7f63cfd2a433a1be7f5",
+    "e": 65537
+  }
+});
+return { TELEGRAM_PUBLIC_KEYS };
+})();
+
+// ---- src/mtproto/client.js ----
+const __mod_src_mtproto_client = (() => {
+// The high-level client: one auth key per DC, a bot login once per home DC, DC migration, chunked file downloads and
+// a JSON-safe state the plugin shell stores encrypted. Calls run one at a time (Kino calls `read` one at a time too).
+const { toBase64, fromBase64, toHex, fromHex } = __mod_src_mtproto_bytes;
+const { sha1 } = __mod_src_mtproto_crypto;
+const { Transport } = __mod_src_mtproto_transport;
+const { createAuthKey } = __mod_src_mtproto_authkey;
+const { Session } = __mod_src_mtproto_session;
+const { CTOR, LAYER, invokeWithLayer, initConnection, importBotAuthorization, exportAuthorization, importAuthorization, inputDocumentFileLocation, uploadGetFile, parseUploadFile, parseUploadFileHex, parseAuthorization, parseExportedAuthorization, exportLoginToken, importLoginToken, getPassword, checkPassword, logOut } = __mod_src_mtproto_tl;
+const { decode } = __mod_src_mtproto_schema_reader;
+const { srpCheck } = __mod_src_mtproto_srp;
+const { mtError } = __mod_src_mtproto_errors;
+const { BOT_CALLS, ACCOUNT_CALLS, ACCOUNT_AUTH_CALLS } = __mod_src_mtproto_requests;
+const { describeError, isServerAnswer } = __mod_src_mtproto_errors;
+const { big } = __mod_src_mtproto_big;
+const { TELEGRAM_PUBLIC_KEYS } = __mod_src_mtproto_keys;
+
+const CHUNK = 1048576;
+const BUDGET_KEY = "mtproto.botLogins";
+const BUDGET_MAX = 3;
+const BUDGET_WINDOW_MS = 3600000;
+const MIN_LEFT_MS = 1500;   // a request never starts with less time than this before its caller's deadline
+const MARGIN_MS = 500;      // what a request leaves its caller after its own wait
+const POLL_MS = 250;        // how often a call waiting for its turn checks its deadline
+const MAX_AHEAD = 2;           // file chunks requested ahead and tracked (answered or still in flight), oldest dropped first:
+                              // a hard count cap, so answered hex held is at most ~2 chunks whatever the timing
+const MAX_AHEAD_BYTES = 5 << 20; // characters of ANSWERED read-ahead hex kept at once: ~2 chunks (a 1 MiB chunk is
+                                 // ~2 MiB of hex), enough for the depth-2 read-ahead, so a runtime with no forced GC
+                                 // never piles several more up
+const MAX_IN_FLIGHT = 3;    // requests on one connection at once (the asked chunk included), on every path
+const ROOM_WAIT_MS = 2500;  // the longest a chunk request waits for room before taking the oldest in flight as lost
+const AHEAD_WAIT_MS = 8000; // the longest a read waits for a chunk requested ahead before asking for it again
+
+/**
+ * At most 3 bot logins per hour per device (Telegram answered FLOOD_WAIT_3121 after about ten in an hour). `store` is
+ * kino.storage or anything with get/set of strings. Answers { allowed, remaining, retryAfterSeconds, record() };
+ * record() notes a login now, or throws `login_budget` (with `seconds`) when none is left.
+ */
+function loginBudget(store, now = Date.now(), { key = BUDGET_KEY, max = BUDGET_MAX, what = "bot logins" } = {}) {
+  let times = [];
+  try {
+    const v = JSON.parse(store.get(key) || "[]");
+    if (Array.isArray(v)) times = v.filter((t) => typeof t === "number" && t <= now && now - t < BUDGET_WINDOW_MS).sort((a, b) => a - b);
+  } catch { times = []; }
+  const allowed = times.length < max;
+  const retryAfterSeconds = allowed ? 0 : Math.ceil((times[0] + BUDGET_WINDOW_MS - now) / 1000);
+  return {
+    allowed,
+    remaining: Math.max(0, max - times.length),
+    retryAfterSeconds,
+    record() {
+      if (!allowed) throw mtError("login_budget", "too many " + what + " on this device in the last hour", { seconds: retryAfterSeconds });
+      times.push(now);
+      store.set(key, JSON.stringify(times));
+    },
+  };
+}
+
+function encodeState(dc, s) {
+  const out = { dc, authKey: toBase64(s.authKey), authKeyId: toHex(s.authKeyId), serverSalt: toBase64(s.serverSalt), timeOffset: s.timeOffset | 0, loggedIn: !!s.loggedIn };
+  if (s.userId !== undefined) out.userId = String(s.userId);
+  return out;
+}
+
+function decodeState(v) {
+  const authKey = fromBase64(String(v.authKey || ""));
+  if (authKey.length !== 256) throw mtError("invalid_request", "stored auth key must be 256 bytes");
+  let serverSalt = new Uint8Array(8);
+  try { const s = fromBase64(String(v.serverSalt || "")); if (s.length === 8) serverSalt = s; } catch { /* a bad salt is fixed by bad_server_salt */ }
+  const s = { authKey, authKeyId: sha1(authKey).slice(12, 20), serverSalt, timeOffset: Number(v.timeOffset) | 0, loggedIn: v.loggedIn === true };
+  if (v.userId !== undefined) s.userId = BigInt(v.userId);
+  return s;
+}
+
+// `call` sends only what is on the mode's allowlist (requests.js): the first 4 bytes of the body must be one of those
+// method ids. Account mode is read only (ACCOUNT_CALLS); its login methods go only through the login calls below.
+const ALLOWED = Object.freeze({ bot: new Set(BOT_CALLS), account: new Set(ACCOUNT_CALLS) });
+const ACCOUNT_AUTH = new Set(ACCOUNT_AUTH_CALLS);
+const methodId = (body) => (body[0] | (body[1] << 8) | (body[2] << 16) | (body[3] << 24)) >>> 0;
+/** 2FA password attempts per device and hour (each one is a guess Telegram counts). */
+const PASSWORD_BUDGET = Object.freeze({ key: "mtproto.passwordTries", max: 5, what: "password attempts" });
+
+const DEFAULT_DEVICE = Object.freeze({ deviceModel: "Kino", systemVersion: "Android", appVersion: "1.0", systemLangCode: "en", langPack: "", langCode: "en" });
+
+function checkRange(offset, limit) {
+  if (!Number.isInteger(offset) || offset < 0 || offset % 4096 !== 0) throw mtError("invalid_request", "offset must be a non-negative multiple of 4096");
+  if (!Number.isInteger(limit) || limit <= 0 || limit % 4096 !== 0 || CHUNK % limit !== 0) throw mtError("invalid_request", "limit must be a multiple of 4096 that divides 1 MiB");
+  if (Math.floor(offset / CHUNK) !== Math.floor((offset + limit - 1) / CHUNK)) throw mtError("invalid_request", "a chunk may not cross a 1 MiB boundary");
+}
+
+class TelegramClient {
+  /**
+   * `apiId` is needed for initConnection on every new connection. `publicKeys` defaults to Telegram's (tests inject a
+   * fake DC's). `store` is REQUIRED: kino.storage (or any get/set of strings) for the login budget, which keeps a
+   * burst of bot logins from earning a FLOOD_WAIT of almost an hour; only a test may pass `store: false` to go without.
+   * `wsOpen`/`urlFor` are for tests and other transports.
+   */
+  constructor({ apiId, publicKeys = TELEGRAM_PUBLIC_KEYS, device = {}, store, timeoutMs = 20000, now = () => Date.now(), log = () => {}, onUpdate = null, wsOpen, urlFor, abandonedMs, mode = "bot" } = {}) {
+    if (mode !== "bot" && mode !== "account") throw mtError("invalid_request", "mode is bot or account");
+    this.mode = mode;
+    this.abandonedMs = abandonedMs;
+    this.maxInflight = 0; // the most requests ever in flight on one connection at a send (tests)
+    if (store === false) store = null;
+    else if (!store || typeof store.get !== "function" || typeof store.set !== "function") {
+      throw mtError("invalid_request", "TelegramClient needs `store` (kino.storage) for the bot login budget; only tests may pass store: false");
+    }
+    this.apiId = apiId;
+    this.publicKeys = publicKeys;
+    this.device = { ...DEFAULT_DEVICE, ...device };
+    this.store = store;
+    this.timeoutMs = timeoutMs;
+    this.now = now;
+    this.log = log;
+    this.onUpdate = onUpdate;
+    this.wsOpen = wsOpen;
+    this.urlFor = urlFor;
+    this.homeDc = null;
+    this.dcs = new Map();   // dc -> { authKey, authKeyId, serverSalt, timeOffset, loggedIn, userId? }
+    this.conns = new Map(); // dc -> { transport, session, inited }
+    this.chain = Promise.resolve();
+    this.ahead = new Map(); // "<doc id>:<offset>" -> { dc, session, entry, limit }, in request order
+    this.lastActiveAt = this.now(); // when a chunk request last ran: an idle runtime drops its caches (idleReset)
+  }
+
+  /** How many chunks requested ahead are kept (tests). */
+  aheadCount() { return this.ahead.size; }
+  /** Characters of answered read-ahead hex held right now (in-flight entries hold nothing yet). */
+  aheadBytes() { let n = 0; for (const a of this.ahead.values()) if (a.entry.done && a.entry.result) n += a.entry.result.length; return n; }
+
+  /**
+   * Frees everything a finished play leaves behind when the runtime has been idle for `idleMs`: the read-ahead cache
+   * (hex chunks) and the open connection (its transport buffers and session). The next read reconnects with the stored
+   * key (no key exchange, no login). There is no "stream closed" hook from Kino, so this is where retention is bounded
+   * between plays.
+   */
+  async idleReset(idleMs) {
+    if ((this.ahead.size || this.conns.size) && this.now() - this.lastActiveAt >= idleMs) {
+      this.log("idle " + Math.round((this.now() - this.lastActiveAt) / 1000) + " s: releasing caches and the connection");
+      await this.reset();
+    }
+  }
+
+  /**
+   * Tears everything down after a failure the caller cannot place: every connection closes (the requests in flight on
+   * them are dropped), the chunks read ahead are forgotten. The keys and logins stay: the next call reconnects with
+   * them, with no key exchange and no new login.
+   */
+  reset() {
+    return this.serial(async () => {
+      for (const [k, a] of [...this.ahead]) this.dropAhead(k, a);
+      for (const dc of [...this.conns.keys()]) await this.drop(dc);
+    });
+  }
+
+  /**
+   * Runs `fn` after the calls already queued (one at a time). With a `deadline` (a time of `now()`), the call is
+   * dropped unsent when its turn comes too late, and a caller queued behind a busy client gets a typed timeout at its
+   * deadline instead of waiting for its turn (`kino.sleep` polls; it is only used while the client is busy).
+   */
+  serial(fn, deadline, trace) {
+    const queuedAt = trace ? Date.now() : 0;
+    const busy = this.pending > 0;
+    this.pending = (this.pending || 0) + 1;
+    const turn = () => {
+      if (trace) trace.queue += Date.now() - queuedAt;
+      if (deadline !== undefined && this.now() > deadline - MIN_LEFT_MS) throw mtError("timeout", "no time left before the caller's deadline", { deadline: true });
+      return fn();
+    };
+    const run = this.chain.then(turn, turn);
+    this.chain = run.then(() => { this.pending--; }, () => { this.pending--; });
+    if (!busy || deadline === undefined || typeof kino === "undefined" || typeof kino.sleep !== "function") return run;
+    let settled = false;
+    run.then(() => { settled = true; }, () => { settled = true; });
+    const watch = (async () => {
+      for (;;) {
+        const left = deadline - MIN_LEFT_MS - this.now();
+        if (settled) return new Promise(() => {}); // the call won: this side never answers
+        if (left <= 0) throw mtError("timeout", "the client stayed busy past the caller's deadline", { deadline: true });
+        await kino.sleep(Math.min(POLL_MS, left));
+      }
+    })();
+    return Promise.race([run, watch]);
+  }
+
+  /** The wait of one request: the client's timeout, or less when the caller's `deadline` is closer (typed timeout when too close). */
+  budget(deadline) {
+    if (deadline === undefined || deadline === null || !Number.isFinite(deadline)) return { ms: this.timeoutMs, clamped: false };
+    const left = deadline - this.now() - MARGIN_MS;
+    if (left < MIN_LEFT_MS - MARGIN_MS) throw mtError("timeout", "no time left before the caller's deadline", { deadline: true });
+    return left < this.timeoutMs ? { ms: left, clamped: true } : { ms: this.timeoutMs, clamped: false };
+  }
+
+  /** Takes a state from exportState() (all DCs) or one DC's entry of it. */
+  importState(state) {
+    if (!state || typeof state !== "object") return;
+    if (state.dcs && typeof state.dcs === "object") {
+      for (const [k, v] of Object.entries(state.dcs)) this.dcs.set(Number(k), decodeState(v));
+      if (state.homeDc) this.homeDc = Number(state.homeDc);
+    } else if (state.authKey) {
+      this.dcs.set(Number(state.dc), decodeState(state));
+    }
+  }
+
+  /** { homeDc, dcs: { "<dc>": { dc, authKey (base64), authKeyId (hex), serverSalt (base64), timeOffset, loggedIn, userId? } } } */
+  exportState() {
+    const dcs = {};
+    for (const [dc, s] of this.dcs) dcs[String(dc)] = encodeState(dc, s);
+    return { homeDc: this.homeDc, dcs };
+  }
+
+  /** Connects to the home DC (`state.homeDc` wins over `dc` when a full state is given), reusing a stored key. */
+  connect(dc, state, { deadline } = {}) {
+    return this.serial(async () => {
+      this.importState(state);
+      if (!(state && state.homeDc)) this.homeDc = Number(dc);
+      await this.conn(this.homeDc, deadline);
+      return this;
+    }, deadline);
+  }
+
+  async conn(dc, deadline) {
+    let c = this.conns.get(dc);
+    if (c && !c.transport.closed && !c.session.broken) return c;
+    if (c) await this.drop(dc);
+    const transport = await new Transport(dc, { open: this.wsOpen, url: this.urlFor ? this.urlFor(dc) : undefined }).open();
+    let st = this.dcs.get(dc);
+    if (!st) {
+      try {
+        st = { ...(await createAuthKey(transport, { dc, publicKeys: this.publicKeys, now: this.now, timeoutMs: this.budget(deadline).ms })), loggedIn: false };
+      } catch (e) {
+        await transport.close();
+        throw e;
+      }
+      this.dcs.set(dc, st);
+    }
+    let session;
+    try {
+      session = new Session(transport, st, { now: this.now, timeoutMs: this.timeoutMs, onUpdate: this.onUpdate, log: this.log, ...(this.abandonedMs !== undefined ? { abandonedMs: this.abandonedMs } : {}) });
+    } catch (e) {
+      await transport.close();
+      throw e;
+    }
+    c = { transport, session, inited: false };
+    this.conns.set(dc, c);
+    return c;
+  }
+
+  async drop(dc) {
+    const c = this.conns.get(dc);
+    this.conns.delete(dc);
+    for (const [k, a] of [...this.ahead]) if (a.dc === dc) this.dropAhead(k, a); // their answers die with the connection
+    if (c) await c.transport.close();
+  }
+
+  /** Forgets one chunk read ahead: an answered one gives its result back, one in flight is abandoned. */
+  dropAhead(k, a) {
+    this.ahead.delete(k);
+    if (a.entry.done) { if (a.entry.result) big.release(a.entry.result.length); a.entry.result = null; }
+    else a.session.forget(a.entry);
+  }
+
+  /**
+   * One API call on DC `dc`; the first call of each connection goes inside invokeWithLayer(initConnection(...)).
+   * A closed socket is retried once on a new connection unless `retry` is false (the bot login retries by itself, so
+   * that every attempt spends the budget). `hex` answers the result as a hex string (Session.call).
+   */
+  async invoke(dc, body, { retry = true, hex = false, deadline, trace, after, before } = {}) {
+    const c = await this.conn(dc, deadline);
+    const wrapped = c.inited ? body : invokeWithLayer(LAYER, initConnection({ apiId: this.apiId, ...this.device }, body));
+    const wait = this.budget(deadline);
+    try {
+      // `before` makes room on the connection first (a chunk request waits for fewer than 3 in flight). When the room
+      // does not come (requests that never answer), the connection goes: that takes them off the wire, and a new one
+      // (stored key, no key exchange, no login) starts with nothing in flight. A failure while waiting (a socket that
+      // closed) is handled below like any other.
+      if (before && (await before(c)) === false) {
+        this.log("no room on the connection: reconnecting");
+        await this.drop(dc);
+        return this.invoke(dc, body, { retry, hex, deadline, trace, after });
+      }
+      const started = this.now();
+      const entry = await c.session.request(wrapped, { hex, trace });
+      this.maxInflight = Math.max(this.maxInflight, c.session.maxInflight);
+      // `after` sends more requests right behind this one, on a connection already initialised: never a failure of its own.
+      if (after && c.inited) { try { await after(c); } catch (e) { this.log("request ahead not sent (" + describeError(e) + ")"); } }
+      const res = await c.session.settle(entry, started + wait.ms);
+      c.inited = true;
+      return res;
+    } catch (thrown) {
+      // Anything may be thrown from below (a native failure is not always an Error): read it through `e`.
+      const e = thrown && typeof thrown === "object" ? thrown : { code: undefined, thrown };
+      if (e.code === "closed" && retry) {
+        await this.drop(dc);
+        return this.invoke(dc, body, { retry: false, hex, deadline, trace, before, after });
+      }
+      // A connection in an unknown state is never used again: the next call reconnects with the stored key.
+      if (e.code === "timeout" || e.code === "closed" || e.code === "protocol" || !isServerAnswer(e) || c.session.broken) await this.drop(dc);
+      if (e.code === "timeout" && wait.clamped) e.deadline = true; // the caller's deadline, not the server's silence alone
+      if (e.code === "auth_key_unregistered") {
+        // A key the server forgot (-404), refuses (AUTH_KEY_INVALID) or sees on two connections at once
+        // (AUTH_KEY_DUPLICATED: e.g. a copy restored on another device) is dead: drop it, the next call makes a new one.
+        // Any other 401 (AUTH_KEY_UNREGISTERED, SESSION_REVOKED...) keeps the key and only needs a new login.
+        if (e.transport || /^AUTH_KEY_(INVALID|DUPLICATED)$/.test(String(e.rpc || ""))) { await this.drop(dc); this.dcs.delete(dc); }
+        else { const st = this.dcs.get(dc); if (st) st.loggedIn = false; }
+      }
+      throw thrown;
+    }
+  }
+
+  /**
+   * Logs the bot in on the home DC once: a DC already logged in (also from a stored state) sends nothing and answers
+   * { reused: true, userId }. Follows USER_MIGRATE_n (the home DC changes only when the login there succeeds) and
+   * retries once after a closed socket. Every attempt sent, migrations and retries included, spends a budget slot.
+   */
+  /** Whether the home DC still needs a bot login (no key there yet, or a key not logged in). */
+  needsLogin() {
+    const home = this.homeDc ? this.dcs.get(this.homeDc) : null;
+    return !(home && home.loggedIn);
+  }
+
+  botLogin({ apiId, apiHash, botToken, deadline }) {
+    if (this.mode !== "bot") return Promise.reject(mtError("invalid_request", "botLogin is for bot mode"));
+    return this.serial(async () => {
+      if (apiId !== undefined) this.apiId = Number(apiId);
+      if (!this.homeDc) throw mtError("invalid_request", "connect first");
+      if (!apiHash || !botToken || !this.apiId) throw mtError("invalid_request", "apiId, apiHash and botToken are required");
+      const home = this.dcs.get(this.homeDc);
+      if (home && home.loggedIn) return { reused: true, userId: home.userId };
+      let dc = this.homeDc;
+      let hops = 0, closedRetries = 0;
+      for (;;) {
+        if (this.store) loginBudget(this.store, this.now()).record();
+        try {
+          const auth = parseAuthorization(await this.invoke(dc, importBotAuthorization({ apiId: this.apiId, apiHash, botToken }), { retry: false, deadline }));
+          if (auth.ctor !== CTOR.authAuthorization) throw mtError("protocol", "unexpected answer to the bot login");
+          const st = this.dcs.get(dc);
+          st.loggedIn = true;
+          st.userId = auth.userId;
+          this.homeDc = dc;
+          return { userId: auth.userId };
+        } catch (e) {
+          if (e.code === "user_migrate" && hops < 2 && e.dc !== dc) { hops++; dc = e.dc; continue; }
+          if (e.code === "closed" && closedRetries < 1) { closedRetries++; continue; }
+          throw e;
+        }
+      }
+    }, deadline);
+  }
+
+  /**
+   * One raw API call on the home DC for the logged-in bot: `body` is the serialized method (a Uint8Array), the answer
+   * is the result's bytes (unzipped; decode them with schema/reader.js). Server errors come back typed (errors.js).
+   * Refused with `invalid_request` before a login, and for any method not on ALLOWED_CALLS (requests.js): auth
+   * methods, invoke wrappers, gzip_packed, msg_container and every other method are never sent.
+   */
+  call(body, { deadline } = {}) {
+    try {
+      if (!(body instanceof Uint8Array) || body.length < 4) throw mtError("invalid_request", "call needs the serialized method as a Uint8Array");
+      const id = methodId(body);
+      if (!ALLOWED[this.mode].has(id)) throw mtError("invalid_request", "method 0x" + id.toString(16).padStart(8, "0") + " is not allowed through call in " + this.mode + " mode (requests.js)");
+    } catch (e) {
+      return Promise.reject(e);
+    }
+    return this.serial(async () => {
+      if (!this.homeDc) throw mtError("invalid_request", "connect first");
+      const st = this.dcs.get(this.homeDc);
+      if (!st || !st.loggedIn) throw mtError("invalid_request", "log in first");
+      return this.invoke(this.homeDc, body, { deadline });
+    }, deadline);
+  }
+
+  // ---- account mode: the QR login, the 2FA password and the logout ----
+
+  /** One account login method on DC `dc` (ACCOUNT_AUTH_CALLS only, account mode only), decoded as `expect`. */
+  async authInvoke(dc, body, expect, deadline) {
+    if (this.mode !== "account") throw mtError("invalid_request", "account login methods are for account mode");
+    const id = methodId(body);
+    if (!ACCOUNT_AUTH.has(id)) throw mtError("invalid_request", "not an account login method");
+    // Asking for a token or for the password's parameters again changes nothing: those two may retry a closed socket.
+    const idempotent = id === 0xb7e085fe || id === 0x548a30f5;
+    return decode(await this.invoke(dc, body, { retry: idempotent, deadline }), { expect });
+  }
+
+  /** An auth.authorization: the DC it came from is the home DC, logged in as that user. */
+  loggedIn(dc, auth) {
+    if (!auth || auth._ !== "auth.authorization" || !auth.user || auth.user._ !== "user") throw mtError("protocol", "unexpected answer to the account login");
+    if (auth.user.bot) throw mtError("protocol", "the login answered a bot, not an account");
+    const st = this.dcs.get(dc);
+    st.loggedIn = true;
+    st.userId = BigInt(auth.user.id);
+    this.homeDc = dc;
+    return { userId: st.userId };
+  }
+
+  /**
+   * One round of the QR login on the home DC: auth.exportLoginToken. Answers { token (Uint8Array), expires (a unix
+   * time of the server's) } while nobody has scanned it, or { userId } once the person accepted it in the official
+   * Telegram app (auth.loginTokenSuccess; auth.loginTokenMigrateTo is followed: auth.importLoginToken on that DC, which
+   * gets its own auth key, and becomes the home DC). A 2FA account throws `password_needed`: the home DC is then the
+   * DC that asked, and checkPassword goes on there. A DC already logged in sends nothing and answers { reused, userId }.
+   */
+  qrLoginStep({ apiHash, deadline }) {
+    if (this.mode !== "account") return Promise.reject(mtError("invalid_request", "account login methods are for account mode"));
+    return this.serial(async () => {
+      if (!this.homeDc) throw mtError("invalid_request", "connect first");
+      if (!apiHash || !this.apiId) throw mtError("invalid_request", "apiId and apiHash are required");
+      const home = this.dcs.get(this.homeDc);
+      if (home && home.loggedIn) return { reused: true, userId: home.userId };
+      let dc = this.homeDc;
+      let res = await this.authInvoke(dc, exportLoginToken({ apiId: this.apiId, apiHash }), "auth.LoginToken", deadline);
+      for (let hops = 0; res._ === "auth.loginTokenMigrateTo"; hops++) {
+        if (hops >= 2) throw mtError("protocol", "too many login migrations");
+        const target = Number(res.dc_id);
+        if (!(target >= 1 && target <= 5)) throw mtError("protocol", "bad login DC " + target);
+        dc = target;
+        try {
+          res = await this.authInvoke(dc, importLoginToken(res.token), "auth.LoginToken", deadline);
+        } catch (e) {
+          if (e && e.code === "password_needed") { const from = this.homeDc; this.homeDc = dc; if (from !== dc) await this.drop(from); }
+          throw e;
+        }
+      }
+      if (dc !== this.homeDc) await this.drop(this.homeDc); // the DC the token came from is not the account's: free its socket
+      if (res._ === "auth.loginTokenSuccess") return this.loggedIn(dc, res.authorization);
+      if (res._ === "auth.loginToken") return { token: res.token, expires: Number(res.expires) };
+      throw mtError("protocol", "unexpected answer to auth.exportLoginToken");
+    }, deadline);
+  }
+
+  /**
+   * The 2FA step: account.getPassword, the SRP proof (srp.js), auth.checkPassword, on the home DC. `password` is only
+   * used here: never kept, never logged. Each attempt spends one of PASSWORD_BUDGET; a stale SRP round (SRP_ID_INVALID)
+   * is retried once with a fresh getPassword. A wrong password throws `password_invalid`.
+   */
+  checkPassword(password, { deadline } = {}) {
+    if (this.mode !== "account") return Promise.reject(mtError("invalid_request", "account login methods are for account mode"));
+    return this.serial(async () => {
+      if (!this.homeDc) throw mtError("invalid_request", "connect first");
+      const home = this.dcs.get(this.homeDc);
+      if (home && home.loggedIn) return { reused: true, userId: home.userId };
+      if (this.store) loginBudget(this.store, this.now(), PASSWORD_BUDGET).record();
+      for (let attempt = 0; ; attempt++) {
+        const pw = await this.authInvoke(this.homeDc, getPassword(), "account.Password", deadline);
+        if (!pw.has_password || !pw.current_algo) throw mtError("protocol", "the account has no 2FA password");
+        const proof = srpCheck({ algo: pw.current_algo, srpB: pw.srp_B, srpId: BigInt(pw.srp_id) }, password);
+        try {
+          return this.loggedIn(this.homeDc, await this.authInvoke(this.homeDc, checkPassword(proof), "auth.Authorization", deadline));
+        } catch (e) {
+          if (e && e.code === "password_invalid" && e.rpc === "SRP_ID_INVALID" && attempt === 0) continue;
+          throw e;
+        }
+      }
+    }, deadline);
+  }
+
+  /** auth.logOut on the home DC (best effort: the caller forgets the session whatever happens). */
+  logOut({ deadline } = {}) {
+    if (this.mode !== "account") return Promise.reject(mtError("invalid_request", "account login methods are for account mode"));
+    return this.serial(async () => {
+      if (!this.homeDc) return false;
+      const home = this.dcs.get(this.homeDc);
+      if (!home || !home.loggedIn) return false;
+      await this.authInvoke(this.homeDc, logOut(), "auth.LoggedOut", deadline);
+      home.loggedIn = false;
+      return true;
+    }, deadline);
+  }
+
+  /** Makes DC `dc` act for the logged-in bot: export the authorization from the home DC, import it there. */
+  async authorize(dc, deadline) {
+    if (dc === this.homeDc) return;
+    await this.conn(dc, deadline);
+    const st = this.dcs.get(dc);
+    if (st && st.loggedIn) return;
+    const exp = parseExportedAuthorization(await this.invoke(this.homeDc, exportAuthorization(dc), { deadline }));
+    if (exp.ctor !== CTOR.exportedAuthorization) throw mtError("protocol", "unexpected answer to auth.exportAuthorization");
+    const auth = parseAuthorization(await this.invoke(dc, importAuthorization(exp), { deadline }));
+    if (auth.ctor !== CTOR.authAuthorization) throw mtError("protocol", "unexpected answer to auth.importAuthorization");
+    this.dcs.get(dc).loggedIn = true;
+  }
+
+  /**
+   * `limit` bytes of a document from `offset` (fewer at the end of the file), via upload.getFile with an
+   * InputDocumentFileLocation. `loc` is { id, accessHash, fileReference (Uint8Array), dcId? }. Offset a multiple of
+   * 4096, limit a multiple of 4096 dividing 1 MiB, never across a 1 MiB boundary (Telegram's rules, checked here first).
+   * Follows FILE_MIGRATE_n; FLOOD_WAIT_n, FILE_REFERENCE_EXPIRED... come back as typed errors. With `{ hex: true }`
+   * the bytes come back as a hex string, sliced out of the decrypted answer with no JS pass over them.
+   * With `{ thumbSize: "m" }` it reads the document's thumbnail of that type instead (thumb_size in the location):
+   * nothing is read ahead for it and it never touches the file's chunks read ahead.
+   */
+  getFile(loc, offset, limit, { hex = false, deadline, trace, ahead = [], abandon = false, thumbSize = "" } = {}) {
+    try {
+      if (!loc || loc.id === undefined || loc.accessHash === undefined || !(loc.fileReference && typeof loc.fileReference.length === "number")) {
+        throw mtError("invalid_request", "a location needs id, accessHash and fileReference");
+      }
+      if (typeof thumbSize !== "string" || !/^[A-Za-z0-9]{0,4}$/.test(thumbSize)) throw mtError("invalid_request", "a thumb size is 1 to 4 letters or digits");
+      checkRange(offset, limit);
+    } catch (e) {
+      return Promise.reject(e);
+    }
+    if (thumbSize) { ahead = []; abandon = false; }
+    const location = inputDocumentFileLocation({ id: BigInt(loc.id), accessHash: BigInt(loc.accessHash), fileReference: loc.fileReference, thumbSize });
+    const body = uploadGetFile(location, offset, limit);
+    // Chunks read ahead are kept by offset: a read asking a shorter limit there (the file's last chunk) uses them too.
+    const doc = String(loc.id) + ":" + toHex(loc.fileReference) + ":" + (thumbSize ? "t" + thumbSize + ":" : "");
+    const keyOf = (o) => doc + o;
+    const dropAhead = (k, a) => this.dropAhead(k, a);
+    return this.serial(async () => {
+      if (!this.homeDc) throw mtError("invalid_request", "connect first");
+      this.lastActiveAt = this.now();
+      let dc = Number(loc.dcId) || this.homeDc;
+      if (trace) { trace.pipe = "miss"; trace.ahead = 0; }
+      // The chunks to request right behind this one: not already requested, never this one, and never more than
+      // MAX_IN_FLIGHT chunk requests on the connection (abandoned ones still on the wire count): Telegram may pack all
+      // the answers in flight into one packet, and each MiB of it is 2 MiB of hex per copy under QuickJS's 64 MiB cap.
+      const sendAhead = async (c) => {
+        for (const a of ahead) {
+          const k = keyOf(a.offset);
+          if (this.ahead.has(k) || a.offset === offset) continue;
+          if (c.session.inflight() >= MAX_IN_FLIGHT) break;
+          try { checkRange(a.offset, a.limit); } catch { continue; }
+          const entry = await c.session.request(uploadGetFile(location, a.offset, a.limit), { hex: true });
+          this.maxInflight = Math.max(this.maxInflight, c.session.maxInflight);
+          this.ahead.set(k, { dc, session: c.session, entry, limit: a.limit });
+          if (trace) trace.ahead++;
+          // Bound both the count and the ANSWERED bytes held: drop the oldest until both fit.
+          while (this.ahead.size > MAX_AHEAD || this.aheadBytes() > MAX_AHEAD_BYTES) {
+            const oldest = this.ahead.entries().next().value;
+            if (!oldest || oldest[0] === k) break; // never the one just added
+            dropAhead(oldest[0], oldest[1]);
+          }
+        }
+      };
+      // A seek first: the chunks read ahead for this file that this read no longer wants are given up (their answers,
+      // when they come, are dropped without being kept); this read's own chunk, if read ahead, is kept.
+      if (abandon) {
+        const wanted = new Set([keyOf(offset), ...ahead.map((a) => keyOf(a.offset))]);
+        for (const [k, a] of [...this.ahead]) if (k.startsWith(doc) && !wanted.has(k)) dropAhead(k, a);
+      }
+      // A chunk requested ahead by an earlier read: its answer may already be here (or on its way).
+      const pre = this.ahead.get(keyOf(offset));
+      if (pre && pre.limit >= limit) {
+        this.ahead.delete(keyOf(offset));
+        const c = this.conns.get(pre.dc);
+        if (c && c.session === pre.session && !c.transport.closed) {
+          try {
+            const until = Math.min(this.now() + AHEAD_WAIT_MS, deadline === undefined ? Infinity : deadline - MIN_LEFT_MS);
+            let answer = await c.session.settle(pre.entry, until); // read-aheads are always asked as hex
+            let file;
+            try { file = parseUploadFileHex(answer); } finally { big.release(answer.length); answer = null; } // its last use
+            if (file.ctor === CTOR.uploadFile) {
+              if (trace) trace.pipe = "hit";
+              if (ahead.length) { try { await sendAhead(c); } catch (e) { this.log("request ahead not sent (" + describeError(e) + ")"); } } // keep the pipe full
+              const chunk = file.bytesHex.length > limit * 2 ? file.bytesHex.slice(0, limit * 2) : file.bytesHex;
+              return hex ? chunk : fromHex(chunk);
+            }
+          } catch (e) {
+            this.log("chunk read ahead not usable (" + describeError(e) + "): asking again");
+            if (!isServerAnswer(e) || c.session.broken) await this.drop(pre.dc); // the stream is in an unknown state
+          }
+        } else {
+          dropAhead(keyOf(offset), pre);
+        }
+      }
+      // The asked chunk goes out only with room on the wire (fewer than MAX_IN_FLIGHT in flight), never waiting long.
+      const makeRoom = (c) => c.session.drainBelow(MAX_IN_FLIGHT, Math.min(this.now() + ROOM_WAIT_MS, deadline === undefined ? Infinity : deadline - 3 * MIN_LEFT_MS));
+      for (let attempt = 0; attempt < 4; attempt++) {
+        try {
+          await this.authorize(dc, deadline);
+          let answer = await this.invoke(dc, body, { hex, deadline, trace, before: makeRoom, after: attempt === 0 && ahead.length ? sendAhead : undefined });
+          const tp = trace ? Date.now() : 0;
+          const file = hex ? parseUploadFileHex(answer) : parseUploadFile(answer);
+          if (hex) big.release(answer.length); // its last use: the answer below is a slice of it
+          answer = null;
+          if (trace) trace.parse += Date.now() - tp;
+          if (file.ctor === CTOR.uploadFileCdnRedirect) throw mtError("protocol", "CDN redirects are not supported");
+          if (file.ctor !== CTOR.uploadFile) throw mtError("protocol", "unexpected answer to upload.getFile");
+          return hex ? file.bytesHex : file.bytes;
+        } catch (e) {
+          if (e && e.code === "file_migrate" && e.dc !== dc) { dc = e.dc; continue; }
+          if (e && e.code === "auth_key_unregistered" && dc !== this.homeDc) continue; // authorize() again (a new key if it was dropped)
+          throw e;
+        }
+      }
+      throw mtError("protocol", "too many redirects for one chunk");
+    }, deadline, trace);
+  }
+
+  async close() {
+    await this.serial(async () => {
+      for (const dc of [...this.conns.keys()]) await this.drop(dc);
+    });
+  }
+}
+return { CHUNK, loginBudget, PASSWORD_BUDGET, TelegramClient };
+})();
+
 // ---- src/mtproto/discovery.js ----
 const __mod_src_mtproto_discovery = (() => {
 // Video discovery for a logged-in bot: which videos sit in the channels the bot administers and in private chats with
@@ -2641,6 +2964,8 @@ const SKIP_TYPES = new Set([
   "EmojiStatus", "ChatAdminRights", "ChatBannedRights", "Username", "ForumTopic", "PeerNotifySettings", "DraftMessage", "EncryptedMessage",
 ]);
 const skip = (name, type) => (type === "Update" ? !KEEP_UPDATES.has(name) : SKIP_TYPES.has(type));
+/** What an answer's decode may walk without building (shared with the account library). */
+const skipForIndex = skip;
 const VIDEO_MIMES = new Set(["application/x-matroska", "application/mp4", "application/x-mpegurl", "application/vnd.apple.mpegurl"]);
 
 /** The Bot API style chat id of a Peer: "-100<id>" for a channel, "-<id>" for a basic group, "<id>" for a user. */
@@ -3185,7 +3510,278 @@ function createDiscovery({ client, store, budgetBytes = DEFAULT_BUDGET_BYTES, pe
     entries: () => serial(async () => sorted(load().index)),
   };
 }
-return { chatIdOf, thumbOf, videoEntry, createDiscovery };
+return { skipForIndex, chatIdOf, thumbOf, videoEntry, createDiscovery };
+})();
+
+// ---- src/mtproto/account-library.js ----
+const __mod_src_mtproto_account_library = (() => {
+// The video library of a person's OWN Telegram account (account mode, 0.3.0), read only. Unlike a bot, an account can
+// list its chats and search them, so nothing here uses the update boxes:
+//   - messages.getDialogs lists the chats (channels, supergroups, basic groups and Saved Messages; private chats with
+//     other people are left out), at most 500 per listing, again every 30 minutes;
+//   - a chat is PROBED once (messages.search with inputMessagesFilterVideo, then inputMessagesFilterDocument for videos
+//     sent as files): only chats where a video exists become known to the shell, in the order they were found (`seen`),
+//     for its stable channel slots; a chat without videos is probed again after a day;
+//   - a chat the person switched on is walked with the same two filtered searches, newest first, 100 per call; once
+//     walked, each refresh asks only for what is newer than the highest message id seen (min_id);
+//   - channels.getMessages / messages.getMessages re-read one message (a fresh file_reference).
+// The client's call() only lets the reading methods of requests.js ACCOUNT_CALLS out: nothing here can send, edit,
+// delete, forward or mark anything read.
+//
+// Known limits: a video deleted in Telegram stays listed until it is played (the refetch finds it gone and drops it), or
+// until the chat is switched off and on again; an edited caption is seen only when the chat is read again from its start.
+const { mtError } = __mod_src_mtproto_errors;
+const { decode } = __mod_src_mtproto_schema_reader;
+const { videoEntry, chatIdOf, skipForIndex } = __mod_src_mtproto_discovery;
+const { getDialogs, searchMessages, channelsGetMessages, messagesGetMessages, FILTER } = __mod_src_mtproto_requests;
+
+const STATE_KEY = "tg.adiscovery";
+const VERSION = 1;
+const PAGE = 100;
+const DIALOG_PAGES = 5;                 // 500 chats per listing
+const LIST_EVERY_MS = 30 * 60 * 1000;
+const REPROBE_MS = 24 * 3600 * 1000;    // a chat without videos is looked at again after a day
+const DOC_PROBE = 20;                   // documents looked at to find a video sent as a file
+const FILTERS = [FILTER.video, FILTER.document];
+const MAX_TITLE = 100;
+const CHANNEL_BASE = 1000000000000n;
+const cap = (s, n) => { s = String(s || ""); return s.length > n ? s.slice(0, n) : s; };
+const ISOLATED = new Set(["protocol", "rpc_error"]);
+const errorOf = (e) => ({ code: e && e.code ? e.code : "error", message: String(e && e.message) });
+
+const fresh = () => ({ v: VERSION, chats: {}, dlg: null, listedAt: 0 });
+function parseState(raw) {
+  let v;
+  try { v = typeof raw === "string" ? JSON.parse(raw) : raw; } catch { return fresh(); }
+  if (!v || v.v !== VERSION || !v.chats || typeof v.chats !== "object" || Array.isArray(v.chats)) return fresh();
+  for (const [id, c] of Object.entries(v.chats)) {
+    if (!/^-?\d{1,20}$/.test(id) || !c || !["channel", "chat", "self"].includes(c.kind) || typeof c.id !== "string") return fresh();
+    if (c.kind === "channel" && typeof c.accessHash !== "string") return fresh();
+  }
+  return { v: VERSION, chats: v.chats, dlg: v.dlg && typeof v.dlg === "object" ? v.dlg : null, listedAt: Number(v.listedAt) || 0 };
+}
+/** The InputPeer of a known chat. */
+function peerOf(c) {
+  if (c.kind === "self") return { kind: "self" };
+  if (c.kind === "chat") return { kind: "chat", id: c.id };
+  return { kind: "channel", id: c.id, accessHash: c.accessHash };
+}
+
+/**
+ * createAccountDiscovery({ client, store, now, log }): `client` a TelegramClient in account mode, logged in. The same
+ * operations the bot's discovery gives the shell: refresh, refetch, resetChannel. Operations run one at a time.
+ */
+function createAccountDiscovery({ client, store, now = () => Date.now(), log = () => {} }) {
+  if (!client || typeof client.call !== "function") throw mtError("invalid_request", "createAccountDiscovery needs a TelegramClient");
+  let chain = Promise.resolve();
+  const serial = (fn) => { const run = chain.then(fn, fn); chain = run.then(() => {}, () => {}); return run; };
+  const load = () => { let raw = null; try { raw = store.get(STATE_KEY); } catch { raw = null; } return parseState(raw); };
+  const save = (st) => { try { store.set(STATE_KEY, JSON.stringify(st)); return true; } catch (e) { log("account state not saved: " + (e && e.code)); return false; } };
+  const call = async (body, expect, deadline) => decode(await client.call(body, { deadline: Number.isFinite(deadline) ? deadline : undefined }), { expect, skip: skipForIndex });
+  const nextSeen = (st) => Object.values(st.chats).reduce((m, x) => Math.max(m, Number.isInteger(x.seen) ? x.seen : 0), 0) + 1;
+
+  /** Chats and users of an answer: channels with a usable access hash, basic groups, and the person's own user. */
+  function learn(st, res, listed, dropped) {
+    const known = new Map();
+    for (const c of res.chats || []) {
+      if (c._ === "channel" && !c.min && c.access_hash !== undefined && !c.left) known.set(String(-(CHANNEL_BASE + BigInt(c.id))), { kind: "channel", id: String(c.id), accessHash: String(c.access_hash), title: cap(c.title, MAX_TITLE) });
+      else if (c._ === "chat" && !c.deactivated && !c.migrated_to && !c.left) known.set(String(-BigInt(c.id)), { kind: "chat", id: String(c.id), title: cap(c.title, MAX_TITLE) });
+      else if (c._ === "channelForbidden" || c._ === "chatForbidden" || (c._ === "channel" && c.left)) {
+        const key = c._ === "chatForbidden" ? String(-BigInt(c.id)) : String(-(CHANNEL_BASE + BigInt(c.id)));
+        if (st.chats[key]) { delete st.chats[key]; dropped.push(key); }
+      }
+    }
+    for (const u of res.users || []) if (u._ === "user" && u.self) known.set(String(u.id), { kind: "self", id: String(u.id), title: "" });
+    for (const [key, c] of known) {
+      const old = st.chats[key];
+      if (old) { old.title = c.title; if (c.accessHash) old.accessHash = c.accessHash; }
+      else if (listed) st.chats[key] = { ...c, probe: null, probedAt: 0, scan: { f: 0, offsetId: 0 }, top: 0 };
+    }
+    return known;
+  }
+
+  function refresh({ maxPages = 20, shouldScan = null, commit = true, deadline = Infinity } = {}) {
+    return serial(async () => {
+      const st = load();
+      const upserted = new Map();
+      const dropped = [];
+      const errors = [];
+      let pages = 0, incomplete = false, floodWait;
+      const spend = () => { if (pages >= maxPages || now() + 1500 >= deadline) { incomplete = true; return false; } pages++; return true; };
+      const put = (res, chatKey) => {
+        const c = st.chats[chatKey];
+        let low = null, n = 0;
+        for (const m of res.messages || []) {
+          if (!m || m._ !== "message") continue;
+          n++;
+          if (low === null || m.id < low) low = m.id;
+          if (chatIdOf(m.peer_id) !== chatKey) continue;
+          const e = videoEntry(m, c ? c.title : "");
+          if (!e) continue;
+          upserted.set(e.key, e);
+          if (c) c.maxSeen = Math.max(c.maxSeen || 0, m.id);
+        }
+        return { low, n };
+      };
+      try {
+        // 1. the chat list (every 30 minutes, or to finish a listing an earlier pass left)
+        if (st.dlg || !st.listedAt || now() - st.listedAt >= LIST_EVERY_MS) {
+          const d = st.dlg || { offsetDate: 0, offsetId: 0, peer: null, listed: [], pages: 0 };
+          st.dlg = d;
+          while (st.dlg) {
+            if (!spend()) break;
+            const res = await call(getDialogs({ offsetDate: d.offsetDate, offsetId: d.offsetId, offsetPeer: d.peer, limit: PAGE }), "messages.Dialogs", deadline);
+            if (res._ === "messages.dialogsNotModified") { st.dlg = null; break; }
+            const known = learn(st, res, true, dropped);
+            const users = new Map((res.users || []).map((u) => [String(u.id), u]));
+            for (const dl of res.dialogs || []) { const key = chatIdOf(dl.peer); if (key !== null && known.has(key)) d.listed.push(key); }
+            d.pages++;
+            const list = res.dialogs || [];
+            const last = list[list.length - 1];
+            const done = res._ === "messages.dialogs" || list.length < PAGE || !last;
+            if (!done && last) {
+              const top = (res.messages || []).find((m) => m.id === last.top_message && chatIdOf(m.peer_id) === chatIdOf(last.peer));
+              const key = chatIdOf(last.peer);
+              const k = known.get(key);
+              let peer = null;
+              if (k) peer = peerOf(k);
+              else if (last.peer._ === "peerUser" && users.get(key) && users.get(key).access_hash !== undefined) peer = { kind: "user", id: key, accessHash: String(users.get(key).access_hash) };
+              if (!peer) { log("dialog list: no cursor for the last chat, listing ends here"); }
+              else { d.offsetDate = top ? top.date : 0; d.offsetId = last.top_message; d.peer = peer; }
+              if (!peer || d.pages >= DIALOG_PAGES) { st.dlg = null; st.listedAt = now(); break; }
+              continue;
+            }
+            // A complete listing: a chat that is not in it any more is gone (left, deleted or never again a dialog).
+            const seenNow = new Set(d.listed);
+            for (const key of Object.keys(st.chats)) if (!seenNow.has(key)) { if (st.chats[key].probe === "video") dropped.push(key); delete st.chats[key]; }
+            st.dlg = null;
+            st.listedAt = now();
+          }
+        }
+        // 2. probes: which chats hold a video (Saved Messages first, then in dialog order)
+        if (!incomplete) {
+          const keys = Object.keys(st.chats).sort((a, b) => (st.chats[a].kind === "self" ? -1 : 0) - (st.chats[b].kind === "self" ? -1 : 0));
+          for (const key of keys) {
+            const c = st.chats[key];
+            if (!c || (c.probe === "video") || (c.probe === "none" && now() - c.probedAt < REPROBE_MS)) continue;
+            if (!spend()) break;
+            let found = false;
+            try {
+              const v = await call(searchMessages({ peer: peerOf(c), filter: FILTER.video, limit: 1 }), "messages.Messages", deadline);
+              found = (v.messages || []).some((m) => m._ === "message" && videoEntry(m, ""));
+              if (!found) {
+                if (!spend()) break;
+                const docs = await call(searchMessages({ peer: peerOf(c), filter: FILTER.document, limit: DOC_PROBE }), "messages.Messages", deadline);
+                found = (docs.messages || []).some((m) => m._ === "message" && videoEntry(m, ""));
+              }
+            } catch (e) {
+              if (e.code === "channel_invalid") { delete st.chats[key]; dropped.push(key); continue; }
+              if (!ISOLATED.has(e.code)) throw e;
+              errors.push({ scope: "channel", chatId: key, ...errorOf(e) });
+              continue;
+            }
+            c.probedAt = now();
+            if (found && c.probe !== "video") { c.probe = "video"; c.seen = nextSeen(st); }
+            else if (!found) c.probe = "none";
+          }
+        }
+        // 3. the chats the person switched on: the walk from the newest, or what is newer than the last one seen
+        if (!incomplete) {
+          const keys = Object.keys(st.chats).filter((k) => st.chats[k].probe === "video").sort((a, b) => st.chats[a].seen - st.chats[b].seen);
+          for (const key of keys) {
+            if (incomplete) break;
+            if (shouldScan && !shouldScan(key)) continue;
+            const c = st.chats[key];
+            try {
+              if (c.scan) {
+                while (c.scan && spend()) {
+                  const res = await call(searchMessages({ peer: peerOf(c), filter: FILTERS[c.scan.f], offsetId: c.scan.offsetId, limit: PAGE }), "messages.Messages", deadline);
+                  learn(st, res, false, dropped);
+                  const { low, n } = put(res, key);
+                  if (n < PAGE || low === null) {
+                    if (c.scan.f + 1 < FILTERS.length) c.scan = { f: c.scan.f + 1, offsetId: 0 };
+                    else { c.scan = null; c.top = Math.max(c.top || 0, c.maxSeen || 0); }
+                  } else c.scan.offsetId = low;
+                }
+              } else {
+                for (let f = 0; f < FILTERS.length && !incomplete; f++) {
+                  let offsetId = 0;
+                  for (;;) {
+                    if (!spend()) break;
+                    const res = await call(searchMessages({ peer: peerOf(c), filter: FILTERS[f], offsetId, minId: c.top || 0, limit: PAGE }), "messages.Messages", deadline);
+                    learn(st, res, false, dropped);
+                    const { low, n } = put(res, key);
+                    if (n < PAGE || low === null) break;
+                    offsetId = low;
+                  }
+                }
+                if (!incomplete) c.top = Math.max(c.top || 0, c.maxSeen || 0);
+              }
+            } catch (e) {
+              if (e.code === "channel_invalid") { log("a chat was dropped: " + e.code); delete st.chats[key]; dropped.push(key); continue; }
+              if (!ISOLATED.has(e.code)) throw e;
+              log("a chat was skipped: " + e.code);
+              errors.push({ scope: "channel", chatId: key, ...errorOf(e) });
+            }
+          }
+        }
+      } catch (e) {
+        const outOfTime = e.code === "timeout" && e.deadline === true;
+        if (e.code !== "flood_wait" && !outOfTime) throw e; // nothing of this pass is kept
+        incomplete = true;
+        if (!outOfTime) floodWait = e.seconds;
+      }
+      const out = {
+        changes: { upserted: [...upserted.values()].filter((e) => st.chats[e.chatId]).sort((a, b) => b.date - a.date), removed: [], droppedChats: [...new Set(dropped)], commonDeletedIds: [] },
+        state: { chats: Object.fromEntries(Object.entries(st.chats).filter(([, c]) => c.probe === "video").map(([k, c]) => [k, { title: c.title, kind: c.kind, seen: c.seen }])) },
+        checking: Object.values(st.chats).filter((c) => c.probe === null).length,
+        errors,
+        pages,
+      };
+      if (incomplete) out.incomplete = true;
+      if (floodWait !== undefined) out.floodWait = floodWait;
+      out.commit = () => save(st);
+      if (commit) out.commit();
+      return out;
+    });
+  }
+
+  /** The entry's message again (a fresh file_reference), or null when it is gone or no longer a video. */
+  function refetch(entry, { deadline } = {}) {
+    return serial(async () => {
+      if (!entry || typeof entry.chatId !== "string" || !Number.isInteger(entry.msgId)) throw mtError("invalid_request", "refetch needs an IndexEntry");
+      const st = load();
+      const c = st.chats[entry.chatId];
+      if (!c) throw mtError("channel_invalid", "the chat is not known");
+      const res = c.kind === "channel"
+        ? await call(channelsGetMessages({ channelId: c.id, accessHash: c.accessHash, ids: [entry.msgId] }), "messages.Messages", deadline)
+        : await call(messagesGetMessages([entry.msgId]), "messages.Messages", deadline);
+      const m = (res.messages || []).find((x) => x.id === entry.msgId);
+      if (!m || m._ !== "message" || chatIdOf(m.peer_id) !== entry.chatId) return null;
+      const e = videoEntry(m, c.title);
+      return e ? { ...e } : null;
+    });
+  }
+
+  /** The chat is read again from its newest message on the next refresh. */
+  function resetChannel(chatId) {
+    return serial(async () => {
+      const st = load();
+      const c = st.chats[String(chatId)];
+      if (!c) return false;
+      c.scan = { f: 0, offsetId: 0 };
+      c.top = 0;
+      delete c.maxSeen;
+      save(st);
+      return true;
+    });
+  }
+
+  return { refresh, refetch, resetChannel, stateKey: STATE_KEY };
+}
+
+const ACCOUNT_STATE_KEY = STATE_KEY;
+return { createAccountDiscovery, ACCOUNT_STATE_KEY };
 })();
 
 // ---- src/shell/store.js ----
@@ -3197,7 +3793,11 @@ const __mod_src_shell_store = (() => {
 //   tg.shell           this shell's state: channel slots, purges, the index marker, last error   < 2 KB
 // The video entries are never here: they live in kino.catalog. No setting value is ever written here; `fp` is a
 // truncated SHA-256 of the api_id and the bot token, so a new bot starts from scratch.
-const KEYS = Object.freeze({ budget: "mtproto.botLogins", session: "tg.session", discovery: "tg.discovery", shell: "tg.shell", login: "tg.login" });
+//   tg.usession        account mode: the account's session, sealed like tg.session, never synced  ~0.6 KB per DC
+//   tg.adiscovery      account mode: the chats with videos and how far each was read             ~0.2 KB per chat
+//   tg.qr              account mode: a QR login under way ({ fp, stage, until }; never the token)  < 100 B
+//   tg.login           a login refused, delayed, or an account session Telegram ended            < 100 B
+const KEYS = Object.freeze({ budget: "mtproto.botLogins", session: "tg.session", discovery: "tg.discovery", shell: "tg.shell", login: "tg.login", usession: "tg.usession", adiscovery: "tg.adiscovery", qr: "tg.qr", accountLogins: "mtproto.accountLogins" });
 
 function readJson(key) {
   let raw = null;
@@ -3235,6 +3835,7 @@ const __mod_src_shell_live = (() => {
 const { TelegramClient } = __mod_src_mtproto_client;
 const { TELEGRAM_PUBLIC_KEYS } = __mod_src_mtproto_keys;
 const { createDiscovery } = __mod_src_mtproto_discovery;
+const { createAccountDiscovery, ACCOUNT_STATE_KEY } = __mod_src_mtproto_account_library;
 const { KEYS, readJson, writeJson, remove, kinoStore } = __mod_src_shell_store;
 const { shellError } = __mod_src_shell_errors;
 
@@ -3242,18 +3843,25 @@ const { shellError } = __mod_src_shell_errors;
 const PUBLIC_KEYS = TELEGRAM_PUBLIC_KEYS;
 const FIRST_DC = 2;
 
-/** The person's settings (trimmed); `complete` when all three are there. Never logged, never stored. */
+/**
+ * The person's settings (trimmed). `mode` is "bot" (the default, a bot in the person's channels) or "account" (the
+ * person's own account, read only, signed in with a QR). `complete` when the mode has what it needs. Never logged,
+ * never stored.
+ */
 function credentials() {
   const get = (k) => String(kino.config.get(k) ?? "").trim();
-  const apiId = get("api_id"), apiHash = get("api_hash"), botToken = get("bot_token");
-  return { apiId, apiHash, botToken, complete: !!(apiId && apiHash && botToken) };
+  const mode = kino.config.get("access") === "account" ? "account" : "bot";
+  const apiId = get("api_id"), apiHash = get("api_hash"), botToken = mode === "bot" ? get("bot_token") : "";
+  return { mode, apiId, apiHash, botToken, complete: !!(apiId && apiHash && (mode === "account" || botToken)) };
 }
 
 const digest = (text) => kino.crypto.hash("sha256", text).slice(0, 16);
-/** Which bot (and api_id) a session belongs to. */
-const sessionFp = (c) => digest("session\n" + c.apiId + "\n" + c.botToken);
+/** Which bot (and api_id) a session belongs to; in account mode, which api_id (the account is learned at the login). */
+const sessionFp = (c) => (c.mode === "account" ? digest("account\n" + c.apiId) : digest("session\n" + c.apiId + "\n" + c.botToken));
 /** Which exact settings a refused login was made with (api_hash included). */
-const loginFp = (c) => digest("login\n" + c.apiId + "\n" + c.apiHash + "\n" + c.botToken);
+const loginFp = (c) => (c.mode === "account" ? digest("alogin\n" + c.apiId + "\n" + c.apiHash) : digest("login\n" + c.apiId + "\n" + c.apiHash + "\n" + c.botToken));
+/** Where the mode's session lives: the bot's and the account's are separate keys, never mixed. */
+const sessionStoreKey = (c) => (c.mode === "account" ? KEYS.usession : KEYS.session);
 
 let live = null;       // { fp, device, client, discovery, saved, ready }
 let connecting = null; // the one connect in flight: every caller of this runtime waits on it
@@ -3295,14 +3903,12 @@ function checkDevice() {
   return checking;
 }
 async function runCheckDevice() {
-  const stored = readJson(KEYS.session);
+  const stored = [readJson(KEYS.session), readJson(KEYS.usession)].filter(Boolean);
   let mark = await deviceMark();
-  if (stored && (!mark || stored.device !== mark)) {
+  if (stored.some((x) => !mark || x.device !== mark)) {
     kino.log("stored session was not made on this device: a new session and a new index");
     if (live) await close();
-    remove(KEYS.session);
-    remove(KEYS.discovery);
-    remove(KEYS.shell);
+    for (const k of [KEYS.session, KEYS.usession, KEYS.discovery, ACCOUNT_STATE_KEY, KEYS.shell, KEYS.qr]) remove(k);
     await kino.catalog.clear();
     mark = null;
   }
@@ -3311,6 +3917,7 @@ async function runCheckDevice() {
 
 function newClient(c) {
   return new TelegramClient({
+    mode: c.mode,
     apiId: Number(c.apiId),
     publicKeys: PUBLIC_KEYS,
     store: kinoStore,
@@ -3330,7 +3937,11 @@ function newClient(c) {
 // under a key derived (HMAC-SHA256) from the bot token and the api_hash, with a random per-install salt kept beside it.
 // The fingerprint and the device mark stay readable (they hold no secret). A changed token or api_hash cannot open the
 // old blob: that is no session (a new one, one login inside the budget). Nothing of it is ever logged.
-const sessionKey = (c, salt) => kino.crypto.hmac("sha256", c.apiHash + "\n" + c.botToken, "tg.session\n" + salt, { keyEncoding: "utf8", inputEncoding: "utf8", outputEncoding: "hex" });
+// The account's session (tg.usession) is sealed the same way under the api_hash and api_id: whoever reads the plain
+// kino.storage (a backup file, a dump) gets nothing usable without the password settings, which Kino keeps encrypted.
+const sessionKey = (c, salt) => (c.mode === "account"
+  ? kino.crypto.hmac("sha256", c.apiHash + "\naccount:" + c.apiId, "tg.usession\n" + salt, { keyEncoding: "utf8", inputEncoding: "utf8", outputEncoding: "hex" })
+  : kino.crypto.hmac("sha256", c.apiHash + "\n" + c.botToken, "tg.session\n" + salt, { keyEncoding: "utf8", inputEncoding: "utf8", outputEncoding: "hex" }));
 
 function sealState(key, salt, state) {
   const iv = kino.crypto.randomBytes(12);
@@ -3359,7 +3970,7 @@ function saveSession() {
   const state = live.client.exportState();
   const text = JSON.stringify(state);
   if (text === live.saved) return;
-  if (writeJson(KEYS.session, { v: 2, fp: live.fp, device: live.device, ...sealState(live.key, live.salt, state) })) live.saved = text;
+  if (writeJson(live.skey, { v: 2, fp: live.fp, device: live.device, ...sealState(live.key, live.salt, state) })) live.saved = text;
 }
 
 // ---- logins that must wait ----
@@ -3371,6 +3982,7 @@ function loginBlocked(c) {
   const rec = readJson(KEYS.login);
   if (!rec || rec.fp !== loginFp(c)) return null;
   if (rec.kind === "token" || rec.kind === "api_id") return shellError(rec.kind, "login refused before");
+  if (rec.kind === "closed") return null; // an account session Telegram ended: only a reason to show, the QR login clears it
   if ((rec.kind === "flood" || rec.kind === "budget") && Number(rec.until) > Date.now()) {
     return shellError(rec.kind, "login must wait", { seconds: Math.max(1, Math.ceil((Number(rec.until) - Date.now()) / 1000)) });
   }
@@ -3390,24 +4002,31 @@ function recordLoginFailure(c, e) {
  * flight (cleared when it fails), so concurrent calls never build two clients or spend two logins. `shell.refused`
  * marks a login Telegram refused with these exact settings: it is not tried again.
  */
-function connect(c, shell, { deadline, noLogin = false } = {}) {
+function connect(c, shell, { deadline, noLogin = false, loginFlow = false } = {}) {
   const fp = sessionFp(c);
-  if (live && live.fp === fp && live.ready) return Promise.resolve(live);
+  if (live && live.fp === fp && live.mode === c.mode && live.ready) return Promise.resolve(live);
   // A picture never logs in: it opens on its own (Kino runs a plugin's calls one at a time) and gives up before a login.
-  if (noLogin) return open(c, shell, deadline, true);
-  if (!connecting) connecting = open(c, shell, deadline, false).finally(() => { connecting = null; });
+  // The account's QR login (`loginFlow`, only from a settings action or the settings form) gets the client unlogged.
+  if (noLogin || loginFlow) return open(c, shell, deadline, noLogin, loginFlow);
+  if (!connecting) connecting = open(c, shell, deadline, false, false).finally(() => { connecting = null; });
   return connecting;
 }
 
 /** Connect and login, each request inside `deadline` (the first caller's: whoever joins waits on the same one). */
-async function open(c, shell, deadline, noLogin) {
+async function open(c, shell, deadline, noLogin, loginFlow = false) {
   const fp = sessionFp(c);
-  if (live && live.fp !== fp) await close();
+  if (live && (live.fp !== fp || live.mode !== c.mode)) await close();
   if (shell.refused && shell.refused.fp === loginFp(c)) throw shellError(shell.refused.kind, "login refused before");
+  // An account with no session on this device: nothing to open (no key exchange either) until the person's QR login.
+  if (c.mode === "account" && !loginFlow && !live && !readJson(sessionStoreKey(c))) {
+    const rec = readJson(KEYS.login);
+    throw shellError(rec && rec.fp === loginFp(c) && rec.kind === "closed" ? "closed" : "signin", "no account session");
+  }
   const t0 = Date.now();
   if (!live) {
     const device = await checkDevice();
-    const stored = readJson(KEYS.session);
+    const skey = sessionStoreKey(c);
+    const stored = readJson(skey);
     let client = newClient(c);
     let saved = null;
     const mine = stored && stored.fp === fp && stored.device === device ? stored : null;
@@ -3424,15 +4043,31 @@ async function open(c, shell, deadline, noLogin) {
       client = newClient(c);
       await client.connect(FIRST_DC, undefined, { deadline });
     }
-    live = { fp, device, client, saved: mine && mine.v === 2 ? saved : null, key: sessionKey(c, salt), salt, ready: false, discovery: createDiscovery({ client, store: kinoStore, persistEntries: false, log: (m) => kino.log("discovery: " + m) }) };
+    const discovery = c.mode === "account"
+      ? createAccountDiscovery({ client, store: kinoStore, log: (m) => kino.log("discovery: " + m) })
+      : createDiscovery({ client, store: kinoStore, persistEntries: false, log: (m) => kino.log("discovery: " + m) });
+    live = { fp, mode: c.mode, skey, device, client, saved: mine && mine.v === 2 ? saved : null, key: sessionKey(c, salt), salt, ready: false, discovery };
     if (mine && mine.v === 1) saveSession(); // the old plaintext session is rewritten encrypted at once
   }
   const t1 = Date.now();
   let who = null;
   if (live.client.needsLogin()) {
     if (noLogin) throw shellError("unavailable", "no login on this device");
+    if (c.mode === "account") {
+      // An account never logs in by itself: only the person's QR login (a settings action) does.
+      lastOpen = { connect: t1 - t0, loginms: 0, login: "-" };
+      saveSession();
+      if (loginFlow) return live;
+      const rec = readJson(KEYS.login);
+      throw shellError(rec && rec.fp === loginFp(c) && rec.kind === "closed" ? "closed" : "signin", "no account session");
+    }
     const blocked = loginBlocked(c);
     if (blocked) throw blocked;
+  }
+  if (c.mode === "account") {
+    lastOpen = { connect: t1 - t0, loginms: 0, login: "reused" };
+    live.ready = true;
+    return live;
   }
   try {
     who = await live.client.botLogin({ apiHash: c.apiHash, botToken: c.botToken, deadline });
@@ -3458,6 +4093,7 @@ async function withSession(c, shell, fn, { deadline } = {}) {
     return await fn(l);
   } catch (e) {
     if (!e || e.code !== "auth_key_unregistered") throw e;
+    if (c.mode === "account") { await sessionClosed(c); throw shellError("closed", "account session ended"); }
     kino.log("session lost (" + (e.rpc && /^[A-Z_]{1,40}$/.test(e.rpc) ? e.rpc : "transport") + "): one new login");
     l.ready = false;
     saveSession();
@@ -3477,21 +4113,38 @@ async function close() {
   if (l) { try { await l.client.close(); } catch { /* already closed */ } }
 }
 
+/**
+ * An account session Telegram ended (SESSION_REVOKED, AUTH_KEY_UNREGISTERED: the person closed it in Settings ▸
+ * Devices): the key is dropped and the reason kept, and nothing logs in again by itself. Never a loop.
+ */
+async function sessionClosed(c) {
+  kino.log("account session ended by Telegram: sign in again");
+  await close();
+  remove(KEYS.usession);
+  writeJson(KEYS.login, { fp: loginFp(c), kind: "closed" });
+}
+
 /** Forgets the session of this device (the login budget stays: it protects the bot from a flood wait). */
 async function forgetSession() {
   await close();
   remove(KEYS.session);
+  remove(KEYS.usession);
 }
 
+/** The live client of this runtime when it is open for these settings (the account's login flow). */
+const liveFor = (c) => (live && live.fp === sessionFp(c) && live.mode === c.mode ? live : null);
+/** The account just logged in (the QR or the password): the live client is ready, the session saved. */
+function markLoggedIn() { if (live) { live.ready = true; saveSession(); } }
+
 const hasStoredLogin = (c) => {
-  const s = readJson(KEYS.session);
+  const s = readJson(sessionStoreKey(c));
   if (!s || s.fp !== sessionFp(c)) return false;
   const state = openState(s, c);
   if (!state) return false;
   const home = state.dcs[String(state.homeDc)];
   return !!(home && home.loggedIn);
 };
-return { credentials, sessionFp, loginFp, lastOpenTiming, DEVICE_ROW, deviceMark, markDevice, checkDevice, saveSession, connect, withSession, idleReset, close, forgetSession, hasStoredLogin };
+return { credentials, sessionFp, loginFp, sessionStoreKey, lastOpenTiming, DEVICE_ROW, deviceMark, markDevice, checkDevice, saveSession, loginBlocked, recordLoginFailure, connect, withSession, idleReset, close, sessionClosed, forgetSession, liveFor, markLoggedIn, hasStoredLogin };
 })();
 
 // ---- src/shell/timing.js ----
@@ -3875,16 +4528,17 @@ const __mod_src_shell_library = (() => {
 // The video library: Telegram's channels through the discovery, kept in kino.catalog (one row per video), and the
 // rows, pages and searches Kino shows, read from the catalog only.
 //
-// Channels: the bot learns every channel it administers; the slots are the first 8 of them by ascending channel id,
-// recomputed from the whole set at every refresh (a channel the bot lost frees its slot), so the same bot gives the same
-// slot -> channel mapping on every device once they have seen the same channels. The slot's toggle in the settings
-// (which syncs) says whether that channel is shown and indexed. A channel that is
-// off is never scanned and has no rows: turning it off removes its rows from the catalog (by id, in steps); turning
-// it on reads it again from its start. Slot 1's toggle starts on, the others off (the manifest's defaults).
+// Channels: the bot learns every channel it administers (account mode: every chat of the account where a video exists);
+// they get the 6 slots in the order they were first seen, and keep them (see assignSlots). The slot's toggle in the
+// settings (which syncs) says whether that channel is shown and indexed. A channel that is off is never scanned and has
+// no rows: turning it off removes its rows from the catalog (by id, in steps); turning it on reads it again from its
+// start. Slot 1's toggle starts on, the others off (the manifest's defaults). Six, not more: Kino's settings contract
+// allows 12 valued settings and 16 others per plugin, and account mode needed two of the old eight toggles' places.
 //
 // Refresh: from Home (at most every 5 minutes, sooner while a pass is unfinished or a toggle changed) and from the
 // "Actualizar ahora" action. Never from search. A refresh that fails keeps the old rows and stores the error.
-const { withSession, credentials, saveSession, loginFp, sessionFp, forgetSession, hasStoredLogin: hasLogin, checkDevice, deviceMark, markDevice, DEVICE_ROW } = __mod_src_shell_live;
+const { withSession, credentials, saveSession, loginFp, sessionFp, forgetSession, hasStoredLogin: hasLogin, checkDevice, deviceMark, markDevice, DEVICE_ROW, close: closeLive } = __mod_src_shell_live;
+const { ACCOUNT_STATE_KEY } = __mod_src_mtproto_account_library;
 const { KEYS, readJson, writeJson, remove } = __mod_src_shell_store;
 const { shellError, kindOf } = __mod_src_shell_errors;
 const { t, minutes, videoCount } = __mod_src_shell_text;
@@ -3893,7 +4547,7 @@ const { lastOpenTiming } = __mod_src_shell_live;
 const { nameOf, carry, displayTitle, posterOf, backdropOf, enrichStep, tmdbOn, viewOf } = __mod_src_shell_enrich;
 const { clip, cleanText } = __mod_src_shell_clean;
 
-const SLOTS = 8;
+const SLOTS = 6;
 const REFRESH_MS = 5 * 60 * 1000;
 const BATCH = 500;              // kino.catalog: items per upsert, ids per get/remove
 const MAX_PAGES = 25;           // discovery RPCs per refresh (Home has 20 s)
@@ -3906,14 +4560,36 @@ const HLS = /mpegurl/i;
 
 // ---- shell state (tg.shell) ----
 
-const freshShell = (fp) => ({ v: 1, fp, slots: [], missing: [], titles: {}, applied: [], top: {}, purge: [], indexedAt: 0, incomplete: false, count: 0, unslotted: 0, error: null, refused: null, channelErrors: 0, en: { off: 0, at: 0, done: false } });
+const freshShell = (fp) => ({ v: 1, fp, slots: [], missing: [], waiting: [], wasOn: [], titles: {}, selfId: null, applied: [], top: {}, purge: [], indexedAt: 0, incomplete: false, count: 0, unslotted: 0, checking: 0, error: null, refused: null, channelErrors: 0, en: { off: 0, at: 0, done: false } });
 
 function loadShell(c) {
   const s = readJson(KEYS.shell);
   const fp = c && c.complete ? sessionFp(c) : null;
   if (!s || s.v !== 1 || !Array.isArray(s.slots)) return freshShell(fp);
-  return { ...freshShell(fp), ...s };
+  return migrateSlots({ ...freshShell(fp), ...s });
 }
+
+/**
+ * 0.2.x had 8 slots, 0.3.0 has 6. The channels of slots 7 and 8 are not dropped and nothing moves: they wait first in
+ * line for a place (in their old order), marked when they were switched on, so the status line can say so and how to
+ * give them one (switch a place off, then "Dar lugar a los que esperan"). Their rows go with the next refresh's purge,
+ * as for any channel switched off. Slots 1 to 6 keep their channel and their toggle.
+ */
+function migrateSlots(shell) {
+  if (shell.slots.length <= SLOTS) return shell;
+  const over = shell.slots.slice(SLOTS);
+  const missing = new Set(shell.missing || []);
+  shell.slots = shell.slots.slice(0, SLOTS);
+  shell.missing = (shell.missing || []).filter((x) => shell.slots.includes(x));
+  const keep = over.filter((x) => !missing.has(x));
+  shell.waiting = [...keep, ...(shell.waiting || []).filter((x) => !keep.includes(x))];
+  shell.wasOn = [...new Set([...(shell.wasOn || []), ...keep.filter((x) => (shell.applied || []).includes(x))])];
+  shell.unslotted = shell.waiting.length;
+  return shell;
+}
+
+/** A chat's name as the person reads it (Saved Messages in their language). */
+const titleOf = (shell, chatId) => (chatId === shell.selfId ? t("chat.saved") : shell.titles[chatId] || chatId);
 const saveShell = (s) => writeJson(KEYS.shell, s);
 
 /** The chats (Bot API ids, "-100...") whose toggle is on. */
@@ -4048,7 +4724,9 @@ function problemOf(shell, now = Date.now()) {
 
 function noticeFor(problem, now = Date.now()) {
   switch (problem.kind) {
-    case "config": return notice("config", t("setup.config"));
+    case "config": return notice("config", t(credentials().mode === "account" ? "setup.configAccount" : "setup.config"));
+    case "signin": return notice("signin", t("setup.signin"));
+    case "closed": return notice("closed", t("setup.closed"));
     case "token": return notice("token", t("setup.token"));
     case "api_id": return notice("api_id", t("setup.apiId"));
     case "flood": return notice("flood", t("setup.flood", { min: minutes((problem.until - now) / 1000) }));
@@ -4061,8 +4739,9 @@ function noticeFor(problem, now = Date.now()) {
 /** Starts over for another bot: the index and the discovery state go (this device keeps its mark). */
 async function resetIndex(shell) {
   remove(KEYS.discovery);
-  shell.slots = []; shell.missing = []; shell.titles = {}; shell.applied = []; shell.top = {}; shell.purge = [];
-  shell.indexedAt = 0; shell.incomplete = false; shell.count = 0; shell.unslotted = 0; shell.channelErrors = 0;
+  remove(ACCOUNT_STATE_KEY);
+  shell.slots = []; shell.missing = []; shell.waiting = []; shell.wasOn = []; shell.titles = {}; shell.selfId = null; shell.applied = []; shell.top = {}; shell.purge = [];
+  shell.indexedAt = 0; shell.incomplete = false; shell.count = 0; shell.unslotted = 0; shell.checking = 0; shell.channelErrors = 0;
   const mark = await deviceMark();
   try { await kino.catalog.clear(); } catch (e) { kino.log("catalog clear failed: " + (e && e.code)); }
   await markDevice(mark || undefined);
@@ -4082,18 +4761,58 @@ async function countVideos() {
  * and can never take the owner's slot or push it out (a 9th channel just gets no slot). A channel the bot lost keeps
  * its slot, marked missing, so that slot is never handed to a newcomer whose videos would then show switched on.
  */
-function assignSlots(shell, channels) {
-  const order = (id) => (Number.isInteger(channels[id].seen) ? channels[id].seen : Number.MAX_SAFE_INTEGER);
-  const ids = Object.keys(channels || {}).sort((a, b) => order(a) - order(b) || (BigInt(a) < BigInt(b) ? -1 : BigInt(a) > BigInt(b) ? 1 : 0));
-  const known = new Set();
-  for (const rawId of ids) {
-    const chatId = channelChatId(rawId);
-    known.add(chatId);
-    shell.titles[chatId] = clip(channels[rawId].title, 100);
-    if (!shell.slots.includes(chatId) && shell.slots.length < SLOTS) shell.slots.push(chatId);
+function assignSlots(shell, chats) {
+  const order = (id) => (Number.isInteger(chats[id].seen) ? chats[id].seen : Number.MAX_SAFE_INTEGER);
+  const ids = Object.keys(chats || {}).sort((a, b) => order(a) - order(b) || (BigInt(a) < BigInt(b) ? -1 : BigInt(a) > BigInt(b) ? 1 : 0));
+  const known = new Set(ids);
+  for (const chatId of ids) {
+    if (chats[chatId].kind === "self") shell.selfId = chatId;
+    shell.titles[chatId] = clip(chats[chatId].title, 100);
   }
+  // Who waits for a place: those already waiting keep their turn (slots 7 and 8 of 0.2.x first), then the newcomers.
+  const waiting = (shell.waiting || []).filter((x) => known.has(x) && !shell.slots.includes(x));
+  for (const chatId of ids) if (!shell.slots.includes(chatId) && !waiting.includes(chatId)) waiting.push(chatId);
+  while (shell.slots.length < SLOTS && waiting.length) shell.slots.push(waiting.shift());
+  shell.waiting = waiting;
+  shell.wasOn = (shell.wasOn || []).filter((x) => waiting.includes(x));
   shell.missing = shell.slots.filter((chatId) => !known.has(chatId));
-  shell.unslotted = [...known].filter((chatId) => !shell.slots.includes(chatId)).length;
+  shell.unslotted = waiting.length;
+}
+
+/** The discovery's known chats as { chatId: { title, seen, kind } }, whichever the mode. */
+function chatsOf(res, mode) {
+  if (mode === "account") return (res.state && res.state.chats) || {};
+  const out = {};
+  for (const [rawId, ch] of Object.entries((res.state && res.state.channels) || {})) out[channelChatId(rawId)] = { title: ch.title, seen: ch.seen, kind: "channel" };
+  return out;
+}
+
+/**
+ * The "Dar lugar a los que esperan" action: every place whose toggle is off (or whose channel the bot lost) goes to the
+ * next channel waiting, in line order; the channel that had it waits at the end of the line. Nothing is switched on:
+ * the toggle of a place given away is off, so a newcomer (perhaps a stranger's channel) still shows nothing until the
+ * person turns it on. Answers how many places changed hands.
+ */
+function freeSlots() {
+  const c = credentials();
+  const shell = loadShell(c);
+  let n = 0;
+  const missing = new Set(shell.missing || []);
+  const line = shell.waiting.slice(); // only those waiting now get a place: one that gives its place waits after them
+  const gave = [];
+  for (let i = 0; i < shell.slots.length && line.length; i++) {
+    const chatId = shell.slots[i];
+    if (kino.config.get("ch" + (i + 1)) === true && !missing.has(chatId)) continue;
+    shell.slots[i] = line.shift();
+    if (!missing.has(chatId)) gave.push(chatId);
+    n++;
+  }
+  shell.waiting = [...line, ...gave];
+  shell.missing = shell.slots.filter((x) => missing.has(x));
+  shell.wasOn = (shell.wasOn || []).filter((x) => shell.waiting.includes(x));
+  shell.unslotted = shell.waiting.length;
+  if (n) saveShell(shell);
+  return n;
 }
 
 /** Applies one refresh's changes to the catalog: only videos of active channels, never an HLS playlist. */
@@ -4201,7 +4920,8 @@ async function runRefresh({ force = false } = {}) {
       for (let pass = 0; pass < 2 && Date.now() < deadline; pass++) {
         const active = activeChats(shell);
         const td = Date.now();
-        const res = await live.discovery.refresh({ maxPages: MAX_PAGES, deadline, commit: false, shouldScan: (rawId) => active.has(channelChatId(rawId)) });
+        const shouldScan = c.mode === "account" ? (chatId) => active.has(chatId) : (rawId) => active.has(channelChatId(rawId));
+        const res = await live.discovery.refresh({ maxPages: MAX_PAGES, deadline, commit: false, shouldScan });
         const tu = Date.now();
         tm.disc += tu - td; tm.pages += res.pages || 0;
         // The catalog first, then the discovery's progress: a write that fails (or a call cut off in between) leaves
@@ -4210,7 +4930,8 @@ async function runRefresh({ force = false } = {}) {
         tm.upsert += Date.now() - tu;
         res.commit();
         shell.channelErrors = (res.errors || []).filter((x) => x.scope === "channel").length;
-        assignSlots(shell, res.state.channels);
+        assignSlots(shell, chatsOf(res, c.mode));
+        shell.checking = Number(res.checking) || 0;
         shell.incomplete = !!res.incomplete;
         if (res.floodWait !== undefined) {
           shell.error = { kind: "flood", until: now + res.floodWait * 1000, at: now };
@@ -4265,6 +4986,19 @@ async function enrich(shell, started) {
 async function forget() {
   await forgetSession();
   remove(KEYS.discovery);
+  remove(ACCOUNT_STATE_KEY);
+  remove(KEYS.qr);
+  remove(KEYS.shell);
+  await kino.catalog.clear();
+  await markDevice();
+}
+
+/** Signs the account out on this device: its session, its index and the catalog go; a bot session stays. */
+async function forgetAccount() {
+  await closeLive();
+  remove(KEYS.usession);
+  remove(ACCOUNT_STATE_KEY);
+  remove(KEYS.qr);
   remove(KEYS.shell);
   await kino.catalog.clear();
   await markDevice();
@@ -4308,10 +5042,11 @@ async function homeRows({ shell, problem }, started = nowMs()) {
       // A channel's own row is optional: past the budget Home answers with what it has (never a timeout).
       if (nowMs() - started > HOME_BUDGET_MS) { kino.log("home: channel rows skipped, out of time"); break; }
       const r = await scanChat(chatId, shell.top[chatId] || 0, ROW_ITEMS);
-      if (r.items.length) rows.push({ id: "c" + chatId, title: clip(shell.titles[chatId] || chatId, 200), ref: "chan:" + chatId, items: r.items.map(itemOf) });
+      if (r.items.length) rows.push({ id: "c" + chatId, title: clip(titleOf(shell, chatId), 200), ref: "chan:" + chatId, items: r.items.map(itemOf) });
     }
   } else if (!problem) {
-    rows.push(shell.slots.length === 0 ? notice("noChannels", t("setup.noChannels")) : active.size === 0 ? notice("noneActive", t("setup.noneActive")) : notice("empty", t("setup.empty")));
+    const none = c.mode === "account" ? (shell.checking > 0 ? notice("checking", t("setup.checking")) : notice("noChannels", t("setup.noChats"))) : notice("noChannels", t("setup.noChannels"));
+    rows.push(shell.slots.length === 0 ? none : active.size === 0 ? notice("noneActive", t("setup.noneActive")) : notice("empty", t("setup.empty")));
   }
   return rows.slice(0, 20);
 }
@@ -4357,7 +5092,7 @@ async function rowFor(ref) {
   return viewOf(row);
 }
 
-const channelTabs = (shell) => shell.slots.filter((x) => activeChats(shell).has(x)).map((chatId) => ({ chatId, title: shell.titles[chatId] || chatId }));
+const channelTabs = (shell) => shell.slots.filter((x) => activeChats(shell).has(x)).map((chatId) => ({ chatId, title: titleOf(shell, chatId) }));
 
 /** The settings form's status lines (no network). */
 function statusLines() {
@@ -4366,30 +5101,213 @@ function statusLines() {
   const now = Date.now();
   const out = {};
   const problem = problemOf(shell, now);
-  if (!c.complete) out.account_status = t("status.missing");
+  if (!c.complete) out.account_status = t(c.mode === "account" ? "status.missingAccount" : "status.missing");
   else if (shell.refused && shell.refused.fp === loginFp(c)) out.account_status = t(shell.refused.kind === "token" ? "status.token" : "status.apiId");
   else if (problem && problem.kind === "flood") out.account_status = t("status.flood", { min: minutes((problem.until - now) / 1000) });
+  else if (c.mode === "account") out.account_status = accountStatus(c);
   else out.account_status = hasLogin(c) ? t("status.connected") : t("status.notYet");
+  // The places on one line (Kino's settings contract leaves no room for one line per place): "1 ✓ Pelis · 2 — Viajes".
+  const places = [];
   for (let i = 0; i < SLOTS; i++) {
     const chatId = shell.slots[i];
-    const key = "ch" + (i + 1) + "_name";
-    if (!chatId) { out[key] = t("slot.free"); continue; }
-    const title = shell.titles[chatId] || chatId;
-    out[key] = (shell.missing || []).includes(chatId) ? t("slot.gone", { title }) : kino.config.get("ch" + (i + 1)) === true ? title : t("slot.off", { title });
+    if (!chatId) { places.push(i + 1 + " " + t("slots.free")); continue; }
+    const name = clip(titleOf(shell, chatId), 24);
+    places.push(i + 1 + ((shell.missing || []).includes(chatId) ? " ✗ " + name + " (" + t("slots.gone") + ")" : kino.config.get("ch" + (i + 1)) === true ? " ✓ " + name : " — " + name));
   }
+  out.channels_status = shell.slots.length ? places.join(" · ").slice(0, 200) : t("slots.none");
+  const waiting = (shell.waiting || []).map((x) => ((shell.wasOn || []).includes(x) ? t("more.wasOn", { title: clip(titleOf(shell, x), 24) }) : clip(titleOf(shell, x), 24)));
+  out.channels_more = waiting.length ? t("more.list", { list: waiting.slice(0, 4).join(", ") + (waiting.length > 4 ? " +" + (waiting.length - 4) : "") }).slice(0, 200) : t("more.none");
   const parts = [shell.count > 0 ? videoCount(shell.count) : t("index.none")];
   if (shell.indexedAt) {
     const m = Math.floor((now - shell.indexedAt) / 60000);
     parts.push(m < 1 ? t("index.justNow") : t("index.at", { min: minutes(m * 60) }));
   }
   if (shell.incomplete) parts.push(t("index.reading"));
+  if (c.mode === "account" && shell.checking > 0) parts.push(t("index.checking", { n: shell.checking }));
   if (problem) parts.push(problem.kind === "flood" || problem.kind === "budget" ? t("setup.flood", { min: minutes((problem.until - now) / 1000) }) : noticeFor(problem).items[0].title);
   if (shell.channelErrors > 0) parts.push(t("index.channelErrors", { n: shell.channelErrors }));
-  if (shell.unslotted > 0) parts.push(t("index.unslotted", { n: shell.unslotted }));
   out.index_status = parts.join(" · ").slice(0, 200);
   return out;
 }
-return { SLOTS, REFRESH_MS, loadShell, activeChats, rowOf, posterFor, itemOf, countVideos, refresh, forget, nowMs, homeRows, browsePage, searchPage, rowFor, channelTabs, statusLines, chatOfId, msgOfId };
+
+/** The account line of the settings form in account mode (no network). */
+function accountStatus(c) {
+  const rec = readJson(KEYS.login);
+  const qr = readJson(KEYS.qr);
+  if (qr && qr.fp === sessionFp(c) && qr.stage === "password") return t("status.password");
+  if (qr && qr.fp === sessionFp(c) && qr.stage === "qr" && qr.until > Date.now()) return t("qr.waiting");
+  if (hasLogin(c)) return t("status.accountOn");
+  if (rec && rec.fp === loginFp(c) && rec.kind === "closed") return t("status.closed");
+  return t("status.signin");
+}
+return { SLOTS, REFRESH_MS, loadShell, titleOf, activeChats, rowOf, posterFor, itemOf, countVideos, freeSlots, refresh, forget, forgetAccount, nowMs, homeRows, browsePage, searchPage, rowFor, channelTabs, statusLines, chatOfId, msgOfId };
+})();
+
+// ---- src/shell/account.js ----
+const __mod_src_shell_account = (() => {
+// Account mode's sign-in, from the settings form only (there is no login in the background):
+//   - "Iniciar sesión con QR" (action qr_login) asks Telegram for a login token (auth.exportLoginToken, with the person's
+//     api_id and api_hash). The form's `qr` setting shows it as tg://login?token=<base64url>, for the person to scan with
+//     the OFFICIAL Telegram app (Settings ▸ Devices ▸ Link Desktop Device), which shows whose account is linked and
+//     asks to confirm. Kino asks settingsStatus() every 5 s while the form is open; this module then asks Telegram again
+//     when the token is close to expiring (about 30 s) or 10 s went by: that answer is a new token, or the login
+//     (auth.loginTokenSuccess, or auth.loginTokenMigrateTo, followed by the client). The window closes after 150 s.
+//   - A 2FA account answers SESSION_PASSWORD_NEEDED: the person types the password in the `tg_password` setting, taps
+//     Guardar, then "Confirmar la contraseña" (action check_password): SRP (src/mtproto/srp.js), auth.checkPassword.
+//     The password is read from the settings for that one call and the action always asks Kino to clear the field
+//     (clearSettings): it is never stored by the plugin, never logged, never part of a row or an error.
+//   - "Cerrar sesión" (action logout): auth.logOut (best effort), then the session, the account's index and its catalog
+//     rows are deleted on this device.
+// The login token is never logged and never stored (tg.qr keeps only { fp, stage, until }).
+const { credentials, connect, saveSession, loginBlocked, recordLoginFailure, markLoggedIn, hasStoredLogin, sessionFp, close } = __mod_src_shell_live;
+const { KEYS, readJson, writeJson, remove, kinoStore } = __mod_src_shell_store;
+const { loginBudget } = __mod_src_mtproto_client;
+const { toBase64 } = __mod_src_mtproto_bytes;
+const { t, minutes } = __mod_src_shell_text;
+const { loadShell, forgetAccount } = __mod_src_shell_library;
+
+const QR_WINDOW_MS = 150000;  // how long a QR login stays open after the person pressed the button
+const POLL_MS = 10000;        // ask Telegram again at least this often while the QR is shown
+const RENEW_MS = 8000;        // ...and when the token has less than this left
+const CALL_MS = 7000;         // one poll inside settingsStatus's 10 s
+const ACTION_MS = 20000;      // one action inside its 30 s
+/** QR logins per device and hour (each press of the button). */
+const ACCOUNT_BUDGET = Object.freeze({ key: KEYS.accountLogins, max: 5, what: "account logins" });
+
+let qr = null; // { fp, url, expiresAt, lastAt } of this runtime: the token itself lives only here
+const clock = () => (typeof kino.now === "function" ? kino.now() : Date.now()); // a test may give kino a clock
+
+const b64url = (u8) => toBase64(u8).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+const errCode = (e) => (e && typeof e.code === "string" ? e.code : e && e.shell ? e.shell : "error");
+
+/** What a login step answered: a token to show, the login done, or a password to ask. */
+function took(c, step, now) {
+  if (step && step.token) {
+    // The server's expiry is in its clock; the token lives ~30 s: count from now with the time it says is left.
+    const left = Math.max(5000, Math.min(60000, (Number(step.expires) - Math.floor(now / 1000)) * 1000));
+    qr = { fp: sessionFp(c), url: "tg://login?token=" + b64url(step.token), expiresAt: now + (Number.isFinite(left) ? left : 30000), lastAt: now };
+    saveSession();
+    return "token";
+  }
+  if (step && step.userId !== undefined) { done(); return "done"; }
+  throw new Error("unexpected login step");
+}
+function done() {
+  qr = null;
+  remove(KEYS.qr);
+  remove(KEYS.login); // a "closed" or wait record of the old session
+  markLoggedIn();
+}
+function failed(c, e) {
+  qr = null;
+  const code = errCode(e);
+  if (code === "password_needed") { writeJson(KEYS.qr, { fp: sessionFp(c), stage: "password" }); saveSession(); return t("qr.password"); }
+  remove(KEYS.qr);
+  recordLoginFailure(c, e);
+  kino.log("account login stopped: " + code);
+  if (code === "flood_wait") return t("setup.flood", { min: minutes(e.seconds) });
+  if (code === "api_id_invalid") return t("status.apiId");
+  return t("qr.failed");
+}
+
+/** The qr_login action. */
+async function startQr() {
+  const c = credentials();
+  if (c.mode !== "account") return t("qr.botMode");
+  if (!c.complete) return t("status.missingAccount");
+  if (hasStoredLogin(c)) return t("qr.already");
+  const blocked = loginBlocked(c);
+  if (blocked) return t("setup.flood", { min: minutes(blocked.seconds) });
+  try {
+    loginBudget(kinoStore, clock(), ACCOUNT_BUDGET).record();
+  } catch (e) {
+    return t("qr.budget", { min: minutes(e.seconds) });
+  }
+  const now = clock();
+  try {
+    const live = await connect(c, loadShell(c), { deadline: now + ACTION_MS, loginFlow: true });
+    const step = await live.client.qrLoginStep({ apiHash: c.apiHash, deadline: now + ACTION_MS });
+    if (took(c, step, clock()) === "done") return t("qr.done");
+    writeJson(KEYS.qr, { fp: sessionFp(c), stage: "qr", until: now + QR_WINDOW_MS });
+    return t("qr.scan");
+  } catch (e) {
+    return failed(c, e);
+  }
+}
+
+/**
+ * From settingsStatus: the QR text to draw (or none) and the account line while a login is under way. Asks Telegram
+ * only when the token is about to expire or POLL_MS went by. Never throws.
+ */
+async function qrPoll() {
+  const c = credentials();
+  if (c.mode !== "account" || !c.complete) return {};
+  const st = readJson(KEYS.qr);
+  if (!st || st.fp !== sessionFp(c)) { qr = null; return {}; }
+  if (st.stage === "password") return { status: t("status.password") };
+  const now = clock();
+  if (!(st.until > now)) { remove(KEYS.qr); qr = null; return { status: t("qr.expired") }; }
+  const due = !qr || qr.fp !== st.fp || qr.expiresAt - now < RENEW_MS || now - qr.lastAt >= POLL_MS;
+  if (due) {
+    try {
+      const live = await connect(c, loadShell(c), { deadline: now + CALL_MS, loginFlow: true });
+      const step = await live.client.qrLoginStep({ apiHash: c.apiHash, deadline: now + CALL_MS });
+      if (took(c, step, clock()) === "done") return { status: t("qr.done") };
+    } catch (e) {
+      const code = errCode(e);
+      if (code === "timeout" || code === "closed") { kino.log("qr poll: " + code); if (qr) qr.lastAt = now; }
+      else return { status: failed(c, e) };
+    }
+  }
+  return qr ? { qr: qr.url, status: t("qr.waiting") } : { status: t("qr.waiting") };
+}
+
+/** The check_password action: the 2FA password from the settings, used once; the field is always cleared. */
+async function confirmPassword() {
+  const clear = { clearSettings: ["tg_password"] };
+  const c = credentials();
+  if (c.mode !== "account" || !c.complete) return { message: t("qr.botMode"), ...clear };
+  const st = readJson(KEYS.qr);
+  if (!st || st.fp !== sessionFp(c) || st.stage !== "password") return { message: t(hasStoredLogin(c) ? "qr.already" : "pw.notNeeded"), ...clear };
+  const typed = kino.config.get("tg_password");
+  if (typeof typed !== "string" || !typed) return { message: t("pw.empty") };
+  const now = clock();
+  try {
+    const live = await connect(c, loadShell(c), { deadline: now + ACTION_MS, loginFlow: true });
+    await live.client.checkPassword(typed, { deadline: now + ACTION_MS });
+    done();
+    return { message: t("qr.done"), ...clear };
+  } catch (e) {
+    const code = errCode(e);
+    kino.log("password check: " + code);
+    if (code === "password_invalid") return { message: t("pw.wrong"), ...clear };
+    if (code === "login_budget") return { message: t("pw.budget", { min: minutes(e.seconds) }), ...clear };
+    if (code === "flood_wait") { recordLoginFailure(c, e); return { message: t("setup.flood", { min: minutes(e.seconds) }), ...clear }; }
+    return { message: t("qr.failed"), ...clear };
+  }
+}
+
+/** The logout action: auth.logOut when there is a session (best effort), then everything of the account goes. */
+async function logout() {
+  const c = credentials();
+  const clear = { clearSettings: ["tg_password"] };
+  if (c.mode !== "account") return { message: t("logout.none"), ...clear };
+  const had = !!readJson(KEYS.usession);
+  if (hasStoredLogin(c)) {
+    try {
+      const live = await connect(c, loadShell(c), { deadline: clock() + 8000, loginFlow: true });
+      await live.client.logOut({ deadline: clock() + 8000 });
+    } catch (e) {
+      kino.log("logout on Telegram failed (" + errCode(e) + "): the session is deleted here anyway");
+    }
+  }
+  qr = null;
+  await close();
+  await forgetAccount();
+  remove(KEYS.login);
+  return { message: t(had ? "logout.done" : "logout.none"), ...clear };
+}
+return { ACCOUNT_BUDGET, startQr, qrPoll, confirmPassword, logout };
 })();
 
 // ---- src/shell/b64.js ----
@@ -4674,7 +5592,8 @@ return { image };
 // scripts/build.mjs (`npm run build`): the published plugin.js.
 const { guard, shellError } = __mod_src_shell_errors;
 const { credentials } = __mod_src_shell_live;
-const { refresh, forget, homeRows, browsePage, searchPage, rowFor, loadShell, channelTabs, statusLines, posterFor, nowMs } = __mod_src_shell_library;
+const { refresh, forget, homeRows, browsePage, searchPage, rowFor, loadShell, channelTabs, statusLines, posterFor, nowMs, freeSlots } = __mod_src_shell_library;
+const { startQr, qrPoll, confirmPassword, logout } = __mod_src_shell_account;
 const { read: readBytes } = __mod_src_shell_read;
 const { image: imageBytes } = __mod_src_shell_image;
 const { displayTitle, backdropOf } = __mod_src_shell_enrich;
@@ -4713,7 +5632,7 @@ export async function resolve(ref) {
       let kind = ref.slice(6);
       const seconds = secondsLeft(kind);
       if ((kind === "flood" || kind === "budget") && seconds === undefined) kind = "unavailable"; // the wait is over
-      throw shellError(["config", "token", "api_id", "flood", "budget"].includes(kind) ? kind : "unavailable", "setup notice", { seconds });
+      throw shellError(["config", "token", "api_id", "flood", "budget", "signin", "closed"].includes(kind) ? kind : "unavailable", "setup notice", { seconds });
     }
     if (!credentials().complete) throw shellError("config");
     const row = await rowFor(ref);
@@ -4781,11 +5700,24 @@ export async function categories() {
 }
 
 export async function settingsStatus() {
-  return guard(async () => statusLines());
+  return guard(async () => {
+    const login = await qrPoll(); // account mode: the QR to draw and how the login goes (asks Telegram only when due)
+    const out = statusLines();
+    if (login.status) out.account_status = login.status;
+    if (login.qr) out.login_qr = login.qr;
+    return out;
+  });
 }
 
 export async function action(key) {
   return guard(async () => {
+    if (key === "qr_login") return { message: await startQr() };
+    if (key === "check_password") return confirmPassword();
+    if (key === "logout") return logout();
+    if (key === "free_slots") {
+      const n = freeSlots();
+      return { message: n ? t("free.done", { n }) : t("free.none") };
+    }
     if (key === "forget") {
       await forget();
       return { message: t("action.forgot") };
@@ -4794,7 +5726,7 @@ export async function action(key) {
     const { shell, added, problem } = await refresh({ force: true });
     if (problem) {
       if (problem.kind === "flood" || problem.kind === "budget") return { message: t(problem.kind === "flood" ? "setup.flood" : "setup.budget", { min: minutes((problem.until - Date.now()) / 1000) }) };
-      const key2 = { config: "setup.config", token: "setup.token", api_id: "setup.apiId", network: "setup.network" }[problem.kind] || "setup.unavailable";
+      const key2 = { config: credentials().mode === "account" ? "setup.configAccount" : "setup.config", token: "setup.token", api_id: "setup.apiId", network: "setup.network", signin: "setup.signin", closed: "setup.closed" }[problem.kind] || "setup.unavailable";
       return { message: t(key2) };
     }
     return { message: t("action.refreshed", { count: videoCount(shell.count), added }) };
@@ -4807,7 +5739,9 @@ export async function validateSettings(values) {
   const out = {};
   if (v.api_id !== undefined && !/^\d{3,12}$/.test(String(v.api_id).trim())) out.api_id = t("validate.apiId");
   if (v.api_hash !== undefined && !/^[0-9a-fA-F]{32}$/.test(String(v.api_hash).trim())) out.api_hash = t("validate.apiHash");
-  if (v.bot_token !== undefined && !/^\d{3,15}:[A-Za-z0-9_-]{20,80}$/.test(String(v.bot_token).trim())) out.bot_token = t("validate.token");
+  const account = v.access === "account";
+  if (!account && (v.bot_token === undefined || !String(v.bot_token).trim())) out.bot_token = t("validate.tokenNeeded");
+  else if (v.bot_token !== undefined && String(v.bot_token).trim() && !/^\d{3,15}:[A-Za-z0-9_-]{20,80}$/.test(String(v.bot_token).trim())) out.bot_token = t("validate.token");
   return Object.keys(out).length ? out : null;
 }
 

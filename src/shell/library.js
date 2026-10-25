@@ -1,16 +1,17 @@
 // The video library: Telegram's channels through the discovery, kept in kino.catalog (one row per video), and the
 // rows, pages and searches Kino shows, read from the catalog only.
 //
-// Channels: the bot learns every channel it administers; the slots are the first 8 of them by ascending channel id,
-// recomputed from the whole set at every refresh (a channel the bot lost frees its slot), so the same bot gives the same
-// slot -> channel mapping on every device once they have seen the same channels. The slot's toggle in the settings
-// (which syncs) says whether that channel is shown and indexed. A channel that is
-// off is never scanned and has no rows: turning it off removes its rows from the catalog (by id, in steps); turning
-// it on reads it again from its start. Slot 1's toggle starts on, the others off (the manifest's defaults).
+// Channels: the bot learns every channel it administers (account mode: every chat of the account where a video exists);
+// they get the 6 slots in the order they were first seen, and keep them (see assignSlots). The slot's toggle in the
+// settings (which syncs) says whether that channel is shown and indexed. A channel that is off is never scanned and has
+// no rows: turning it off removes its rows from the catalog (by id, in steps); turning it on reads it again from its
+// start. Slot 1's toggle starts on, the others off (the manifest's defaults). Six, not more: Kino's settings contract
+// allows 12 valued settings and 16 others per plugin, and account mode needed two of the old eight toggles' places.
 //
 // Refresh: from Home (at most every 5 minutes, sooner while a pass is unfinished or a toggle changed) and from the
 // "Actualizar ahora" action. Never from search. A refresh that fails keeps the old rows and stores the error.
-import { withSession, credentials, saveSession, loginFp, sessionFp, forgetSession, hasStoredLogin as hasLogin, checkDevice, deviceMark, markDevice, DEVICE_ROW } from "./live.js";
+import { withSession, credentials, saveSession, loginFp, sessionFp, forgetSession, hasStoredLogin as hasLogin, checkDevice, deviceMark, markDevice, DEVICE_ROW, close as closeLive } from "./live.js";
+import { ACCOUNT_STATE_KEY } from "../mtproto/account-library.js";
 import { KEYS, readJson, writeJson, remove } from "./store.js";
 import { shellError, kindOf } from "./errors.js";
 import { t, minutes, videoCount } from "./text.js";
@@ -19,7 +20,7 @@ import { lastOpenTiming } from "./live.js";
 import { nameOf, carry, displayTitle, posterOf, backdropOf, enrichStep, tmdbOn, viewOf } from "./enrich.js";
 import { clip, cleanText } from "./clean.js";
 
-export const SLOTS = 8;
+export const SLOTS = 6;
 export const REFRESH_MS = 5 * 60 * 1000;
 const BATCH = 500;              // kino.catalog: items per upsert, ids per get/remove
 const MAX_PAGES = 25;           // discovery RPCs per refresh (Home has 20 s)
@@ -32,14 +33,36 @@ const HLS = /mpegurl/i;
 
 // ---- shell state (tg.shell) ----
 
-const freshShell = (fp) => ({ v: 1, fp, slots: [], missing: [], titles: {}, applied: [], top: {}, purge: [], indexedAt: 0, incomplete: false, count: 0, unslotted: 0, error: null, refused: null, channelErrors: 0, en: { off: 0, at: 0, done: false } });
+const freshShell = (fp) => ({ v: 1, fp, slots: [], missing: [], waiting: [], wasOn: [], titles: {}, selfId: null, applied: [], top: {}, purge: [], indexedAt: 0, incomplete: false, count: 0, unslotted: 0, checking: 0, error: null, refused: null, channelErrors: 0, en: { off: 0, at: 0, done: false } });
 
 export function loadShell(c) {
   const s = readJson(KEYS.shell);
   const fp = c && c.complete ? sessionFp(c) : null;
   if (!s || s.v !== 1 || !Array.isArray(s.slots)) return freshShell(fp);
-  return { ...freshShell(fp), ...s };
+  return migrateSlots({ ...freshShell(fp), ...s });
 }
+
+/**
+ * 0.2.x had 8 slots, 0.3.0 has 6. The channels of slots 7 and 8 are not dropped and nothing moves: they wait first in
+ * line for a place (in their old order), marked when they were switched on, so the status line can say so and how to
+ * give them one (switch a place off, then "Dar lugar a los que esperan"). Their rows go with the next refresh's purge,
+ * as for any channel switched off. Slots 1 to 6 keep their channel and their toggle.
+ */
+function migrateSlots(shell) {
+  if (shell.slots.length <= SLOTS) return shell;
+  const over = shell.slots.slice(SLOTS);
+  const missing = new Set(shell.missing || []);
+  shell.slots = shell.slots.slice(0, SLOTS);
+  shell.missing = (shell.missing || []).filter((x) => shell.slots.includes(x));
+  const keep = over.filter((x) => !missing.has(x));
+  shell.waiting = [...keep, ...(shell.waiting || []).filter((x) => !keep.includes(x))];
+  shell.wasOn = [...new Set([...(shell.wasOn || []), ...keep.filter((x) => (shell.applied || []).includes(x))])];
+  shell.unslotted = shell.waiting.length;
+  return shell;
+}
+
+/** A chat's name as the person reads it (Saved Messages in their language). */
+export const titleOf = (shell, chatId) => (chatId === shell.selfId ? t("chat.saved") : shell.titles[chatId] || chatId);
 const saveShell = (s) => writeJson(KEYS.shell, s);
 
 /** The chats (Bot API ids, "-100...") whose toggle is on. */
@@ -174,7 +197,9 @@ function problemOf(shell, now = Date.now()) {
 
 function noticeFor(problem, now = Date.now()) {
   switch (problem.kind) {
-    case "config": return notice("config", t("setup.config"));
+    case "config": return notice("config", t(credentials().mode === "account" ? "setup.configAccount" : "setup.config"));
+    case "signin": return notice("signin", t("setup.signin"));
+    case "closed": return notice("closed", t("setup.closed"));
     case "token": return notice("token", t("setup.token"));
     case "api_id": return notice("api_id", t("setup.apiId"));
     case "flood": return notice("flood", t("setup.flood", { min: minutes((problem.until - now) / 1000) }));
@@ -187,8 +212,9 @@ function noticeFor(problem, now = Date.now()) {
 /** Starts over for another bot: the index and the discovery state go (this device keeps its mark). */
 async function resetIndex(shell) {
   remove(KEYS.discovery);
-  shell.slots = []; shell.missing = []; shell.titles = {}; shell.applied = []; shell.top = {}; shell.purge = [];
-  shell.indexedAt = 0; shell.incomplete = false; shell.count = 0; shell.unslotted = 0; shell.channelErrors = 0;
+  remove(ACCOUNT_STATE_KEY);
+  shell.slots = []; shell.missing = []; shell.waiting = []; shell.wasOn = []; shell.titles = {}; shell.selfId = null; shell.applied = []; shell.top = {}; shell.purge = [];
+  shell.indexedAt = 0; shell.incomplete = false; shell.count = 0; shell.unslotted = 0; shell.checking = 0; shell.channelErrors = 0;
   const mark = await deviceMark();
   try { await kino.catalog.clear(); } catch (e) { kino.log("catalog clear failed: " + (e && e.code)); }
   await markDevice(mark || undefined);
@@ -208,18 +234,58 @@ export async function countVideos() {
  * and can never take the owner's slot or push it out (a 9th channel just gets no slot). A channel the bot lost keeps
  * its slot, marked missing, so that slot is never handed to a newcomer whose videos would then show switched on.
  */
-function assignSlots(shell, channels) {
-  const order = (id) => (Number.isInteger(channels[id].seen) ? channels[id].seen : Number.MAX_SAFE_INTEGER);
-  const ids = Object.keys(channels || {}).sort((a, b) => order(a) - order(b) || (BigInt(a) < BigInt(b) ? -1 : BigInt(a) > BigInt(b) ? 1 : 0));
-  const known = new Set();
-  for (const rawId of ids) {
-    const chatId = channelChatId(rawId);
-    known.add(chatId);
-    shell.titles[chatId] = clip(channels[rawId].title, 100);
-    if (!shell.slots.includes(chatId) && shell.slots.length < SLOTS) shell.slots.push(chatId);
+function assignSlots(shell, chats) {
+  const order = (id) => (Number.isInteger(chats[id].seen) ? chats[id].seen : Number.MAX_SAFE_INTEGER);
+  const ids = Object.keys(chats || {}).sort((a, b) => order(a) - order(b) || (BigInt(a) < BigInt(b) ? -1 : BigInt(a) > BigInt(b) ? 1 : 0));
+  const known = new Set(ids);
+  for (const chatId of ids) {
+    if (chats[chatId].kind === "self") shell.selfId = chatId;
+    shell.titles[chatId] = clip(chats[chatId].title, 100);
   }
+  // Who waits for a place: those already waiting keep their turn (slots 7 and 8 of 0.2.x first), then the newcomers.
+  const waiting = (shell.waiting || []).filter((x) => known.has(x) && !shell.slots.includes(x));
+  for (const chatId of ids) if (!shell.slots.includes(chatId) && !waiting.includes(chatId)) waiting.push(chatId);
+  while (shell.slots.length < SLOTS && waiting.length) shell.slots.push(waiting.shift());
+  shell.waiting = waiting;
+  shell.wasOn = (shell.wasOn || []).filter((x) => waiting.includes(x));
   shell.missing = shell.slots.filter((chatId) => !known.has(chatId));
-  shell.unslotted = [...known].filter((chatId) => !shell.slots.includes(chatId)).length;
+  shell.unslotted = waiting.length;
+}
+
+/** The discovery's known chats as { chatId: { title, seen, kind } }, whichever the mode. */
+function chatsOf(res, mode) {
+  if (mode === "account") return (res.state && res.state.chats) || {};
+  const out = {};
+  for (const [rawId, ch] of Object.entries((res.state && res.state.channels) || {})) out[channelChatId(rawId)] = { title: ch.title, seen: ch.seen, kind: "channel" };
+  return out;
+}
+
+/**
+ * The "Dar lugar a los que esperan" action: every place whose toggle is off (or whose channel the bot lost) goes to the
+ * next channel waiting, in line order; the channel that had it waits at the end of the line. Nothing is switched on:
+ * the toggle of a place given away is off, so a newcomer (perhaps a stranger's channel) still shows nothing until the
+ * person turns it on. Answers how many places changed hands.
+ */
+export function freeSlots() {
+  const c = credentials();
+  const shell = loadShell(c);
+  let n = 0;
+  const missing = new Set(shell.missing || []);
+  const line = shell.waiting.slice(); // only those waiting now get a place: one that gives its place waits after them
+  const gave = [];
+  for (let i = 0; i < shell.slots.length && line.length; i++) {
+    const chatId = shell.slots[i];
+    if (kino.config.get("ch" + (i + 1)) === true && !missing.has(chatId)) continue;
+    shell.slots[i] = line.shift();
+    if (!missing.has(chatId)) gave.push(chatId);
+    n++;
+  }
+  shell.waiting = [...line, ...gave];
+  shell.missing = shell.slots.filter((x) => missing.has(x));
+  shell.wasOn = (shell.wasOn || []).filter((x) => shell.waiting.includes(x));
+  shell.unslotted = shell.waiting.length;
+  if (n) saveShell(shell);
+  return n;
 }
 
 /** Applies one refresh's changes to the catalog: only videos of active channels, never an HLS playlist. */
@@ -327,7 +393,8 @@ async function runRefresh({ force = false } = {}) {
       for (let pass = 0; pass < 2 && Date.now() < deadline; pass++) {
         const active = activeChats(shell);
         const td = Date.now();
-        const res = await live.discovery.refresh({ maxPages: MAX_PAGES, deadline, commit: false, shouldScan: (rawId) => active.has(channelChatId(rawId)) });
+        const shouldScan = c.mode === "account" ? (chatId) => active.has(chatId) : (rawId) => active.has(channelChatId(rawId));
+        const res = await live.discovery.refresh({ maxPages: MAX_PAGES, deadline, commit: false, shouldScan });
         const tu = Date.now();
         tm.disc += tu - td; tm.pages += res.pages || 0;
         // The catalog first, then the discovery's progress: a write that fails (or a call cut off in between) leaves
@@ -336,7 +403,8 @@ async function runRefresh({ force = false } = {}) {
         tm.upsert += Date.now() - tu;
         res.commit();
         shell.channelErrors = (res.errors || []).filter((x) => x.scope === "channel").length;
-        assignSlots(shell, res.state.channels);
+        assignSlots(shell, chatsOf(res, c.mode));
+        shell.checking = Number(res.checking) || 0;
         shell.incomplete = !!res.incomplete;
         if (res.floodWait !== undefined) {
           shell.error = { kind: "flood", until: now + res.floodWait * 1000, at: now };
@@ -391,6 +459,19 @@ async function enrich(shell, started) {
 export async function forget() {
   await forgetSession();
   remove(KEYS.discovery);
+  remove(ACCOUNT_STATE_KEY);
+  remove(KEYS.qr);
+  remove(KEYS.shell);
+  await kino.catalog.clear();
+  await markDevice();
+}
+
+/** Signs the account out on this device: its session, its index and the catalog go; a bot session stays. */
+export async function forgetAccount() {
+  await closeLive();
+  remove(KEYS.usession);
+  remove(ACCOUNT_STATE_KEY);
+  remove(KEYS.qr);
   remove(KEYS.shell);
   await kino.catalog.clear();
   await markDevice();
@@ -434,10 +515,11 @@ export async function homeRows({ shell, problem }, started = nowMs()) {
       // A channel's own row is optional: past the budget Home answers with what it has (never a timeout).
       if (nowMs() - started > HOME_BUDGET_MS) { kino.log("home: channel rows skipped, out of time"); break; }
       const r = await scanChat(chatId, shell.top[chatId] || 0, ROW_ITEMS);
-      if (r.items.length) rows.push({ id: "c" + chatId, title: clip(shell.titles[chatId] || chatId, 200), ref: "chan:" + chatId, items: r.items.map(itemOf) });
+      if (r.items.length) rows.push({ id: "c" + chatId, title: clip(titleOf(shell, chatId), 200), ref: "chan:" + chatId, items: r.items.map(itemOf) });
     }
   } else if (!problem) {
-    rows.push(shell.slots.length === 0 ? notice("noChannels", t("setup.noChannels")) : active.size === 0 ? notice("noneActive", t("setup.noneActive")) : notice("empty", t("setup.empty")));
+    const none = c.mode === "account" ? (shell.checking > 0 ? notice("checking", t("setup.checking")) : notice("noChannels", t("setup.noChats"))) : notice("noChannels", t("setup.noChannels"));
+    rows.push(shell.slots.length === 0 ? none : active.size === 0 ? notice("noneActive", t("setup.noneActive")) : notice("empty", t("setup.empty")));
   }
   return rows.slice(0, 20);
 }
@@ -483,7 +565,7 @@ export async function rowFor(ref) {
   return viewOf(row);
 }
 
-export const channelTabs = (shell) => shell.slots.filter((x) => activeChats(shell).has(x)).map((chatId) => ({ chatId, title: shell.titles[chatId] || chatId }));
+export const channelTabs = (shell) => shell.slots.filter((x) => activeChats(shell).has(x)).map((chatId) => ({ chatId, title: titleOf(shell, chatId) }));
 
 /** The settings form's status lines (no network). */
 export function statusLines() {
@@ -492,28 +574,44 @@ export function statusLines() {
   const now = Date.now();
   const out = {};
   const problem = problemOf(shell, now);
-  if (!c.complete) out.account_status = t("status.missing");
+  if (!c.complete) out.account_status = t(c.mode === "account" ? "status.missingAccount" : "status.missing");
   else if (shell.refused && shell.refused.fp === loginFp(c)) out.account_status = t(shell.refused.kind === "token" ? "status.token" : "status.apiId");
   else if (problem && problem.kind === "flood") out.account_status = t("status.flood", { min: minutes((problem.until - now) / 1000) });
+  else if (c.mode === "account") out.account_status = accountStatus(c);
   else out.account_status = hasLogin(c) ? t("status.connected") : t("status.notYet");
+  // The places on one line (Kino's settings contract leaves no room for one line per place): "1 ✓ Pelis · 2 — Viajes".
+  const places = [];
   for (let i = 0; i < SLOTS; i++) {
     const chatId = shell.slots[i];
-    const key = "ch" + (i + 1) + "_name";
-    if (!chatId) { out[key] = t("slot.free"); continue; }
-    const title = shell.titles[chatId] || chatId;
-    out[key] = (shell.missing || []).includes(chatId) ? t("slot.gone", { title }) : kino.config.get("ch" + (i + 1)) === true ? title : t("slot.off", { title });
+    if (!chatId) { places.push(i + 1 + " " + t("slots.free")); continue; }
+    const name = clip(titleOf(shell, chatId), 24);
+    places.push(i + 1 + ((shell.missing || []).includes(chatId) ? " ✗ " + name + " (" + t("slots.gone") + ")" : kino.config.get("ch" + (i + 1)) === true ? " ✓ " + name : " — " + name));
   }
+  out.channels_status = shell.slots.length ? places.join(" · ").slice(0, 200) : t("slots.none");
+  const waiting = (shell.waiting || []).map((x) => ((shell.wasOn || []).includes(x) ? t("more.wasOn", { title: clip(titleOf(shell, x), 24) }) : clip(titleOf(shell, x), 24)));
+  out.channels_more = waiting.length ? t("more.list", { list: waiting.slice(0, 4).join(", ") + (waiting.length > 4 ? " +" + (waiting.length - 4) : "") }).slice(0, 200) : t("more.none");
   const parts = [shell.count > 0 ? videoCount(shell.count) : t("index.none")];
   if (shell.indexedAt) {
     const m = Math.floor((now - shell.indexedAt) / 60000);
     parts.push(m < 1 ? t("index.justNow") : t("index.at", { min: minutes(m * 60) }));
   }
   if (shell.incomplete) parts.push(t("index.reading"));
+  if (c.mode === "account" && shell.checking > 0) parts.push(t("index.checking", { n: shell.checking }));
   if (problem) parts.push(problem.kind === "flood" || problem.kind === "budget" ? t("setup.flood", { min: minutes((problem.until - now) / 1000) }) : noticeFor(problem).items[0].title);
   if (shell.channelErrors > 0) parts.push(t("index.channelErrors", { n: shell.channelErrors }));
-  if (shell.unslotted > 0) parts.push(t("index.unslotted", { n: shell.unslotted }));
   out.index_status = parts.join(" · ").slice(0, 200);
   return out;
+}
+
+/** The account line of the settings form in account mode (no network). */
+function accountStatus(c) {
+  const rec = readJson(KEYS.login);
+  const qr = readJson(KEYS.qr);
+  if (qr && qr.fp === sessionFp(c) && qr.stage === "password") return t("status.password");
+  if (qr && qr.fp === sessionFp(c) && qr.stage === "qr" && qr.until > Date.now()) return t("qr.waiting");
+  if (hasLogin(c)) return t("status.accountOn");
+  if (rec && rec.fp === loginFp(c) && rec.kind === "closed") return t("status.closed");
+  return t("status.signin");
 }
 
 export { chatOfId, msgOfId };

@@ -6,7 +6,8 @@
 // scripts/build.mjs (`npm run build`): the published plugin.js.
 import { guard, shellError } from "./shell/errors.js";
 import { credentials } from "./shell/live.js";
-import { refresh, forget, homeRows, browsePage, searchPage, rowFor, loadShell, channelTabs, statusLines, posterFor, nowMs } from "./shell/library.js";
+import { refresh, forget, homeRows, browsePage, searchPage, rowFor, loadShell, channelTabs, statusLines, posterFor, nowMs, freeSlots } from "./shell/library.js";
+import { startQr, qrPoll, confirmPassword, logout } from "./shell/account.js";
 import { read as readBytes } from "./shell/read.js";
 import { image as imageBytes } from "./shell/image.js";
 import { displayTitle, backdropOf } from "./shell/enrich.js";
@@ -45,7 +46,7 @@ export async function resolve(ref) {
       let kind = ref.slice(6);
       const seconds = secondsLeft(kind);
       if ((kind === "flood" || kind === "budget") && seconds === undefined) kind = "unavailable"; // the wait is over
-      throw shellError(["config", "token", "api_id", "flood", "budget"].includes(kind) ? kind : "unavailable", "setup notice", { seconds });
+      throw shellError(["config", "token", "api_id", "flood", "budget", "signin", "closed"].includes(kind) ? kind : "unavailable", "setup notice", { seconds });
     }
     if (!credentials().complete) throw shellError("config");
     const row = await rowFor(ref);
@@ -113,11 +114,24 @@ export async function categories() {
 }
 
 export async function settingsStatus() {
-  return guard(async () => statusLines());
+  return guard(async () => {
+    const login = await qrPoll(); // account mode: the QR to draw and how the login goes (asks Telegram only when due)
+    const out = statusLines();
+    if (login.status) out.account_status = login.status;
+    if (login.qr) out.login_qr = login.qr;
+    return out;
+  });
 }
 
 export async function action(key) {
   return guard(async () => {
+    if (key === "qr_login") return { message: await startQr() };
+    if (key === "check_password") return confirmPassword();
+    if (key === "logout") return logout();
+    if (key === "free_slots") {
+      const n = freeSlots();
+      return { message: n ? t("free.done", { n }) : t("free.none") };
+    }
     if (key === "forget") {
       await forget();
       return { message: t("action.forgot") };
@@ -126,7 +140,7 @@ export async function action(key) {
     const { shell, added, problem } = await refresh({ force: true });
     if (problem) {
       if (problem.kind === "flood" || problem.kind === "budget") return { message: t(problem.kind === "flood" ? "setup.flood" : "setup.budget", { min: minutes((problem.until - Date.now()) / 1000) }) };
-      const key2 = { config: "setup.config", token: "setup.token", api_id: "setup.apiId", network: "setup.network" }[problem.kind] || "setup.unavailable";
+      const key2 = { config: credentials().mode === "account" ? "setup.configAccount" : "setup.config", token: "setup.token", api_id: "setup.apiId", network: "setup.network", signin: "setup.signin", closed: "setup.closed" }[problem.kind] || "setup.unavailable";
       return { message: t(key2) };
     }
     return { message: t("action.refreshed", { count: videoCount(shell.count), added }) };
@@ -139,7 +153,9 @@ export async function validateSettings(values) {
   const out = {};
   if (v.api_id !== undefined && !/^\d{3,12}$/.test(String(v.api_id).trim())) out.api_id = t("validate.apiId");
   if (v.api_hash !== undefined && !/^[0-9a-fA-F]{32}$/.test(String(v.api_hash).trim())) out.api_hash = t("validate.apiHash");
-  if (v.bot_token !== undefined && !/^\d{3,15}:[A-Za-z0-9_-]{20,80}$/.test(String(v.bot_token).trim())) out.bot_token = t("validate.token");
+  const account = v.access === "account";
+  if (!account && (v.bot_token === undefined || !String(v.bot_token).trim())) out.bot_token = t("validate.tokenNeeded");
+  else if (v.bot_token !== undefined && String(v.bot_token).trim() && !/^\d{3,15}:[A-Za-z0-9_-]{20,80}$/.test(String(v.bot_token).trim())) out.bot_token = t("validate.token");
   return Object.keys(out).length ? out : null;
 }
 

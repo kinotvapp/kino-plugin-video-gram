@@ -50,11 +50,22 @@ export function device({ lang = "es-CO", metaFixture = null } = {}) {
   const sink = (...a) => logs.push(a.map((x) => (typeof x === "string" ? x : JSON.stringify(x))).join(" "));
   const pluginConsole = { log: sink, info: sink, warn: sink, error: sink };
   const kinoLog = Object.assign((...a) => sink("[kino.log]", ...a), { report: (...a) => sink("[kino.log.report]", ...a) });
+  let previous = null; // the sockets of the last runtime opened with closePrevious (Kino closes a sandbox's sockets with it)
   return {
     base,
     logs,
-    async runtime(values = {}, { lang: runtimeLang = lang, catalog = base.catalog, crypto = base.crypto, meta = base.meta, now = null } = {}) {
-      const kino = Object.freeze({ ...base, lang: runtimeLang, config: configOf(values), log: kinoLog, catalog, crypto, meta: meta === null ? undefined : meta, ...(now ? { now } : {}) });
+    /**
+     * `closePrevious`: this runtime replaces the last one opened with the same option, as Kino replaces a sandbox after a
+     * settings change: that one's sockets are closed first (Kino allows 4 open sockets per plugin).
+     */
+    async runtime(values = {}, { lang: runtimeLang = lang, catalog = base.catalog, crypto = base.crypto, meta = base.meta, now = null, closePrevious = false } = {}) {
+      let ws = base.ws;
+      if (closePrevious && base.ws) {
+        if (previous) { for (const sock of previous) { try { await sock.close(); } catch { /* closed */ } } }
+        const mine = (previous = new Set());
+        ws = Object.freeze({ ...base.ws, open: async (...a) => { const sock = await base.ws.open(...a); mine.add(sock); return sock; } });
+      }
+      const kino = Object.freeze({ ...base, lang: runtimeLang, config: configOf(values), log: kinoLog, catalog, crypto, ws, meta: meta === null ? undefined : meta, ...(now ? { now } : {}) });
       const { plugin } = await loadPlugin(file, kino, { console: pluginConsole });
       // Answers cross into Kino as JSON (README section 4), so they come back here as JSON too (main-realm values).
       const calls = {};
@@ -78,4 +89,14 @@ export function device({ lang = "es-CO", metaFixture = null } = {}) {
     },
     close() { rmSync(dir, { recursive: true, force: true }); },
   };
+}
+
+/** The settings' places line ("1 ✓ Pelis · 2 — Viajes · 3 libre") as one string per place, without its number. */
+export function places(status) {
+  const out = [];
+  for (const part of String(status.channels_status || "").split(" · ")) {
+    const m = /^(\d+) (.*)$/.exec(part);
+    if (m) out[Number(m[1]) - 1] = m[2];
+  }
+  return out;
 }

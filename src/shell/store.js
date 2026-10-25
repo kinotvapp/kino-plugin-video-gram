@@ -5,7 +5,11 @@
 //   tg.shell           this shell's state: channel slots, purges, the index marker, last error   < 2 KB
 // The video entries are never here: they live in kino.catalog. No setting value is ever written here; `fp` is a
 // truncated SHA-256 of the api_id and the bot token, so a new bot starts from scratch.
-export const KEYS = Object.freeze({ budget: "mtproto.botLogins", session: "tg.session", discovery: "tg.discovery", shell: "tg.shell", login: "tg.login" });
+//   tg.usession        account mode: the account's session, sealed like tg.session, never synced  ~0.6 KB per DC
+//   tg.adiscovery      account mode: the chats with videos and how far each was read             ~0.2 KB per chat
+//   tg.qr              account mode: a QR login under way ({ fp, stage, until }; never the token)  < 100 B
+//   tg.login           a login refused, delayed, or an account session Telegram ended            < 100 B
+export const KEYS = Object.freeze({ budget: "mtproto.botLogins", session: "tg.session", discovery: "tg.discovery", shell: "tg.shell", login: "tg.login", usession: "tg.usession", adiscovery: "tg.adiscovery", qr: "tg.qr", accountLogins: "mtproto.accountLogins" });
 
 export function readJson(key) {
   let raw = null;

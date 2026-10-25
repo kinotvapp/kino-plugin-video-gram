@@ -2,10 +2,13 @@
 // key = HMAC-SHA256(api_hash + "\n" + bot_token, "tg.session\n" + salt); AES-256-GCM, the tag at the end of `ct`.
 import { createHmac, createDecipheriv } from "node:crypto";
 
-export function openSession(storedText, { api_hash, bot_token }) {
+// The account's tg.usession (account mode): key = HMAC-SHA256(api_hash + "\naccount:" + api_id, "tg.usession\n" + salt).
+export function openSession(storedText, { api_hash, bot_token, api_id, account = false }) {
   const s = JSON.parse(storedText);
   if (s.v === 1) return s.state;
-  const key = Buffer.from(createHmac("sha256", Buffer.from(api_hash + "\n" + bot_token, "utf8")).update("tg.session\n" + s.salt, "utf8").digest("hex"), "hex");
+  const key = account
+    ? createHmac("sha256", Buffer.from(api_hash + "\naccount:" + api_id, "utf8")).update("tg.usession\n" + s.salt, "utf8").digest()
+    : Buffer.from(createHmac("sha256", Buffer.from(api_hash + "\n" + bot_token, "utf8")).update("tg.session\n" + s.salt, "utf8").digest("hex"), "hex");
   const raw = Buffer.from(s.ct, "base64");
   const d = createDecipheriv("aes-256-gcm", key, Buffer.from(s.iv, "hex"));
   d.setAuthTag(raw.subarray(raw.length - 16));

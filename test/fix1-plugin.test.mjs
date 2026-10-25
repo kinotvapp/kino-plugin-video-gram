@@ -4,7 +4,7 @@ import { test, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { FakeTelegram } from "../testkit/fake-dc.mjs";
 import { FakeBotWorld } from "../testkit/fake-world.mjs";
-import { device } from "../testkit/plugin-harness.mjs";
+import { device, places } from "../testkit/plugin-harness.mjs";
 import { openSession } from "../testkit/session-open.mjs";
 
 const MiB = 1048576;
@@ -221,10 +221,10 @@ test("I5 slots are first-seen: two devices of the same bot show the same channel
   const pb = await b.runtime(SETTINGS);
   await pb.home(); // b meets both at once
   const sa = await pa.settingsStatus(), sb = await pb.settingsStatus();
-  assert.equal(sa.ch1_name, sb.ch1_name);
-  assert.equal(sa.ch2_name, sb.ch2_name);
-  assert.equal(sa.ch1_name, "Viajes", "the first channel the bot met is slot 1, whatever the ids");
-  assert.match(sa.ch2_name, /^Pelis/, "a later channel is appended");
+  assert.equal(places(sa)[0], places(sb)[0]);
+  assert.equal(places(sa)[1], places(sb)[1]);
+  assert.equal(places(sa)[0], "✓ Viajes", "the first channel the bot met is slot 1, whatever the ids");
+  assert.match(places(sa)[1], /^— Pelis/, "a later channel is appended");
 });
 
 test("I5 a channel the bot lost keeps its slot (marked), so its switched-on slot is never handed to a newcomer", async () => {
@@ -237,21 +237,21 @@ test("I5 a channel the bot lost keeps its slot (marked), so its switched-on slot
   world.addChannel({ id: 2100000000n, accessHash: 33n, title: "Nuevo" });
   await p.action("refresh");
   const st = await p.settingsStatus();
-  assert.match(st.ch1_name, /^Pelis \(el bot ya no tiene acceso\)/);
-  assert.match(st.ch2_name, /^Viajes/);
-  assert.match(st.ch3_name, /^Nuevo \(desactivado\)/, "the newcomer is appended, switched off");
+  assert.match(places(st)[0], /^✗ Pelis \(sin acceso\)/);
+  assert.match(places(st)[1], /^— Viajes/);
+  assert.match(places(st)[2], /^— Nuevo/, "the newcomer is appended, switched off");
 });
 
 // ---- minors ----
 
-test("M1 more than 8 channels: the status line says how many have no slot", async () => {
+test("M1 more than 6 channels: the line under the places names the ones waiting and how to give them one", async () => {
   for (let i = 0; i < 10; i++) world.addChannel({ id: 1900000000n + BigInt(i), accessHash: 5n, title: "C" + i });
   const d = newDevice();
   const p = await d.runtime(SETTINGS);
   await p.home();
-  assert.match((await p.settingsStatus()).index_status, /2 canales más sin lugar/);
+  assert.match((await p.settingsStatus()).channels_more, /^C6, C7, C8, C9\. Para dar un lugar: apaga uno arriba/);
   const en = await d.runtime(SETTINGS, { lang: "en-US" });
-  assert.match((await en.settingsStatus()).index_status, /2 more channels without a slot/);
+  assert.match((await en.settingsStatus()).channels_more, /^C6, C7, C8, C9\. To give one a place: turn one off above/);
 });
 
 test("M2 the count follows a purge that runs on a Home that skips the refresh", async () => {

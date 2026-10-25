@@ -1,10 +1,10 @@
 {
   "id": "telegram-library",
   "name": "Telegram Library",
-  "version": "0.2.3",
+  "version": "0.3.0",
   "apiVersion": 13,
   "entry": "plugin.js",
-  "description": "Tu biblioteca personal: los videos de tus canales privados de Telegram, con tu propio bot, en Kino. Your personal library: the videos of your private Telegram channels, with your own bot.",
+  "description": "Tu biblioteca personal: los videos de tus canales y chats de Telegram, con tu propio bot o tu cuenta (solo lectura), en Kino. Your personal library: the videos of your Telegram channels and chats, with your own bot or your account (read only).",
   "author": "kinotvapp",
   "hosts": [
     "pluto.web.telegram.org",
@@ -43,10 +43,29 @@
     {
       "key": "account",
       "type": "section",
-      "label": "Tu bot de Telegram",
-      "labelEn": "Your Telegram bot",
-      "hint": "Crea una app en my.telegram.org (api_id y api_hash) y un bot con @BotFather. Agrega el bot como administrador de tu canal privado y publica tus videos ahí. Todo queda en este aparato.",
-      "hintEn": "Create an app at my.telegram.org (api_id and api_hash) and a bot with @BotFather. Add the bot as an administrator of your private channel and post your videos there. Everything stays on this device."
+      "label": "Conectar Telegram",
+      "labelEn": "Connect Telegram",
+      "hint": "Crea una app en my.telegram.org (api_id y api_hash). Con un bot: créalo con @BotFather y hazlo administrador de tu canal. Con tu cuenta: inicia sesión con QR; Kino solo lee, nunca envía ni cambia nada. Todo queda en este aparato.",
+      "hintEn": "Create an app at my.telegram.org (api_id and api_hash). With a bot: create it with @BotFather and make it an administrator of your channel. With your account: sign in with a QR; Kino only reads, never sends or changes anything. Everything stays on this device."
+    },
+    {
+      "key": "access",
+      "type": "select",
+      "label": "Conectar con",
+      "labelEn": "Connect with",
+      "default": "bot",
+      "options": [
+        {
+          "value": "bot",
+          "label": "Un bot en mis canales",
+          "labelEn": "A bot in my channels"
+        },
+        {
+          "value": "account",
+          "label": "Mi cuenta (solo lectura)",
+          "labelEn": "My account (read only)"
+        }
+      ]
     },
     {
       "key": "api_id",
@@ -69,11 +88,10 @@
     {
       "key": "bot_token",
       "type": "password",
-      "required": true,
       "label": "Token del bot",
       "labelEn": "Bot token",
-      "hint": "El que te da @BotFather, como 123456:ABC...",
-      "hintEn": "The one @BotFather gives you, like 123456:ABC..."
+      "hint": "Solo con bot: el que da @BotFather, 123456:ABC...",
+      "hintEn": "Bot only: the one @BotFather gives, 123456:ABC..."
     },
     {
       "key": "account_status",
@@ -82,116 +100,119 @@
       "labelEn": "Status"
     },
     {
-      "key": "channels",
-      "type": "section",
-      "label": "Canales",
-      "labelEn": "Channels",
-      "hint": "Kino muestra solo los canales que actives (hasta 8). Cada canal nuevo llega desactivado, salvo el primero que ve el bot. Cualquiera que conozca el bot puede agregarlo a su canal: revisa aquí cuáles activas.",
-      "hintEn": "Kino shows only the channels you turn on (up to 8). Each new channel arrives off, except the very first one the bot sees. Anyone who knows the bot can add it to their channel: check here which ones you turn on."
+      "key": "login_qr",
+      "type": "qr",
+      "label": "Escanéalo con Telegram en tu teléfono",
+      "labelEn": "Scan it with Telegram on your phone",
+      "refreshMs": 5000
     },
     {
-      "key": "ch1_name",
+      "key": "qr_login",
+      "type": "action",
+      "label": "Iniciar sesión con QR",
+      "labelEn": "Sign in with a QR"
+    },
+    {
+      "key": "tg_password",
+      "type": "password",
+      "label": "Contraseña de dos pasos",
+      "labelEn": "Two-step password",
+      "hint": "Solo si Telegram la pide. Se borra al usarla",
+      "hintEn": "Only if Telegram asks for it. Erased once used"
+    },
+    {
+      "key": "check_password",
+      "type": "action",
+      "label": "Confirmar la contraseña",
+      "labelEn": "Confirm the password"
+    },
+    {
+      "key": "logout",
+      "type": "action",
+      "label": "Cerrar sesión",
+      "labelEn": "Sign out",
+      "confirm": "¿Cerrar la sesión de tu cuenta en este aparato y borrar su índice?",
+      "confirmEn": "Sign your account out on this device and delete its index?"
+    },
+    {
+      "key": "account_help",
+      "type": "help",
+      "label": "Tu cuenta y la seguridad",
+      "labelEn": "Your account and security",
+      "title": "Tu cuenta en Kino",
+      "titleEn": "Your account in Kino",
+      "body": "Al iniciar sesión con tu cuenta, este aparato guarda una clave de sesión de Telegram. Esa clave da acceso a toda tu cuenta: tus chats, tus canales y tus grupos. Kino la guarda cifrada, solo en este aparato, nunca la sincroniza y la usa únicamente para leer: listar tus chats con videos, buscar videos y reproducirlos. Nunca envía, edita, borra ni reenvía mensajes, no marca nada como leído y no entra ni sale de chats.\n\nLa sesión aparece en Telegram, en Ajustes ▸ Dispositivos, y Telegram te avisa del nuevo inicio de sesión. Para cerrarla: toca Cerrar sesión aquí, o ciérrala desde Telegram en Ajustes ▸ Dispositivos. Si la cierras desde Telegram, Kino lo nota y te pide iniciar sesión otra vez.\n\nLa contraseña de dos pasos se usa una sola vez, para ese inicio de sesión, y Kino la borra enseguida: nunca la guarda.\n\nSolo se ven los chats que actives aquí, y cada chat nuevo con videos llega desactivado.",
+      "bodyEn": "When you sign in with your account, this device keeps a Telegram session key. That key gives access to your whole account: your chats, channels and groups. Kino keeps it encrypted, on this device only, never syncs it and uses it only to read: list your chats with videos, search videos and play them. It never sends, edits, deletes or forwards messages, never marks anything as read and never joins or leaves chats.\n\nThe session shows in Telegram under Settings ▸ Devices, and Telegram tells you about the new login. To end it: tap Sign out here, or end it from Telegram under Settings ▸ Devices. If you end it from Telegram, Kino notices and asks you to sign in again.\n\nThe two-step password is used once, for that login, and Kino erases it right away: it never keeps it.\n\nOnly the chats you turn on here show, and each new chat with videos arrives off."
+    },
+    {
+      "key": "channels",
+      "type": "section",
+      "label": "Canales y chats",
+      "labelEn": "Channels and chats",
+      "hint": "Kino muestra solo los que actives (6 lugares). Cada canal o chat nuevo llega desactivado, salvo el primero. Cualquiera que conozca tu bot puede agregarlo a su canal: revisa cuáles activas.",
+      "hintEn": "Kino shows only the ones you turn on (6 places). Each new channel or chat arrives off, except the first one. Anyone who knows your bot can add it to their channel: check which ones you turn on."
+    },
+    {
+      "key": "channels_status",
       "type": "status",
-      "label": "Canal 1",
-      "labelEn": "Channel 1"
+      "label": "Lugares",
+      "labelEn": "Places"
     },
     {
       "key": "ch1",
       "type": "toggle",
-      "label": "Mostrar el canal 1",
-      "labelEn": "Show channel 1",
+      "label": "Mostrar el lugar 1",
+      "labelEn": "Show place 1",
       "default": true
-    },
-    {
-      "key": "ch2_name",
-      "type": "status",
-      "label": "Canal 2",
-      "labelEn": "Channel 2"
     },
     {
       "key": "ch2",
       "type": "toggle",
-      "label": "Mostrar el canal 2",
-      "labelEn": "Show channel 2",
+      "label": "Mostrar el lugar 2",
+      "labelEn": "Show place 2",
       "default": false
-    },
-    {
-      "key": "ch3_name",
-      "type": "status",
-      "label": "Canal 3",
-      "labelEn": "Channel 3"
     },
     {
       "key": "ch3",
       "type": "toggle",
-      "label": "Mostrar el canal 3",
-      "labelEn": "Show channel 3",
+      "label": "Mostrar el lugar 3",
+      "labelEn": "Show place 3",
       "default": false
-    },
-    {
-      "key": "ch4_name",
-      "type": "status",
-      "label": "Canal 4",
-      "labelEn": "Channel 4"
     },
     {
       "key": "ch4",
       "type": "toggle",
-      "label": "Mostrar el canal 4",
-      "labelEn": "Show channel 4",
+      "label": "Mostrar el lugar 4",
+      "labelEn": "Show place 4",
       "default": false
-    },
-    {
-      "key": "ch5_name",
-      "type": "status",
-      "label": "Canal 5",
-      "labelEn": "Channel 5"
     },
     {
       "key": "ch5",
       "type": "toggle",
-      "label": "Mostrar el canal 5",
-      "labelEn": "Show channel 5",
+      "label": "Mostrar el lugar 5",
+      "labelEn": "Show place 5",
       "default": false
-    },
-    {
-      "key": "ch6_name",
-      "type": "status",
-      "label": "Canal 6",
-      "labelEn": "Channel 6"
     },
     {
       "key": "ch6",
       "type": "toggle",
-      "label": "Mostrar el canal 6",
-      "labelEn": "Show channel 6",
+      "label": "Mostrar el lugar 6",
+      "labelEn": "Show place 6",
       "default": false
     },
     {
-      "key": "ch7_name",
+      "key": "channels_more",
       "type": "status",
-      "label": "Canal 7",
-      "labelEn": "Channel 7"
+      "label": "Sin lugar",
+      "labelEn": "Without a place"
     },
     {
-      "key": "ch7",
-      "type": "toggle",
-      "label": "Mostrar el canal 7",
-      "labelEn": "Show channel 7",
-      "default": false
-    },
-    {
-      "key": "ch8_name",
-      "type": "status",
-      "label": "Canal 8",
-      "labelEn": "Channel 8"
-    },
-    {
-      "key": "ch8",
-      "type": "toggle",
-      "label": "Mostrar el canal 8",
-      "labelEn": "Show channel 8",
-      "default": false
+      "key": "free_slots",
+      "type": "action",
+      "label": "Dar lugar a los que esperan",
+      "labelEn": "Give places to those waiting",
+      "confirm": "Los lugares apagados pasan a los canales sin lugar (llegan apagados). ¿Seguir?",
+      "confirmEn": "The places that are off go to the channels without one (they arrive off). Go on?"
     },
     {
       "key": "index",
