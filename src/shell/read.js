@@ -7,7 +7,7 @@
 // prelude decoding the WebSocket frame, and the transport's one toHex of it (src/mtproto/transport.js).
 import { CHUNK } from "../mtproto/client.js";
 import { fromHex } from "../mtproto/bytes.js";
-import { credentials, withSession, saveSession } from "./live.js";
+import { credentials, withSession, saveSession, idleReset } from "./live.js";
 import { loadShell, rowFor, rowOf } from "./library.js";
 import { carry } from "./enrich.js";
 import { shellError } from "./errors.js";
@@ -17,6 +17,7 @@ import { isServerAnswer } from "../mtproto/errors.js";
 import { big } from "../mtproto/big.js";
 
 const AHEAD = 2;          // whole chunks requested right behind a read at a MiB offset (never past the end of the file)
+const IDLE_RESET_MS = 20000; // no read for this long: the previous play's caches and connection are freed on the next
 const SHORT_FLOOD_S = 5;     // a FLOOD_WAIT this short is waited out once inside the read (kino.sleep: 5 s at most)
 const READ_BUDGET_MS = 17000; // everything a read does (getFile, refetch, retries) ends before this; Kino gives it 20 s
 const MIN_LEFT_MS = 1500;     // a request is not started with less than this left
@@ -59,6 +60,9 @@ async function readTimed(arg, started) {
   if (!Number.isSafeInteger(length) || length < 1 || length > CHUNK) throw shellError("invalid", "length must be 1 to 1048576");
   const c = credentials();
   if (!c.complete) throw shellError("config");
+  // A new play on the same runtime (Kino gives no "stream closed" hook): if the last read was long ago, drop the caches
+  // and the connection the previous play left, so a second play does not start near the 64 MiB cap.
+  await idleReset(IDLE_RESET_MS);
   let row = await rowFor(handle);
   const size = row.data.size;
   const want = Math.max(0, Math.min(length, size - offset));

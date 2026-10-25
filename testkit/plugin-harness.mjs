@@ -53,8 +53,8 @@ export function device({ lang = "es-CO", metaFixture = null } = {}) {
   return {
     base,
     logs,
-    async runtime(values = {}, { lang: runtimeLang = lang, catalog = base.catalog, crypto = base.crypto, meta = base.meta } = {}) {
-      const kino = Object.freeze({ ...base, lang: runtimeLang, config: configOf(values), log: kinoLog, catalog, crypto, meta: meta === null ? undefined : meta });
+    async runtime(values = {}, { lang: runtimeLang = lang, catalog = base.catalog, crypto = base.crypto, meta = base.meta, now = null } = {}) {
+      const kino = Object.freeze({ ...base, lang: runtimeLang, config: configOf(values), log: kinoLog, catalog, crypto, meta: meta === null ? undefined : meta, ...(now ? { now } : {}) });
       const { plugin } = await loadPlugin(file, kino, { console: pluginConsole });
       // Answers cross into Kino as JSON (README section 4), so they come back here as JSON too (main-realm values).
       const calls = {};

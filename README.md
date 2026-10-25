@@ -82,7 +82,7 @@ What to expect:
   it on again reads it from the start.
 - **New videos: tap *Refresh now*.** It is the reliable way to bring in what you just posted. Kino also checks your
   channels when Home opens, at most every 5 minutes, but Kino keeps Home rows for hours.
-- **Read-ahead.** Kino asks Telegram for the next pieces of the video while you watch one. When the video keeps its index at the end and that index is big (over 1 MiB), or when you jump elsewhere, that read-ahead is dropped and asked again as needed.
+- **Read-ahead.** Kino asks Telegram for the next pieces of the video while you watch one. When the video keeps its index at the end and that index is big (over 1 MiB), or when you jump elsewhere, that read-ahead is dropped and asked again as needed. When you leave a video and come back later, the plugin frees what the last play left before starting the new one.
 - **Search** works offline, over this device's index, ignoring accents and case. It finds a video by its TMDB title
   and by its file name.
 - **Posters and names.** Kino cleans the file name (`El.Laberinto.del.Fauno.2006.1080p.BluRay.mkv` shows as *El

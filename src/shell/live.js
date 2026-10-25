@@ -86,6 +86,8 @@ function newClient(c) {
     publicKeys: PUBLIC_KEYS,
     store: kinoStore,
     timeoutMs: 9000,
+    ...(typeof kino.now === "function" ? { now: kino.now } : {}),
+
     device: { deviceModel: "Kino", systemVersion: kino.device === "tv" ? "Android TV" : "Android", appVersion: String(kino.appVersion || "1.0").slice(0, 20), systemLangCode: String(kino.lang || "es").slice(0, 2), langCode: String(kino.lang || "es").slice(0, 2) },
     log: (m) => kino.log("mtproto: " + m),
   });
@@ -162,6 +164,11 @@ export async function withSession(c, shell, fn, { deadline } = {}) {
     saveSession();
     return fn(await connect(c, shell, { deadline }));
   }
+}
+
+/** Frees the live client's caches and connection when it has been idle for `idleMs` (between plays). */
+export async function idleReset(idleMs) {
+  if (live && live.client) await live.client.idleReset(idleMs);
 }
 
 /** Closes the live client (a settings change, a forget). */

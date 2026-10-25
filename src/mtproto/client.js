@@ -22,7 +22,11 @@ const BUDGET_WINDOW_MS = 3600000;
 const MIN_LEFT_MS = 1500;   // a request never starts with less time than this before its caller's deadline
 const MARGIN_MS = 500;      // what a request leaves its caller after its own wait
 const POLL_MS = 250;        // how often a call waiting for its turn checks its deadline
-const MAX_AHEAD = 4;        // file chunks requested ahead and kept (answered or still in flight), oldest dropped first
+const MAX_AHEAD = 2;           // file chunks requested ahead and tracked (answered or still in flight), oldest dropped first:
+                              // a hard count cap, so answered hex held is at most ~2 chunks whatever the timing
+const MAX_AHEAD_BYTES = 5 << 20; // characters of ANSWERED read-ahead hex kept at once: ~2 chunks (a 1 MiB chunk is
+                                 // ~2 MiB of hex), enough for the depth-2 read-ahead, so a runtime with no forced GC
+                                 // never piles several more up
 const MAX_IN_FLIGHT = 3;    // requests on one connection at once (the asked chunk included), on every path
 const ROOM_WAIT_MS = 2500;  // the longest a chunk request waits for room before taking the oldest in flight as lost
 const AHEAD_WAIT_MS = 8000; // the longest a read waits for a chunk requested ahead before asking for it again
@@ -107,11 +111,27 @@ export class TelegramClient {
     this.dcs = new Map();   // dc -> { authKey, authKeyId, serverSalt, timeOffset, loggedIn, userId? }
     this.conns = new Map(); // dc -> { transport, session, inited }
     this.chain = Promise.resolve();
-    this.ahead = new Map(); // "<doc id>:<offset>:<limit>" -> { dc, session, entry }, in request order
+    this.ahead = new Map(); // "<doc id>:<offset>" -> { dc, session, entry, limit }, in request order
+    this.lastActiveAt = this.now(); // when a chunk request last ran: an idle runtime drops its caches (idleReset)
   }
 
   /** How many chunks requested ahead are kept (tests). */
   aheadCount() { return this.ahead.size; }
+  /** Characters of answered read-ahead hex held right now (in-flight entries hold nothing yet). */
+  aheadBytes() { let n = 0; for (const a of this.ahead.values()) if (a.entry.done && a.entry.result) n += a.entry.result.length; return n; }
+
+  /**
+   * Frees everything a finished play leaves behind when the runtime has been idle for `idleMs`: the read-ahead cache
+   * (hex chunks) and the open connection (its transport buffers and session). The next read reconnects with the stored
+   * key (no key exchange, no login). There is no "stream closed" hook from Kino, so this is where retention is bounded
+   * between plays.
+   */
+  async idleReset(idleMs) {
+    if ((this.ahead.size || this.conns.size) && this.now() - this.lastActiveAt >= idleMs) {
+      this.log("idle " + Math.round((this.now() - this.lastActiveAt) / 1000) + " s: releasing caches and the connection");
+      await this.reset();
+    }
+  }
 
   /**
    * Tears everything down after a failure the caller cannot place: every connection closes (the requests in flight on
@@ -376,6 +396,7 @@ export class TelegramClient {
     const dropAhead = (k, a) => this.dropAhead(k, a);
     return this.serial(async () => {
       if (!this.homeDc) throw mtError("invalid_request", "connect first");
+      this.lastActiveAt = this.now();
       let dc = Number(loc.dcId) || this.homeDc;
       if (trace) { trace.pipe = "miss"; trace.ahead = 0; }
       // The chunks to request right behind this one: not already requested, never this one, and never more than
@@ -391,9 +412,11 @@ export class TelegramClient {
           this.maxInflight = Math.max(this.maxInflight, c.session.maxInflight);
           this.ahead.set(k, { dc, session: c.session, entry, limit: a.limit });
           if (trace) trace.ahead++;
-          while (this.ahead.size > MAX_AHEAD) {
-            const [oldKey, old] = this.ahead.entries().next().value;
-            dropAhead(oldKey, old);
+          // Bound both the count and the ANSWERED bytes held: drop the oldest until both fit.
+          while (this.ahead.size > MAX_AHEAD || this.aheadBytes() > MAX_AHEAD_BYTES) {
+            const oldest = this.ahead.entries().next().value;
+            if (!oldest || oldest[0] === k) break; // never the one just added
+            dropAhead(oldest[0], oldest[1]);
           }
         }
       };
