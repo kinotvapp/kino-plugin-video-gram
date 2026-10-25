@@ -1,7 +1,7 @@
 {
   "id": "telegram-library",
   "name": "Telegram Library",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "apiVersion": 13,
   "entry": "plugin.js",
   "description": "Tu biblioteca personal: los videos de tus canales y chats de Telegram, con tu propio bot o tu cuenta (solo lectura), en Kino. Your personal library: the videos of your Telegram channels and chats, with your own bot or your account (read only).",
@@ -118,7 +118,8 @@
       "label": "Contraseña de dos pasos",
       "labelEn": "Two-step password",
       "hint": "Solo si Telegram la pide. Se borra al usarla",
-      "hintEn": "Only if Telegram asks for it. Erased once used"
+      "hintEn": "Only if Telegram asks for it. Erased once used",
+      "sync": false
     },
     {
       "key": "check_password",

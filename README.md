@@ -36,7 +36,8 @@ This is for **your own** channel. It is not a catalogue of films, and it is not 
    Dispositivos ▸ **Vincular un dispositivo** y escanéalo; Telegram te muestra qué cuenta se vincula y te pide
    confirmar. El código se renueva solo cada pocos segundos y sirve durante dos minutos y medio.
 4. Si tu cuenta tiene **contraseña de dos pasos**, la pestaña te lo dice: escríbela en *Contraseña de dos pasos*, toca
-   Guardar y luego **Confirmar la contraseña**. Kino la usa una vez y borra el campo enseguida.
+   Guardar y luego **Confirmar la contraseña**. Kino la usa una vez y borra el campo enseguida. Esa contraseña nunca
+   sale de este aparato: no se sincroniza con tus otros aparatos ni va en las copias de seguridad.
 5. Abre Inicio: Kino busca en tus chats los que tienen videos (canales, grupos y **Mensajes guardados**) y los pone en
    los lugares, desactivados salvo el primero. Actívalos en la pestaña del plugin.
 
@@ -67,7 +68,10 @@ Qué esperar:
   ni sale de chats. La sesión aparece en Telegram ▸ Ajustes ▸ Dispositivos (Telegram te avisa del nuevo inicio de
   sesión); para cerrarla, toca **Cerrar sesión** aquí o ciérrala desde ese menú de Telegram: Kino lo nota, borra la
   clave y te pide iniciar sesión otra vez, sin reintentar solo. La contraseña de dos pasos nunca se guarda: se usa una
-  vez y el campo se borra (Kino la tiene en sus ajustes cifrados solo entre que tocas Guardar y Confirmar).
+  vez y el campo se borra (Kino la tiene en sus ajustes cifrados solo entre que tocas Guardar y Confirmar), y nunca
+  sale de este aparato: ese campo no se sincroniza con tus otros aparatos ni va en las copias de seguridad
+  (`"sync": false`). Hace falta una Kino que conozca ese ajuste; una más vieja lo ignoraría y sincronizaría el campo
+  como cualquier contraseña, por eso este plugin se publica solo junto con una Kino que lo tiene.
 - **Videos nuevos: toca *Actualizar ahora*.** Es la forma segura de traer lo último que publicaste. Kino también
   revisa tus canales al abrir Inicio, como mucho cada 5 minutos, pero Kino guarda las filas de Inicio varias horas.
 - **Lectura anticipada.** Kino pide a Telegram los siguientes trozos del video mientras ves uno. Si el video guarda su índice al final y ese índice es grande (más de 1 MiB), o si saltas a otro punto, esa lectura anticipada se descarta y se vuelve a pedir lo que haga falta.
@@ -115,7 +119,8 @@ Qué esperar:
    **Link Desktop Device** and scan it; Telegram shows which account is being linked and asks you to confirm. The code
    renews itself every few seconds and works for two and a half minutes.
 4. If your account has a **two-step password**, the tab says so: type it in *Two-step password*, tap Save, then
-   **Confirm the password**. Kino uses it once and clears the field right away.
+   **Confirm the password**. Kino uses it once and clears the field right away. That password never leaves this
+   device: it is not synced to your other devices and is not in backups.
 5. Open Home: Kino looks through your chats for the ones with videos (channels, groups and **Saved Messages**) and puts
    them in the places, off except the first. Turn them on in the plugin's tab.
 
@@ -146,7 +151,10 @@ What to expect:
   joins or leaves chats. The session shows in Telegram ▸ Settings ▸ Devices (Telegram tells you about the new login);
   to end it, tap **Sign out** here or end it from that Telegram menu: Kino notices, deletes the key and asks you to
   sign in again, never retrying by itself. The two-step password is never stored: it is used once and the field is
-  cleared (Kino holds it in its encrypted settings only between your Save and Confirm).
+  cleared (Kino holds it in its encrypted settings only between your Save and Confirm), and it never leaves this
+  device: that field is not synced to your other devices and is not in backups (`"sync": false`). It takes a Kino that
+  knows that key; an older one would ignore it and sync the field like any password, so this plugin is released only
+  together with a Kino that has it.
 - **New videos: tap *Refresh now*.** It is the reliable way to bring in what you just posted. Kino also checks your
   channels when Home opens, at most every 5 minutes, but Kino keeps Home rows for hours.
 - **Read-ahead.** Kino asks Telegram for the next pieces of the video while you watch one. When the video keeps its index at the end and that index is big (over 1 MiB), or when you jump elsewhere, that read-ahead is dropped and asked again as needed. When you leave a video and come back later, the plugin frees what the last play left before starting the new one.

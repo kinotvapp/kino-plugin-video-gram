@@ -234,3 +234,19 @@ test("the manifest: access defaults to the bot, the bot token is optional, 12 va
   assert.equal(s.find((x) => x.key === "login_qr").refreshMs, 5000);
   assert.ok(s.filter((x) => /^ch\d$/.test(x.key)).length === 6);
 });
+
+test("the 2FA password never leaves the device: sync false on tg_password (and only there), the kit accepts it", async () => {
+  const { validateManifest } = await import("../sdk/contract.mjs");
+  const r = validateManifest(JSON.stringify(MANIFEST));
+  assert.equal(r.ok, true, JSON.stringify(r).slice(0, 300));
+  assert.equal(MANIFEST.apiVersion, 13);
+  const pw = MANIFEST.settings.find((x) => x.key === "tg_password");
+  assert.equal(pw.type, "password");
+  assert.equal(pw.sync, false);
+  assert.deepEqual(MANIFEST.settings.filter((x) => x.sync === false).map((x) => x.key), ["tg_password"], "the api_id, api_hash and bot token still sync");
+  assert.equal(MANIFEST.sync, undefined, "no sync block, so no provision can name it");
+  // The kit refuses sync false on anything but a password (the same rule Kino applies).
+  const bad = JSON.parse(JSON.stringify(MANIFEST));
+  bad.settings.find((x) => x.key === "tmdb").sync = false;
+  assert.equal(validateManifest(JSON.stringify(bad)).ok, false);
+});
