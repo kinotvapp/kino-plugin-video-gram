@@ -515,7 +515,7 @@
     "randomMaxBytes": 1024,
     "bytesOps": {
       "apiVersion": 13,
-      "ops": ["aesIge", "modPow", "gunzip"],
+      "ops": ["aesIge", "modPow", "gunzip", "convert", "aesIgeVerify"],
       "modPowMaxBits": 4096
     },
     "maxDataBytes": 5242880,

@@ -15,7 +15,7 @@
 // simulates the app's marker, substitution, declared-host-and-https and redaction rules on top of that.
 import { kitCall } from "./kit-call.mjs";
 import { gunzipSync } from "node:zlib";
-import { createCipheriv, createDecipheriv, createHash, createHmac, createPublicKey, diffieHellman, generateKeyPairSync, pbkdf2Sync, randomBytes, randomUUID, sign as nodeSign, verify as nodeVerify } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, createHmac, createPublicKey, diffieHellman, generateKeyPairSync, pbkdf2Sync, randomBytes, randomUUID, timingSafeEqual, sign as nodeSign, verify as nodeVerify } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -1258,9 +1258,11 @@ export function createKino(manifest, { appVersion = "sdk", lang = "es-CO", devic
   function aesIge(dir, key, iv, data, p = {}) {
     refuseSealedAny(dir, key, iv, data);
     if (dir !== "encrypt" && dir !== "decrypt") throw kinoError("crypto_error", INVALID_CRYPTO);
+    return redactOut(out(igeBytes(dir === "encrypt", key, iv, data, p), p.outputEncoding || "base64"));
+  }
+  function igeBytes(encrypt, key, iv, data, p) {
     const keyB = buf(key, p.keyEncoding || "utf8", "key"), ivB = buf(iv, p.ivEncoding || "utf8", "iv"), dataB = buf(data, p.inputEncoding || "utf8", "data");
     if (keyB.length !== 32 || ivB.length !== 32 || dataB.length % 16 !== 0) throw kinoError("crypto_error", INVALID_CRYPTO);
-    const encrypt = dir === "encrypt";
     const c = encrypt ? createCipheriv("aes-256-ecb", keyB, null) : createDecipheriv("aes-256-ecb", keyB, null);
     c.setAutoPadding(false);
     let y = Buffer.from(ivB.subarray(0, 16)), x = Buffer.from(ivB.subarray(16, 32));
@@ -1273,7 +1275,7 @@ export function createKino(manifest, { appVersion = "sdk", lang = "es-CO", devic
       for (let j = 0; j < 16; j++) res[i + j] = e[j] ^ (encrypt ? x[j] : y[j]);
       if (encrypt) { x = Buffer.from(block); y = Buffer.from(res.subarray(i, i + 16)); } else { x = Buffer.from(res.subarray(i, i + 16)); y = Buffer.from(block); }
     }
-    return redactOut(out(res, p.outputEncoding || "base64"));
+    return res;
   }
   const bigHex = (v, field) => {
     if (typeof v !== "string") throw kinoError("crypto_error", `missing "${field}"`);
@@ -1302,6 +1304,25 @@ export function createKino(manifest, { appVersion = "sdk", lang = "es-CO", devic
       throw kinoError("crypto_error", INVALID_CRYPTO);
     }
     return redactOut(out(raw, p.outputEncoding || "utf8"));
+  }
+  function convert(data, from, to) {
+    refuseSealedAny(data, from, to);
+    if (!k.encodings.includes(from)) throw kinoError("crypto_error", "unknown encoding: " + String(from ?? "").slice(0, 20));
+    if (!k.encodings.includes(to)) throw kinoError("crypto_error", "unknown encoding: " + String(to ?? "").slice(0, 20));
+    return redactOut(out(buf(data, from, "data"), to));
+  }
+  // AES-256-IGE decryption checked by SHA-256(macPrefix || plaintext)[macOffset, macOffset + mac.length) === mac, as PluginCrypto.kt.
+  function aesIgeVerify(key, iv, data, p = {}) {
+    refuseSealedAny(key, iv, data, p.mac, p.macPrefix);
+    const macEnc = p.macEncoding || "hex";
+    const mac = buf(p.mac, macEnc, "mac");
+    const prefix = p.macPrefix === undefined || p.macPrefix === null ? Buffer.alloc(0) : buf(p.macPrefix, macEnc, "macPrefix");
+    const offset = p.macOffset === undefined || p.macOffset === null ? 0 : p.macOffset;
+    if (!Number.isInteger(offset) || offset < 0 || offset > 31 || mac.length === 0 || offset + mac.length > 32) throw kinoError("crypto_error", INVALID_CRYPTO);
+    const plain = igeBytes(false, key, iv, data, p);
+    const digest = createHash("sha256").update(prefix).update(plain).digest();
+    if (!timingSafeEqual(digest.subarray(offset, offset + mac.length), mac)) throw kinoError("crypto_error", "the mac doesn't match");
+    return redactOut(out(plain, p.outputEncoding || "base64"));
   }
   const crypto = Object.freeze({
     hash(alg, data, p = {}) {
@@ -1336,7 +1357,7 @@ export function createKino(manifest, { appVersion = "sdk", lang = "es-CO", devic
       return redactOut(out(randomBytes(n), enc));
     },
     uuid: () => redactOut(randomUUID()),
-    ...(contract.apiVersion >= BYTES.apiVersion ? { aesIge, modPow, gunzip } : {}),
+    ...(contract.apiVersion >= BYTES.apiVersion ? { aesIge, modPow, gunzip, convert, aesIgeVerify } : {}),
     // apiVersion 6's key pairs: the kit reports apiVersion contract.apiVersion, so they are here whenever the app's are.
     ...(contract.apiVersion >= KP.apiVersion ? keyPairApi({ pluginSecrets, buf }) : {}),
   });
