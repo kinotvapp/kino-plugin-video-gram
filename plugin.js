@@ -476,6 +476,10 @@ const __mod_src_mtproto_transport = (() => {
 // kino.crypto's CTR is one-shot (key + iv in, bytes out), so CtrStream keeps the stream position itself: the byte at
 // stream offset k uses counter block iv + floor(k / 16), so a message starting at offset k is encrypted as
 // (k % 16 zero bytes + data) under iv + floor(k / 16) and the k % 16 prefix bytes are dropped.
+//
+// Frames cross kino.ws as hex strings (apiVersion 13: `send(hex, { encoding: "hex" })`, `recv(ms, { encoding: "hex" })`):
+// Kino encodes and decodes them natively, so no JavaScript loop touches the bytes of a chunk. An app without frame
+// encodings answers a Uint8Array or refuses a string: the transport notices it once and goes on the old way.
 const { toHex, fromHex, readU32LE, writeU32LE, random, reversed } = __mod_src_mtproto_bytes;
 const { ctrHex } = __mod_src_mtproto_crypto;
 const { mtError } = __mod_src_mtproto_errors;
@@ -533,7 +537,10 @@ class Transport {
     this.url = url || dcUrl(dc);
     this.wsOpen = open || ((u, o) => kino.ws.open(u, o));
     this.ws = null;
-    this.bufHex = "";
+    this.bufHex = "";   // the start of the stream not yet returned as packets
+    this.pending = [];  // later frames (deobfuscated hex) not yet joined: one join per packet, not one per frame
+    this.pendingChars = 0;
+    this.encoded = true; // frames as hex strings, until the app shows it cannot
     this.closed = false;
   }
 
@@ -562,7 +569,17 @@ class Transport {
     if (this.firstHex) { wire = this.firstHex + wire; this.firstHex = null; }
     if (wire.length / 2 > MAX_SEND_BYTES) throw mtError("invalid_request", "packet too large for one frame");
     try {
-      await this.ws.send(fromHex(wire));
+      if (this.encoded) {
+        try {
+          await this.ws.send(wire, { encoding: "hex" });
+        } catch (e) {
+          if (!(e && e.code === "invalid_request" && /Uint8Array/.test(String(e.message)))) throw e;
+          this.encoded = false; // an app without frame encodings
+          await this.ws.send(fromHex(wire));
+        }
+      } else {
+        await this.ws.send(fromHex(wire));
+      }
     } catch (e) {
       const code = e && e.code;
       if (code === "too_large" || code === "invalid_request") throw mtError("invalid_request", "send refused: " + (e && e.message), { cause: code });
@@ -574,14 +591,22 @@ class Transport {
   /** The next packet's payload as hex. Throws `timeout` after `timeoutMs`, `closed` when the socket ends. */
   async recvHex(timeoutMs = 20000, now = () => Date.now(), trace) {
     const deadline = now() + timeoutMs;
+    const join = () => {
+      if (!this.pending.length) return;
+      this.bufHex += this.pending.length === 1 ? this.pending[0] : this.pending.join("");
+      this.pending = [];
+      this.pendingChars = 0;
+    };
     for (;;) {
+      if (this.bufHex.length < 8) join();
       if (this.bufHex.length >= 8) {
         const n = readU32LE(fromHex(this.bufHex.slice(0, 8)), 0) & 0x7fffffff;
         if (n > MAX_PACKET_BYTES) {
           await this.close();
           throw mtError("protocol", "packet of " + n + " bytes announced: over the " + MAX_PACKET_BYTES + "-byte cap");
         }
-        if (this.bufHex.length >= 8 + n * 2) {
+        if (this.bufHex.length + this.pendingChars >= 8 + n * 2) {
+          join();
           const payload = this.bufHex.slice(8, 8 + n * 2);
           this.bufHex = this.bufHex.slice(8 + n * 2);
           return payload;
@@ -593,21 +618,26 @@ class Transport {
       let frame;
       const t0 = trace ? Date.now() : 0;
       try {
-        frame = await this.ws.recv(Math.min(left, 60000));
+        frame = await this.ws.recv(Math.min(left, 60000), this.encoded ? { encoding: "hex" } : undefined);
       } catch (e) {
         this.closed = true;
         throw mtError(e && e.code === "limit" ? "protocol" : "closed", "socket closed: " + (e && e.message), { cause: e && e.code });
       }
       if (frame === null) { if (trace) trace.wsrecv += Date.now() - t0; continue; }
-      if (!trace) { this.bufHex += this.dec.processHex(toHex(frame)); continue; }
-      // Timing (the shell's TIMING switch): numbers only, never the data.
-      const t1 = Date.now();
-      trace.wsrecv += t1 - t0; trace.frames++; trace.frameBytes += frame.length;
-      if (!trace.firstFrameAt) trace.firstFrameAt = t1;
-      const fh = toHex(frame);
-      const t2 = Date.now();
-      this.bufHex += this.dec.processHex(fh);
-      trace.tohex += t2 - t1; trace.ctr += Date.now() - t2;
+      const t1 = trace ? Date.now() : 0;
+      let fh;
+      if (typeof frame === "string") fh = frame;
+      else { this.encoded = false; fh = toHex(frame); } // an app that ignored the encoding: the old JS pass
+      const t2 = trace ? Date.now() : 0;
+      const plain = this.dec.processHex(fh);
+      this.pending.push(plain);
+      this.pendingChars += plain.length;
+      if (trace) {
+        // Timing (the shell's TIMING switch): numbers only, never the data.
+        trace.wsrecv += t1 - t0; trace.frames++; trace.frameBytes += fh.length / 2;
+        if (!trace.firstFrameAt) trace.firstFrameAt = t1;
+        trace.tohex += t2 - t1; trace.ctr += Date.now() - t2;
+      }
     }
   }
 
@@ -1297,6 +1327,7 @@ class Session {
     this.log = log;
     this.msgIds = new MsgIds(now);
     this.pendingAcks = [];
+    this.waiting = new Map(); // msg_id -> the request waiting for its answer
     this.oldSessions = new Set();
     this.newSession();
   }
@@ -1367,98 +1398,156 @@ class Session {
    * error (errors.js), `timeout` past the deadline, `bad_msg` when the server keeps refusing the message. With
    * `hex: true` the result comes back as a hex string instead of a Uint8Array.
    */
-  async call(body, { timeoutMs = this.timeoutMs, hex: wantHex = false, trace } = {}) {
-    await this.flushAcks();
+  async call(body, { timeoutMs = this.timeoutMs, hex = false, trace } = {}) {
     const deadline = this.now() + timeoutMs;
-    let reqId = await this.send(body);
+    const entry = await this.request(body, { hex, trace });
+    return this.settle(entry, deadline);
+  }
+
+  /**
+   * Sends `body` and answers its entry without waiting for the answer. Several requests may be in flight at once (one
+   * connection, MTProto pairs every answer with its msg_id): each pump fills whichever entry an answer belongs to.
+   * An entry is { done, result (hex), error }; `settle(entry, deadline)` pumps until it is done.
+   */
+  async request(body, { hex = false, trace } = {}) {
+    await this.flushAcks();
+    const entry = { body, hex, trace, id: 0n, done: false, result: null, error: null, resends: 0 };
+    entry.id = await this.send(body);
     if (trace && !trace.sentAt) trace.sentAt = Date.now();
-    let resends = 0;
-    const resend = async (why) => {
-      if (++resends > MAX_RESENDS) throw mtError("bad_msg", "the server keeps refusing the message (" + why + ")", { badMsgCode: why });
-      reqId = await this.send(body);
-    };
-    for (;;) {
-      if (this.now() >= deadline) throw mtError("timeout", "no answer in " + timeoutMs + " ms");
-      const queue = await this.recvMessages(deadline, trace);
-      while (queue.length) {
-        const m = queue.shift();
-        if (m.seqno & 1) this.pendingAcks.push(m.id);
-        const ctor = hexU32(m.hex, 0);
-        if (ctor === CTOR.msgContainer) {
-          const size = m.hex.length / 2;
-          const n = hexU32(m.hex, 4);
-          let o = 8;
-          for (let i = 0; i < n; i++) {
-            if (o + 16 > size) throw protocol("container past its end");
-            const h = new Reader(fromHex(m.hex.slice(o * 2, (o + 16) * 2)));
-            const id = h.long(), seqno = h.int(), len = h.int();
-            if (o + 16 + len > size) throw protocol("container past its end");
-            queue.push({ id, seqno, hex: m.hex.slice((o + 16) * 2, (o + 16 + len) * 2) });
-            o += 16 + len;
-          }
-          continue;
+    this.waiting.set(entry.id, entry);
+    return entry;
+  }
+
+  /** Stops waiting for `entry` (its answer, if it ever comes, is ignored). */
+  forget(entry) {
+    if (!entry.done) this.waiting.delete(entry.id);
+  }
+
+  finish(entry, result, error) {
+    this.waiting.delete(entry.id);
+    entry.done = true;
+    entry.result = result;
+    entry.error = error;
+  }
+
+  async resend(entry, why) {
+    this.waiting.delete(entry.id);
+    if (++entry.resends > MAX_RESENDS) {
+      this.finish(entry, null, mtError("bad_msg", "the server keeps refusing the message (" + why + ")", { badMsgCode: why }));
+      return;
+    }
+    entry.id = await this.send(entry.body);
+    this.waiting.set(entry.id, entry);
+  }
+
+  /**
+   * Pumps answers until `entry` is done; then answers its result (hex, or bytes when the request did not ask for hex)
+   * or throws its error. A pump that fails (the socket, a protocol error, the deadline) fails every request still in
+   * flight on this session: the client drops such a connection.
+   */
+  async settle(entry, deadline) {
+    while (!entry.done) {
+      if (this.now() >= deadline) {
+        this.forget(entry);
+        throw mtError("timeout", "no answer in time");
+      }
+      try {
+        await this.pumpOnce(deadline, entry.trace);
+      } catch (e) {
+        if (e && e.code === "timeout") { this.forget(entry); throw e; }
+        for (const w of [...this.waiting.values()]) this.finish(w, null, e);
+        throw e;
+      }
+    }
+    if (entry.error) throw entry.error;
+    return entry.hex ? entry.result : fromHex(entry.result);
+  }
+
+  /** One transport packet: every message in it goes to the request it answers (or to onUpdate). */
+  async pumpOnce(deadline, trace) {
+    const queue = await this.recvMessages(deadline, trace);
+    while (queue.length) {
+      const m = queue.shift();
+      if (m.seqno & 1) this.pendingAcks.push(m.id);
+      const ctor = hexU32(m.hex, 0);
+      if (ctor === CTOR.msgContainer) {
+        const size = m.hex.length / 2;
+        const n = hexU32(m.hex, 4);
+        let o = 8;
+        for (let i = 0; i < n; i++) {
+          if (o + 16 > size) throw protocol("container past its end");
+          const h = new Reader(fromHex(m.hex.slice(o * 2, (o + 16) * 2)));
+          const id = h.long(), seqno = h.int(), len = h.int();
+          if (o + 16 + len > size) throw protocol("container past its end");
+          queue.push({ id, seqno, hex: m.hex.slice((o + 16) * 2, (o + 16 + len) * 2) });
+          o += 16 + len;
         }
-        if (ctor === CTOR.gzipPacked) {
+        continue;
+      }
+      if (ctor === CTOR.gzipPacked) {
+        const tg = trace ? Date.now() : 0;
+        queue.unshift({ id: m.id, seqno: 0, hex: gunzipHex(hexBytesAt(m.hex, 4).hex) });
+        if (trace) trace.gunzip += Date.now() - tg;
+        continue;
+      }
+      if (ctor === CTOR.rpcResult) {
+        const to = new Reader(fromHex(m.hex.slice(8, 24))).long();
+        const entry = this.waiting.get(to);
+        if (!entry) continue; // a late answer to a request nobody waits for any more
+        let result = m.hex.slice(24);
+        if (result.length >= 8 && hexU32(result, 0) === CTOR.gzipPacked) {
           const tg = trace ? Date.now() : 0;
-          queue.unshift({ id: m.id, seqno: 0, hex: gunzipHex(hexBytesAt(m.hex, 4).hex) });
+          result = gunzipHex(hexBytesAt(result, 4).hex);
           if (trace) trace.gunzip += Date.now() - tg;
-          continue;
         }
-        if (ctor === CTOR.rpcResult) {
-          const to = new Reader(fromHex(m.hex.slice(8, 24))).long();
-          if (to !== reqId) continue; // a late answer to an earlier call
-          let result = m.hex.slice(24);
-          if (result.length >= 8 && hexU32(result, 0) === CTOR.gzipPacked) {
-            const tg = trace ? Date.now() : 0;
-            result = gunzipHex(hexBytesAt(result, 4).hex);
-            if (trace) trace.gunzip += Date.now() - tg;
-          }
-          if (result.length >= 8 && hexU32(result, 0) === CTOR.rpcError) throw fromRpcError(parseRpcError(new Reader(fromHex(result))));
-          return wantHex ? result : fromHex(result);
+        if (result.length >= 8 && hexU32(result, 0) === CTOR.rpcError) this.finish(entry, null, fromRpcError(parseRpcError(new Reader(fromHex(result)))));
+        else this.finish(entry, result, null);
+        continue;
+      }
+      // Everything else is small: read it as bytes.
+      const mBody = fromHex(m.hex);
+      const r = new Reader(mBody);
+      r.int();
+      switch (ctor) {
+        case CTOR.newSessionCreated:
+          r.long(); r.long();
+          this.state.serverSalt = r.raw(8).slice();
+          break;
+        case CTOR.badServerSalt: {
+          const bad = r.long(); r.int(); r.int();
+          this.state.serverSalt = r.raw(8).slice();
+          const entry = this.waiting.get(bad);
+          if (entry) await this.resend(entry, 48);
+          break;
         }
-        // Everything else is small: read it as bytes.
-        const mBody = fromHex(m.hex);
-        const r = new Reader(mBody);
-        r.int();
-        switch (ctor) {
-          case CTOR.newSessionCreated:
-            r.long(); r.long();
-            this.state.serverSalt = r.raw(8).slice();
-            break;
-          case CTOR.badServerSalt: {
-            const bad = r.long(); r.int(); r.int();
-            this.state.serverSalt = r.raw(8).slice();
-            if (bad === reqId) await resend(48);
-            break;
-          }
-          case CTOR.badMsgNotification: {
-            const bad = r.long(); r.int();
-            const code = r.int();
-            if (bad !== reqId) break;
+        case CTOR.badMsgNotification: {
+          const bad = r.long(); r.int();
+          const code = r.int();
+          const entry = this.waiting.get(bad);
+          if (!entry) break;
+          if (code === 16 || code === 17 || code === 32 || code === 33) {
             if (code === 16 || code === 17) {
               // The server's own msg_id carries its clock. Ids made under the old offset may be far ahead (17), and
               // MsgIds only ever goes up: drop that floor and start a new session so the next ids follow the new clock.
               this.state.timeOffset = Number(m.id >> 32n) - Math.floor(this.now() / 1000);
               this.msgIds.last = 0n;
-              this.newSession();
-              await resend(code);
-            } else if (code === 32 || code === 33) {
-              this.newSession();
-              await resend(code);
-            } else {
-              throw mtError("bad_msg", "bad_msg_notification " + code, { badMsgCode: code });
             }
-            break;
+            this.newSession();
+            // Every request in flight was sent under the old session: its answer would be ignored. Send them all again.
+            for (const w of [...this.waiting.values()]) await this.resend(w, code);
+          } else {
+            this.finish(entry, null, mtError("bad_msg", "bad_msg_notification " + code, { badMsgCode: code }));
           }
-          case CTOR.msgsAck:
-          case CTOR.pong:
-          case CTOR.msgDetailedInfo:
-          case CTOR.msgNewDetailedInfo:
-          case CTOR.futureSalts:
-            break;
-          default:
-            if (this.onUpdate) { try { this.onUpdate(mBody); } catch (e) { this.log("onUpdate failed: " + (e && e.message)); } }
+          break;
         }
+        case CTOR.msgsAck:
+        case CTOR.pong:
+        case CTOR.msgDetailedInfo:
+        case CTOR.msgNewDetailedInfo:
+        case CTOR.futureSalts:
+          break;
+        default:
+          if (this.onUpdate) { try { this.onUpdate(mBody); } catch (e) { this.log("onUpdate failed: " + (e && e.message)); } }
       }
     }
   }
@@ -1546,6 +1635,8 @@ const BUDGET_WINDOW_MS = 3600000;
 const MIN_LEFT_MS = 1500;   // a request never starts with less time than this before its caller's deadline
 const MARGIN_MS = 500;      // what a request leaves its caller after its own wait
 const POLL_MS = 250;        // how often a call waiting for its turn checks its deadline
+const MAX_AHEAD = 4;        // file chunks requested ahead and kept (answered or still in flight), oldest dropped first
+const AHEAD_WAIT_MS = 8000; // the longest a read waits for a chunk requested ahead before asking for it again
 
 /**
  * At most 3 bot logins per hour per device (Telegram answered FLOOD_WAIT_3121 after about ten in an hour). `store` is
@@ -1625,7 +1716,11 @@ class TelegramClient {
     this.dcs = new Map();   // dc -> { authKey, authKeyId, serverSalt, timeOffset, loggedIn, userId? }
     this.conns = new Map(); // dc -> { transport, session, inited }
     this.chain = Promise.resolve();
+    this.ahead = new Map(); // "<doc id>:<offset>:<limit>" -> { dc, session, entry }, in request order
   }
+
+  /** How many chunks requested ahead are kept (tests). */
+  aheadCount() { return this.ahead.size; }
 
   /**
    * Runs `fn` after the calls already queued (one at a time). With a `deadline` (a time of `now()`), the call is
@@ -1723,6 +1818,7 @@ class TelegramClient {
   async drop(dc) {
     const c = this.conns.get(dc);
     this.conns.delete(dc);
+    for (const [k, a] of this.ahead) if (a.dc === dc) this.ahead.delete(k); // their answers die with the connection
     if (c) await c.transport.close();
   }
 
@@ -1731,12 +1827,16 @@ class TelegramClient {
    * A closed socket is retried once on a new connection unless `retry` is false (the bot login retries by itself, so
    * that every attempt spends the budget). `hex` answers the result as a hex string (Session.call).
    */
-  async invoke(dc, body, { retry = true, hex = false, deadline, trace } = {}) {
+  async invoke(dc, body, { retry = true, hex = false, deadline, trace, after } = {}) {
     const c = await this.conn(dc, deadline);
     const wrapped = c.inited ? body : invokeWithLayer(LAYER, initConnection({ apiId: this.apiId, ...this.device }, body));
     const wait = this.budget(deadline);
     try {
-      const res = await c.session.call(wrapped, { timeoutMs: wait.ms, hex, trace });
+      const started = this.now();
+      const entry = await c.session.request(wrapped, { hex, trace });
+      // `after` sends more requests right behind this one, on a connection already initialised: never a failure of its own.
+      if (after && c.inited) { try { await after(c); } catch (e) { this.log("request ahead not sent: " + (e && e.code)); } }
+      const res = await c.session.settle(entry, started + wait.ms);
       c.inited = true;
       return res;
     } catch (e) {
@@ -1832,7 +1932,7 @@ class TelegramClient {
    * Follows FILE_MIGRATE_n; FLOOD_WAIT_n, FILE_REFERENCE_EXPIRED... come back as typed errors. With `{ hex: true }`
    * the bytes come back as a hex string, sliced out of the decrypted answer with no JS pass over them.
    */
-  getFile(loc, offset, limit, { hex = false, deadline, trace } = {}) {
+  getFile(loc, offset, limit, { hex = false, deadline, trace, ahead = [] } = {}) {
     try {
       if (!loc || loc.id === undefined || loc.accessHash === undefined || !(loc.fileReference && typeof loc.fileReference.length === "number")) {
         throw mtError("invalid_request", "a location needs id, accessHash and fileReference");
@@ -1841,14 +1941,56 @@ class TelegramClient {
     } catch (e) {
       return Promise.reject(e);
     }
-    const body = uploadGetFile(inputDocumentFileLocation({ id: BigInt(loc.id), accessHash: BigInt(loc.accessHash), fileReference: loc.fileReference }), offset, limit);
+    const location = inputDocumentFileLocation({ id: BigInt(loc.id), accessHash: BigInt(loc.accessHash), fileReference: loc.fileReference });
+    const body = uploadGetFile(location, offset, limit);
+    const keyOf = (o, l) => String(loc.id) + ":" + o + ":" + l + ":" + toHex(loc.fileReference);
     return this.serial(async () => {
       if (!this.homeDc) throw mtError("invalid_request", "connect first");
       let dc = Number(loc.dcId) || this.homeDc;
+      if (trace) { trace.pipe = "miss"; trace.ahead = 0; }
+      // The chunks to request right behind this one (not already requested, never this one).
+      const sendAhead = async (c) => {
+        for (const a of ahead) {
+          const k = keyOf(a.offset, a.limit);
+          if (this.ahead.has(k) || (a.offset === offset && a.limit === limit)) continue;
+          try { checkRange(a.offset, a.limit); } catch { continue; }
+          const entry = await c.session.request(uploadGetFile(location, a.offset, a.limit), { hex: true });
+          this.ahead.set(k, { dc, session: c.session, entry });
+          if (trace) trace.ahead++;
+          while (this.ahead.size > MAX_AHEAD) {
+            const [oldKey, old] = this.ahead.entries().next().value;
+            this.ahead.delete(oldKey);
+            old.session.forget(old.entry);
+          }
+        }
+      };
+      // A chunk requested ahead by an earlier read: its answer may already be here (or on its way).
+      const pre = this.ahead.get(keyOf(offset, limit));
+      if (pre) {
+        this.ahead.delete(keyOf(offset, limit));
+        const c = this.conns.get(pre.dc);
+        if (c && c.session === pre.session && !c.transport.closed) {
+          try {
+            const until = Math.min(this.now() + AHEAD_WAIT_MS, deadline === undefined ? Infinity : deadline - MIN_LEFT_MS);
+            const answer = await c.session.settle(pre.entry, until);
+            const file = hex ? parseUploadFileHex(answer) : parseUploadFile(answer);
+            if (file.ctor === CTOR.uploadFile) {
+              if (trace) trace.pipe = "hit";
+              if (ahead.length) { try { await sendAhead(c); } catch (e) { this.log("request ahead not sent: " + (e && e.code)); } } // keep the pipe full
+              return hex ? file.bytesHex : file.bytes;
+            }
+          } catch (e) {
+            this.log("chunk read ahead not usable (" + (e && e.code) + "): asking again");
+            if (e && (e.code === "closed" || e.code === "protocol")) await this.drop(pre.dc);
+          }
+        } else {
+          pre.session.forget(pre.entry);
+        }
+      }
       for (let attempt = 0; attempt < 4; attempt++) {
         try {
           await this.authorize(dc, deadline);
-          const answer = await this.invoke(dc, body, { hex, deadline, trace });
+          const answer = await this.invoke(dc, body, { hex, deadline, trace, after: attempt === 0 && ahead.length ? sendAhead : undefined });
           const tp = trace ? Date.now() : 0;
           const file = hex ? parseUploadFileHex(answer) : parseUploadFile(answer);
           if (trace) trace.parse += Date.now() - tp;
@@ -2948,15 +3090,15 @@ const __mod_src_shell_timing = (() => {
 const TIMING = true;
 
 /** A read's trace: every field is a duration in ms or a count; the core adds to it (src/mtproto/*). */
-const newTrace = () => (TIMING ? { start: Date.now(), queue: 0, sentAt: 0, firstFrameAt: 0, wsrecv: 0, frames: 0, frameBytes: 0, tohex: 0, ctr: 0, ige: 0, mac: 0, gunzip: 0, parse: 0, getfile: 0, b64: 0, tries: 0 } : undefined);
+const newTrace = () => (TIMING ? { start: Date.now(), queue: 0, sentAt: 0, firstFrameAt: 0, wsrecv: 0, frames: 0, frameBytes: 0, tohex: 0, ctr: 0, ige: 0, mac: 0, gunzip: 0, parse: 0, getfile: 0, b64: 0, tries: 0, pipe: "miss", ahead: 0 } : undefined);
 
 const n = (v) => (Number.isFinite(v) ? Math.round(v) : 0);
 
-/** `read off=<offset> len=<asked> bytes=<answered> total=<ms> queue=… net=… wsrecv=… frames=… framebytes=… tohex=… ctr=… ige=… mac=… gunzip=… parse=… getfile=… b64=… tries=…` */
+/** `read off=<offset> len=<asked> bytes=<answered> total=<ms> queue=… net=… wsrecv=… frames=… framebytes=… tohex=… ctr=… ige=… mac=… gunzip=… parse=… getfile=… b64=… tries=… pipe=hit|miss ahead=<n>` */
 function logRead(trace, { offset, length, bytes }) {
   if (!trace) return;
   const net = trace.sentAt && trace.firstFrameAt ? trace.firstFrameAt - trace.sentAt : 0;
-  kino.log(`read off=${n(offset)} len=${n(length)} bytes=${n(bytes)} total=${n(Date.now() - trace.start)} queue=${n(trace.queue)} net=${n(net)} wsrecv=${n(trace.wsrecv)} frames=${n(trace.frames)} framebytes=${n(trace.frameBytes)} tohex=${n(trace.tohex)} ctr=${n(trace.ctr)} ige=${n(trace.ige)} mac=${n(trace.mac)} gunzip=${n(trace.gunzip)} parse=${n(trace.parse)} getfile=${n(trace.getfile)} b64=${n(trace.b64)} tries=${n(trace.tries)}`);
+  kino.log(`read off=${n(offset)} len=${n(length)} bytes=${n(bytes)} total=${n(Date.now() - trace.start)} queue=${n(trace.queue)} net=${n(net)} wsrecv=${n(trace.wsrecv)} frames=${n(trace.frames)} framebytes=${n(trace.frameBytes)} tohex=${n(trace.tohex)} ctr=${n(trace.ctr)} ige=${n(trace.ige)} mac=${n(trace.mac)} gunzip=${n(trace.gunzip)} parse=${n(trace.parse)} getfile=${n(trace.getfile)} b64=${n(trace.b64)} tries=${n(trace.tries)} pipe=${trace.pipe === "hit" ? "hit" : "miss"} ahead=${n(trace.ahead)}`);
 }
 
 const word = (v, re) => (typeof v === "string" && re.test(v) ? v : "-");
@@ -3476,6 +3618,7 @@ const { shellError } = __mod_src_shell_errors;
 const { hexToBase64Native } = __mod_src_shell_b64;
 const { newTrace, logRead, logReadFailure } = __mod_src_shell_timing;
 
+const AHEAD = 2;          // whole chunks requested right behind a read at a MiB offset (never past the end of the file)
 const SHORT_FLOOD_S = 5;     // a FLOOD_WAIT this short is waited out once inside the read (kino.sleep: 5 s at most)
 const READ_BUDGET_MS = 17000; // everything a read does (getFile, refetch, retries) ends before this; Kino gives it 20 s
 const MIN_LEFT_MS = 1500;     // a request is not started with less than this left
@@ -3536,14 +3679,20 @@ async function readTimed(arg, started) {
   let refetched = false, waited = false;
   let hex = "";
   try {
+    const list = pieces(offset, want);
+    // Kino reads a file 1 MiB at a time, in order (after the first chunk and the last one): the next chunks are asked
+    // together with this one, so their answers are already on the way when Kino asks for them.
+    const ahead = list.length === 1 && offset % CHUNK === 0
+      ? Array.from({ length: AHEAD }, (_, k) => offset + (k + 1) * CHUNK).filter((o) => o < size).map((o) => ({ offset: o, limit: CHUNK }))
+      : [];
     await withSession(c, loadShell(c), async (live) => {
       hex = "";
-      for (const piece of pieces(offset, want)) {
+      for (const piece of list) {
         for (;;) {
           try {
             const tg = trace ? Date.now() : 0;
             if (trace) trace.tries++;
-            hex += await live.client.getFile(locOf(row.data), piece.offset, piece.limit, { hex: true, deadline, trace });
+            hex += await live.client.getFile(locOf(row.data), piece.offset, piece.limit, { hex: true, deadline, trace, ahead: refetched ? [] : ahead });
             if (trace) trace.getfile += Date.now() - tg;
             break;
           } catch (e) {

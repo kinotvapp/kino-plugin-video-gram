@@ -35,6 +35,7 @@ export class Session {
     this.log = log;
     this.msgIds = new MsgIds(now);
     this.pendingAcks = [];
+    this.waiting = new Map(); // msg_id -> the request waiting for its answer
     this.oldSessions = new Set();
     this.newSession();
   }
@@ -105,98 +106,156 @@ export class Session {
    * error (errors.js), `timeout` past the deadline, `bad_msg` when the server keeps refusing the message. With
    * `hex: true` the result comes back as a hex string instead of a Uint8Array.
    */
-  async call(body, { timeoutMs = this.timeoutMs, hex: wantHex = false, trace } = {}) {
-    await this.flushAcks();
+  async call(body, { timeoutMs = this.timeoutMs, hex = false, trace } = {}) {
     const deadline = this.now() + timeoutMs;
-    let reqId = await this.send(body);
+    const entry = await this.request(body, { hex, trace });
+    return this.settle(entry, deadline);
+  }
+
+  /**
+   * Sends `body` and answers its entry without waiting for the answer. Several requests may be in flight at once (one
+   * connection, MTProto pairs every answer with its msg_id): each pump fills whichever entry an answer belongs to.
+   * An entry is { done, result (hex), error }; `settle(entry, deadline)` pumps until it is done.
+   */
+  async request(body, { hex = false, trace } = {}) {
+    await this.flushAcks();
+    const entry = { body, hex, trace, id: 0n, done: false, result: null, error: null, resends: 0 };
+    entry.id = await this.send(body);
     if (trace && !trace.sentAt) trace.sentAt = Date.now();
-    let resends = 0;
-    const resend = async (why) => {
-      if (++resends > MAX_RESENDS) throw mtError("bad_msg", "the server keeps refusing the message (" + why + ")", { badMsgCode: why });
-      reqId = await this.send(body);
-    };
-    for (;;) {
-      if (this.now() >= deadline) throw mtError("timeout", "no answer in " + timeoutMs + " ms");
-      const queue = await this.recvMessages(deadline, trace);
-      while (queue.length) {
-        const m = queue.shift();
-        if (m.seqno & 1) this.pendingAcks.push(m.id);
-        const ctor = hexU32(m.hex, 0);
-        if (ctor === CTOR.msgContainer) {
-          const size = m.hex.length / 2;
-          const n = hexU32(m.hex, 4);
-          let o = 8;
-          for (let i = 0; i < n; i++) {
-            if (o + 16 > size) throw protocol("container past its end");
-            const h = new Reader(fromHex(m.hex.slice(o * 2, (o + 16) * 2)));
-            const id = h.long(), seqno = h.int(), len = h.int();
-            if (o + 16 + len > size) throw protocol("container past its end");
-            queue.push({ id, seqno, hex: m.hex.slice((o + 16) * 2, (o + 16 + len) * 2) });
-            o += 16 + len;
-          }
-          continue;
+    this.waiting.set(entry.id, entry);
+    return entry;
+  }
+
+  /** Stops waiting for `entry` (its answer, if it ever comes, is ignored). */
+  forget(entry) {
+    if (!entry.done) this.waiting.delete(entry.id);
+  }
+
+  finish(entry, result, error) {
+    this.waiting.delete(entry.id);
+    entry.done = true;
+    entry.result = result;
+    entry.error = error;
+  }
+
+  async resend(entry, why) {
+    this.waiting.delete(entry.id);
+    if (++entry.resends > MAX_RESENDS) {
+      this.finish(entry, null, mtError("bad_msg", "the server keeps refusing the message (" + why + ")", { badMsgCode: why }));
+      return;
+    }
+    entry.id = await this.send(entry.body);
+    this.waiting.set(entry.id, entry);
+  }
+
+  /**
+   * Pumps answers until `entry` is done; then answers its result (hex, or bytes when the request did not ask for hex)
+   * or throws its error. A pump that fails (the socket, a protocol error, the deadline) fails every request still in
+   * flight on this session: the client drops such a connection.
+   */
+  async settle(entry, deadline) {
+    while (!entry.done) {
+      if (this.now() >= deadline) {
+        this.forget(entry);
+        throw mtError("timeout", "no answer in time");
+      }
+      try {
+        await this.pumpOnce(deadline, entry.trace);
+      } catch (e) {
+        if (e && e.code === "timeout") { this.forget(entry); throw e; }
+        for (const w of [...this.waiting.values()]) this.finish(w, null, e);
+        throw e;
+      }
+    }
+    if (entry.error) throw entry.error;
+    return entry.hex ? entry.result : fromHex(entry.result);
+  }
+
+  /** One transport packet: every message in it goes to the request it answers (or to onUpdate). */
+  async pumpOnce(deadline, trace) {
+    const queue = await this.recvMessages(deadline, trace);
+    while (queue.length) {
+      const m = queue.shift();
+      if (m.seqno & 1) this.pendingAcks.push(m.id);
+      const ctor = hexU32(m.hex, 0);
+      if (ctor === CTOR.msgContainer) {
+        const size = m.hex.length / 2;
+        const n = hexU32(m.hex, 4);
+        let o = 8;
+        for (let i = 0; i < n; i++) {
+          if (o + 16 > size) throw protocol("container past its end");
+          const h = new Reader(fromHex(m.hex.slice(o * 2, (o + 16) * 2)));
+          const id = h.long(), seqno = h.int(), len = h.int();
+          if (o + 16 + len > size) throw protocol("container past its end");
+          queue.push({ id, seqno, hex: m.hex.slice((o + 16) * 2, (o + 16 + len) * 2) });
+          o += 16 + len;
         }
-        if (ctor === CTOR.gzipPacked) {
+        continue;
+      }
+      if (ctor === CTOR.gzipPacked) {
+        const tg = trace ? Date.now() : 0;
+        queue.unshift({ id: m.id, seqno: 0, hex: gunzipHex(hexBytesAt(m.hex, 4).hex) });
+        if (trace) trace.gunzip += Date.now() - tg;
+        continue;
+      }
+      if (ctor === CTOR.rpcResult) {
+        const to = new Reader(fromHex(m.hex.slice(8, 24))).long();
+        const entry = this.waiting.get(to);
+        if (!entry) continue; // a late answer to a request nobody waits for any more
+        let result = m.hex.slice(24);
+        if (result.length >= 8 && hexU32(result, 0) === CTOR.gzipPacked) {
           const tg = trace ? Date.now() : 0;
-          queue.unshift({ id: m.id, seqno: 0, hex: gunzipHex(hexBytesAt(m.hex, 4).hex) });
+          result = gunzipHex(hexBytesAt(result, 4).hex);
           if (trace) trace.gunzip += Date.now() - tg;
-          continue;
         }
-        if (ctor === CTOR.rpcResult) {
-          const to = new Reader(fromHex(m.hex.slice(8, 24))).long();
-          if (to !== reqId) continue; // a late answer to an earlier call
-          let result = m.hex.slice(24);
-          if (result.length >= 8 && hexU32(result, 0) === CTOR.gzipPacked) {
-            const tg = trace ? Date.now() : 0;
-            result = gunzipHex(hexBytesAt(result, 4).hex);
-            if (trace) trace.gunzip += Date.now() - tg;
-          }
-          if (result.length >= 8 && hexU32(result, 0) === CTOR.rpcError) throw fromRpcError(parseRpcError(new Reader(fromHex(result))));
-          return wantHex ? result : fromHex(result);
+        if (result.length >= 8 && hexU32(result, 0) === CTOR.rpcError) this.finish(entry, null, fromRpcError(parseRpcError(new Reader(fromHex(result)))));
+        else this.finish(entry, result, null);
+        continue;
+      }
+      // Everything else is small: read it as bytes.
+      const mBody = fromHex(m.hex);
+      const r = new Reader(mBody);
+      r.int();
+      switch (ctor) {
+        case CTOR.newSessionCreated:
+          r.long(); r.long();
+          this.state.serverSalt = r.raw(8).slice();
+          break;
+        case CTOR.badServerSalt: {
+          const bad = r.long(); r.int(); r.int();
+          this.state.serverSalt = r.raw(8).slice();
+          const entry = this.waiting.get(bad);
+          if (entry) await this.resend(entry, 48);
+          break;
         }
-        // Everything else is small: read it as bytes.
-        const mBody = fromHex(m.hex);
-        const r = new Reader(mBody);
-        r.int();
-        switch (ctor) {
-          case CTOR.newSessionCreated:
-            r.long(); r.long();
-            this.state.serverSalt = r.raw(8).slice();
-            break;
-          case CTOR.badServerSalt: {
-            const bad = r.long(); r.int(); r.int();
-            this.state.serverSalt = r.raw(8).slice();
-            if (bad === reqId) await resend(48);
-            break;
-          }
-          case CTOR.badMsgNotification: {
-            const bad = r.long(); r.int();
-            const code = r.int();
-            if (bad !== reqId) break;
+        case CTOR.badMsgNotification: {
+          const bad = r.long(); r.int();
+          const code = r.int();
+          const entry = this.waiting.get(bad);
+          if (!entry) break;
+          if (code === 16 || code === 17 || code === 32 || code === 33) {
             if (code === 16 || code === 17) {
               // The server's own msg_id carries its clock. Ids made under the old offset may be far ahead (17), and
               // MsgIds only ever goes up: drop that floor and start a new session so the next ids follow the new clock.
               this.state.timeOffset = Number(m.id >> 32n) - Math.floor(this.now() / 1000);
               this.msgIds.last = 0n;
-              this.newSession();
-              await resend(code);
-            } else if (code === 32 || code === 33) {
-              this.newSession();
-              await resend(code);
-            } else {
-              throw mtError("bad_msg", "bad_msg_notification " + code, { badMsgCode: code });
             }
-            break;
+            this.newSession();
+            // Every request in flight was sent under the old session: its answer would be ignored. Send them all again.
+            for (const w of [...this.waiting.values()]) await this.resend(w, code);
+          } else {
+            this.finish(entry, null, mtError("bad_msg", "bad_msg_notification " + code, { badMsgCode: code }));
           }
-          case CTOR.msgsAck:
-          case CTOR.pong:
-          case CTOR.msgDetailedInfo:
-          case CTOR.msgNewDetailedInfo:
-          case CTOR.futureSalts:
-            break;
-          default:
-            if (this.onUpdate) { try { this.onUpdate(mBody); } catch (e) { this.log("onUpdate failed: " + (e && e.message)); } }
+          break;
         }
+        case CTOR.msgsAck:
+        case CTOR.pong:
+        case CTOR.msgDetailedInfo:
+        case CTOR.msgNewDetailedInfo:
+        case CTOR.futureSalts:
+          break;
+        default:
+          if (this.onUpdate) { try { this.onUpdate(mBody); } catch (e) { this.log("onUpdate failed: " + (e && e.message)); } }
       }
     }
   }

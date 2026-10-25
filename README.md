@@ -7,7 +7,7 @@ phone talks to Telegram directly.
 
 This is for **your own** channel. It is not a catalogue of films, and it is not meant to share one.
 
-- Plugin id `telegram-library`, `apiVersion` 12 (Kino 0.9.68 or newer), phone first.
+- Plugin id `telegram-library`. Requires Kino with **apiVersion 13** (Kino 0.9.75 or newer); phone first.
 - Capabilities: `home`, `search`, `browse`, `scopedSearch`, `resolve`, `socket`, `byteSource`, `catalog`, plus its own
   section, categories (one tile per channel), `details` and a theme. No `download`, no `storageLarge`.
 - Hosts: `pluto`, `venus`, `aurora`, `vesta` and `flora` `.web.telegram.org` (Telegram's five data centres, over WebSocket). Nothing else.

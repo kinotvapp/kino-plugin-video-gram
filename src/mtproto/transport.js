@@ -5,6 +5,10 @@
 // kino.crypto's CTR is one-shot (key + iv in, bytes out), so CtrStream keeps the stream position itself: the byte at
 // stream offset k uses counter block iv + floor(k / 16), so a message starting at offset k is encrypted as
 // (k % 16 zero bytes + data) under iv + floor(k / 16) and the k % 16 prefix bytes are dropped.
+//
+// Frames cross kino.ws as hex strings (apiVersion 13: `send(hex, { encoding: "hex" })`, `recv(ms, { encoding: "hex" })`):
+// Kino encodes and decodes them natively, so no JavaScript loop touches the bytes of a chunk. An app without frame
+// encodings answers a Uint8Array or refuses a string: the transport notices it once and goes on the old way.
 import { toHex, fromHex, readU32LE, writeU32LE, random, reversed } from "./bytes.js";
 import { ctrHex } from "./crypto.js";
 import { mtError } from "./errors.js";
@@ -62,7 +66,10 @@ export class Transport {
     this.url = url || dcUrl(dc);
     this.wsOpen = open || ((u, o) => kino.ws.open(u, o));
     this.ws = null;
-    this.bufHex = "";
+    this.bufHex = "";   // the start of the stream not yet returned as packets
+    this.pending = [];  // later frames (deobfuscated hex) not yet joined: one join per packet, not one per frame
+    this.pendingChars = 0;
+    this.encoded = true; // frames as hex strings, until the app shows it cannot
     this.closed = false;
   }
 
@@ -91,7 +98,17 @@ export class Transport {
     if (this.firstHex) { wire = this.firstHex + wire; this.firstHex = null; }
     if (wire.length / 2 > MAX_SEND_BYTES) throw mtError("invalid_request", "packet too large for one frame");
     try {
-      await this.ws.send(fromHex(wire));
+      if (this.encoded) {
+        try {
+          await this.ws.send(wire, { encoding: "hex" });
+        } catch (e) {
+          if (!(e && e.code === "invalid_request" && /Uint8Array/.test(String(e.message)))) throw e;
+          this.encoded = false; // an app without frame encodings
+          await this.ws.send(fromHex(wire));
+        }
+      } else {
+        await this.ws.send(fromHex(wire));
+      }
     } catch (e) {
       const code = e && e.code;
       if (code === "too_large" || code === "invalid_request") throw mtError("invalid_request", "send refused: " + (e && e.message), { cause: code });
@@ -103,14 +120,22 @@ export class Transport {
   /** The next packet's payload as hex. Throws `timeout` after `timeoutMs`, `closed` when the socket ends. */
   async recvHex(timeoutMs = 20000, now = () => Date.now(), trace) {
     const deadline = now() + timeoutMs;
+    const join = () => {
+      if (!this.pending.length) return;
+      this.bufHex += this.pending.length === 1 ? this.pending[0] : this.pending.join("");
+      this.pending = [];
+      this.pendingChars = 0;
+    };
     for (;;) {
+      if (this.bufHex.length < 8) join();
       if (this.bufHex.length >= 8) {
         const n = readU32LE(fromHex(this.bufHex.slice(0, 8)), 0) & 0x7fffffff;
         if (n > MAX_PACKET_BYTES) {
           await this.close();
           throw mtError("protocol", "packet of " + n + " bytes announced: over the " + MAX_PACKET_BYTES + "-byte cap");
         }
-        if (this.bufHex.length >= 8 + n * 2) {
+        if (this.bufHex.length + this.pendingChars >= 8 + n * 2) {
+          join();
           const payload = this.bufHex.slice(8, 8 + n * 2);
           this.bufHex = this.bufHex.slice(8 + n * 2);
           return payload;
@@ -122,21 +147,26 @@ export class Transport {
       let frame;
       const t0 = trace ? Date.now() : 0;
       try {
-        frame = await this.ws.recv(Math.min(left, 60000));
+        frame = await this.ws.recv(Math.min(left, 60000), this.encoded ? { encoding: "hex" } : undefined);
       } catch (e) {
         this.closed = true;
         throw mtError(e && e.code === "limit" ? "protocol" : "closed", "socket closed: " + (e && e.message), { cause: e && e.code });
       }
       if (frame === null) { if (trace) trace.wsrecv += Date.now() - t0; continue; }
-      if (!trace) { this.bufHex += this.dec.processHex(toHex(frame)); continue; }
-      // Timing (the shell's TIMING switch): numbers only, never the data.
-      const t1 = Date.now();
-      trace.wsrecv += t1 - t0; trace.frames++; trace.frameBytes += frame.length;
-      if (!trace.firstFrameAt) trace.firstFrameAt = t1;
-      const fh = toHex(frame);
-      const t2 = Date.now();
-      this.bufHex += this.dec.processHex(fh);
-      trace.tohex += t2 - t1; trace.ctr += Date.now() - t2;
+      const t1 = trace ? Date.now() : 0;
+      let fh;
+      if (typeof frame === "string") fh = frame;
+      else { this.encoded = false; fh = toHex(frame); } // an app that ignored the encoding: the old JS pass
+      const t2 = trace ? Date.now() : 0;
+      const plain = this.dec.processHex(fh);
+      this.pending.push(plain);
+      this.pendingChars += plain.length;
+      if (trace) {
+        // Timing (the shell's TIMING switch): numbers only, never the data.
+        trace.wsrecv += t1 - t0; trace.frames++; trace.frameBytes += fh.length / 2;
+        if (!trace.firstFrameAt) trace.firstFrameAt = t1;
+        trace.tohex += t2 - t1; trace.ctr += Date.now() - t2;
+      }
     }
   }
 

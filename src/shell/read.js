@@ -13,6 +13,7 @@ import { shellError } from "./errors.js";
 import { hexToBase64Native } from "./b64.js";
 import { newTrace, logRead, logReadFailure } from "./timing.js";
 
+const AHEAD = 2;          // whole chunks requested right behind a read at a MiB offset (never past the end of the file)
 const SHORT_FLOOD_S = 5;     // a FLOOD_WAIT this short is waited out once inside the read (kino.sleep: 5 s at most)
 const READ_BUDGET_MS = 17000; // everything a read does (getFile, refetch, retries) ends before this; Kino gives it 20 s
 const MIN_LEFT_MS = 1500;     // a request is not started with less than this left
@@ -73,14 +74,20 @@ async function readTimed(arg, started) {
   let refetched = false, waited = false;
   let hex = "";
   try {
+    const list = pieces(offset, want);
+    // Kino reads a file 1 MiB at a time, in order (after the first chunk and the last one): the next chunks are asked
+    // together with this one, so their answers are already on the way when Kino asks for them.
+    const ahead = list.length === 1 && offset % CHUNK === 0
+      ? Array.from({ length: AHEAD }, (_, k) => offset + (k + 1) * CHUNK).filter((o) => o < size).map((o) => ({ offset: o, limit: CHUNK }))
+      : [];
     await withSession(c, loadShell(c), async (live) => {
       hex = "";
-      for (const piece of pieces(offset, want)) {
+      for (const piece of list) {
         for (;;) {
           try {
             const tg = trace ? Date.now() : 0;
             if (trace) trace.tries++;
-            hex += await live.client.getFile(locOf(row.data), piece.offset, piece.limit, { hex: true, deadline, trace });
+            hex += await live.client.getFile(locOf(row.data), piece.offset, piece.limit, { hex: true, deadline, trace, ahead: refetched ? [] : ahead });
             if (trace) trace.getfile += Date.now() - tg;
             break;
           } catch (e) {

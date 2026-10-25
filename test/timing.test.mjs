@@ -10,7 +10,7 @@ const MiB = 1048576;
 const SETTINGS = { api_id: "918273645", api_hash: "0f1e2d3c4b5a69788796a5b4c3d2e1f0", bot_token: "7012345678:AAFake-Token_value-ZZ0123456789abcdefXY" };
 const SECRETS = [SETTINGS.api_id, SETTINGS.api_hash, SETTINGS.bot_token, SETTINGS.bot_token.split(":")[1]];
 const CH1 = 1987654321n;
-const READ_RE = /^\[kino\.log\] read off=\d+ len=\d+ bytes=\d+ total=\d+ queue=\d+ net=\d+ wsrecv=\d+ frames=\d+ framebytes=\d+ tohex=\d+ ctr=\d+ ige=\d+ mac=\d+ gunzip=\d+ parse=\d+ getfile=\d+ b64=\d+ tries=\d+$/;
+const READ_RE = /^\[kino\.log\] read off=\d+ len=\d+ bytes=\d+ total=\d+ queue=\d+ net=\d+ wsrecv=\d+ frames=\d+ framebytes=\d+ tohex=\d+ ctr=\d+ ige=\d+ mac=\d+ gunzip=\d+ parse=\d+ getfile=\d+ b64=\d+ tries=\d+ pipe=(hit|miss) ahead=\d+$/;
 const REFRESH_RE = /^\[kino\.log\] refresh total=\d+ connect=\d+ login=(new|reused|-) loginms=\d+ pages=\d+ disc=\d+ upsert=\d+ purge=\d+ added=\d+ incomplete=[01] result=[a-z_]+$/;
 const FAIL_RE = /^read failed off=\d+ len=\d+ ms=\d+ code=[a-z_-]+ rpc=[A-Z0-9_-]+( seconds=\d+)?( dc=\d+)?( deadline=1)?$/;
 let tg, world, dev;
@@ -29,7 +29,7 @@ test("one timing line per read and per refresh, a warn line per failed read, not
   await p.read({ handle: ref, offset: 0, length: MiB });
   await p.read({ handle: ref, offset: 2 * MiB, length: MiB });
   tg.dc(2).once("getFile", () => ({ error: [420, "FLOOD_WAIT_600"] }));
-  await assert.rejects(p.read({ handle: ref, offset: MiB, length: MiB }));
+  await assert.rejects(p.read({ handle: ref, offset: 3 * 4096, length: 4096 })); // not a chunk read ahead: a request of its own
   const reads = dev.logs.filter((l) => l.startsWith("[kino.log] read "));
   assert.equal(reads.length, 2);
   for (const l of reads) assert.match(l, READ_RE);
@@ -43,7 +43,7 @@ test("one timing line per read and per refresh, a warn line per failed read, not
   const fails = dev.logs.filter((l) => l.startsWith("read failed"));
   assert.equal(fails.length, 1);
   assert.match(fails[0], FAIL_RE);
-  assert.match(fails[0], /^read failed off=1048576 len=1048576 ms=\d+ code=flood_wait rpc=FLOOD_WAIT_600 seconds=600/);
+  assert.match(fails[0], /^read failed off=12288 len=4096 ms=\d+ code=flood_wait rpc=FLOOD_WAIT_600 seconds=600/);
   const all = dev.logs.join("\n");
   for (const s of SECRETS) assert.ok(!all.includes(s), "a secret in the logs");
   const [row] = await dev.base.catalog.get([ref]);

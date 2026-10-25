@@ -13,20 +13,8 @@ import { FakeTelegram, fakeRsa } from "../testkit/fake-dc.mjs";
 
 const kino = installKino();
 
-/**
- * The kit's kino.ws.send checks `data instanceof Uint8Array` against Node's main realm, which a sandboxed plugin's
- * Uint8Array (another realm) never is. In the app the prelude and the plugin share one realm, so this adapter only
- * copies the bytes into a main-realm array; it changes nothing else.
- */
-const sandboxKino = Object.freeze({
-  ...kino,
-  ws: Object.freeze({
-    open: async (url, opts) => {
-      const s = await kino.ws.open(url, opts);
-      return Object.freeze({ send: (data) => s.send(new Uint8Array(data)), recv: (ms) => s.recv(ms), close: () => s.close() });
-    },
-  }),
-});
+// The kit's kino.ws accepts the sandbox realm's byte arrays and the frame encodings, like the app: no adapter needed.
+const sandboxKino = kino;
 
 const source = bundle();
 

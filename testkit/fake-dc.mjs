@@ -358,6 +358,7 @@ class DcConnection {
       r.string();
       const offset = Number(r.long()), limit = r.int();
       dc.stats.getFile++;
+      (dc.stats.getFileOffsets = dc.stats.getFileOffsets || []).push(offset);
       if (!entry.authorized) throw { rpc: [401, "AUTH_KEY_UNREGISTERED"] };
       const f = dc.cluster.files.get(id.toString());
       if (!f || f.accessHash !== accessHash) throw { rpc: [400, "FILE_ID_INVALID"] };
