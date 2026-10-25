@@ -6,17 +6,17 @@
   "additiveFromApp": { "kino.meta": "0.9.53", "kino.tmdb": "0.9.53", "catalogOnly": "0.9.54", "kino.browser.captureAll": "0.9.54", "fetch.errorHost": "0.9.55", "kino.fetchAnyHost": "0.9.55",
     "kino.meta.byTitle": "0.9.55", "kino.device": "0.9.55", "kino.seed": "0.9.55", "panel.loading": "0.9.64", "kino.nuvio": "0.9.71", "kino.sync.remoteChanged": "0.9.74", "action.link": "0.9.74", "action.setSettings": "0.9.74" },
   "capabilities": {
-    "names": ["search", "home", "browse", "episodes", "resolve", "download", "drm", "channels", "migrate", "scopedSearch", "meta", "subtitles", "tracking", "segments", "playlists", "externalResolve", "nuvio", "syncProvider", "socket", "byteSource", "storageLarge", "catalog", "qrScan"],
+    "names": ["search", "home", "browse", "episodes", "resolve", "download", "drm", "channels", "migrate", "scopedSearch", "meta", "subtitles", "tracking", "segments", "playlists", "externalResolve", "nuvio", "syncProvider", "socket", "byteSource", "storageLarge", "catalog", "qrScan", "imageSource"],
     "required": ["resolve"],
     "atLeastOneOf": ["search", "home"],
     "standalone": ["subtitles", "tracking", "segments", "syncProvider"],
     "anyPluginExports": ["subtitles"],
     "declarative": ["download", "drm", "scopedSearch", "externalResolve", "nuvio", "socket", "storageLarge", "catalog", "qrScan"],
-    "apiVersions": { "download": 2, "drm": 2, "channels": 3, "migrate": 6, "scopedSearch": 6, "meta": 6, "tracking": 7, "segments": 7, "playlists": 10, "externalResolve": 11, "nuvio": 11, "syncProvider": 12, "socket": 13, "byteSource": 13, "storageLarge": 13, "catalog": 13, "qrScan": 13 },
+    "apiVersions": { "download": 2, "drm": 2, "channels": 3, "migrate": 6, "scopedSearch": 6, "meta": 6, "tracking": 7, "segments": 7, "playlists": 10, "externalResolve": 11, "nuvio": 11, "syncProvider": 12, "socket": 13, "byteSource": 13, "storageLarge": 13, "catalog": 13, "qrScan": 13, "imageSource": 13 },
     "requires": { "scopedSearch": "search" },
     "requiresMessage": "The \"{capability}\" capability also needs \"{requires}\"",
     "needsApproval": ["download", "drm", "channels", "migrate", "tracking", "nuvio", "syncProvider"],
-    "exports": { "channels": ["liveCategories", "liveChannels"], "tracking": ["track"], "playlists": [], "syncProvider": ["syncPull", "syncPush"], "byteSource": ["read"] },
+    "exports": { "channels": ["liveCategories", "liveChannels"], "tracking": ["track"], "playlists": [], "syncProvider": ["syncPull", "syncPush"], "byteSource": ["read"], "imageSource": ["image"] },
     "optionalExports": { "channels": ["guide", "liveSearch"], "resolve": ["sign"], "playlists": ["playlists", "playlistItems", "playlistCreate", "playlistAddItem", "playlistRemoveItem", "playlistReorder"], "syncProvider": ["syncStatus"] }
   },
   "manifest": {
@@ -576,6 +576,24 @@
     "maxTitleChars": 80,
     "errorCodes": ["busy", "timeout", "unavailable", "permission_denied", "invalid_request", "not_allowed"],
     "settingsQr": { "type": "qr", "maxChars": 512, "minRefreshMs": 2000, "maxRefreshMs": 60000 }
+  },
+  "images": {
+    "$comment": "imageSource (apiVersion 13): a poster, backdrop, still or section hero image may be { source: \"plugin\", handle } instead of a URL; Kino loads it from the plugin's required image({ handle }) export, which answers { bytes: <base64>, mime }. One call in flight per plugin, never while that plugin has an open byte stream or a read queued, running or ended under readQuietMs ago (a timed-out call discards the plugin's runtime: QuickJS cannot be interrupted), kept in the image disk cache per plugin, installed version and handle; a failed handle is left alone for failureTtlMs; pauseAfterTimeouts timeouts in a row pause the plugin's images for pauseMs.",
+    "apiVersion": 13,
+    "capability": "imageSource",
+    "export": "image",
+    "source": "plugin",
+    "fields": ["poster", "backdrop", "still", "hero.image"],
+    "maxHandleChars": 512,
+    "maxBytes": 262144,
+    "mimes": ["image/jpeg", "image/png", "image/webp"],
+    "timeoutMs": 10000,
+    "maxInFlightPerPlugin": 1,
+    "readQuietMs": 2000,
+    "maxWaitMs": 20000,
+    "failureTtlMs": 300000,
+    "pauseAfterTimeouts": 2,
+    "pauseMs": 300000
   },
   "sleep": {
     "maxMs": 5000

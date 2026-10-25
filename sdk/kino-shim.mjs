@@ -19,7 +19,7 @@ import { createCipheriv, createDecipheriv, createHash, createHmac, createPublicK
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { anyFetchRefusal, anyHostBudget, contract, fetchAnyHost, hostMatches, isUserServer, kb, schemeAllowed, syncCallCap } from "./contract.mjs";
+import { allowsImageRefs, anyFetchRefusal, anyHostBudget, contract, fetchAnyHost, hostMatches, imageAnswer, imageRefOf, isUserServer, kb, schemeAllowed, syncCallCap } from "./contract.mjs";
 import { decodeCipherKey } from "./seal.mjs";
 import { filterRelevant, shortQuery, sortBySimilarity } from "./kino-rank.mjs";
 
@@ -2130,3 +2130,35 @@ function catalogKino(state) {
 }
 
 export { CATALOG_DAMAGED };
+
+// ---------- imageSource (apiVersion 13): asking a plugin's image export as Kino does ----------
+
+const imageTurns = new WeakMap();
+
+/**
+ * Asks `plugin`'s `image({ handle })` for the picture behind `ref` (`{ source: "plugin", handle }`, as your answer carries
+ * it), the way Kino's PluginImages does: only for a manifest that declares imageSource at apiVersion 13 and a plugin that
+ * exports `image`; one call at a time per plugin; at most contract.images.timeoutMs; the answer checked by `imageAnswer`
+ * (canonical base64, at most maxBytes decoded, an allowed mime whose signature the bytes carry). Resolves with
+ * `{ bytes: Buffer, mime }`; rejects with an Error naming why Kino would show the placeholder instead. What it does not
+ * mirror: the wait behind playback reads, the 5-minute memory of a failed handle and the disk cache (the app's scheduling).
+ */
+export async function askImage(plugin, manifest, ref, { timeoutMs = contract.images.timeoutMs } = {}) {
+  if (!allowsImageRefs(manifest)) throw new Error(`the manifest does not declare "${contract.images.capability}" at apiVersion ${contract.images.apiVersion}: a reference is no image`);
+  if (!plugin || typeof plugin[contract.images.export] !== "function") throw new Error(`the plugin does not export ${contract.images.export}(): the install fails with "El plugin no carga: le falta ${contract.images.export}"`);
+  const r = imageRefOf(ref);
+  if (!r) throw new Error(`not an image reference: { source: "${contract.images.source}", handle } with a handle of 1 to ${contract.images.maxHandleChars} characters and no control character`);
+  const before = imageTurns.get(plugin) || Promise.resolve();
+  const run = before.catch(() => {}).then(async () => {
+    let timer;
+    const late = new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`image did not answer within ${timeoutMs / 1000} s: Kino shows the placeholder`)), timeoutMs); });
+    try {
+      const out = await Promise.race([Promise.resolve().then(() => plugin[contract.images.export]({ handle: r.handle })), late]);
+      return imageAnswer(JSON.parse(JSON.stringify(out === undefined ? null : out)));
+    } finally {
+      clearTimeout(timer);
+    }
+  });
+  imageTurns.set(plugin, run);
+  return run;
+}

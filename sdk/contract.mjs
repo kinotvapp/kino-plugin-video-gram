@@ -715,6 +715,63 @@ function image(v, servers) {
   return imageVerdict(typeof v === "string" ? v : "", servers).url;
 }
 
+/** imageSource (apiVersion 13): whether this manifest's answers may carry image references (the app's EffectiveHosts.imagePlugin). */
+export function allowsImageRefs(manifest) {
+  return Number.isInteger(manifest.apiVersion) && manifest.apiVersion >= contract.images.apiVersion &&
+    Array.isArray(manifest.capabilities) && manifest.capabilities.includes(contract.images.capability);
+}
+
+/** The app's PluginImageRef.validHandle: 1 to maxHandleChars characters, no control character. */
+export function imageHandleOk(h) {
+  return typeof h === "string" && h.length >= 1 && h.length <= contract.images.maxHandleChars && !/[\u0000-\u001f\u007f-\u009f]/.test(h);
+}
+
+/** The app's PluginImageRef.fromOutput: `{ source: "plugin", handle }` with a valid handle as `{ source, handle }`, else null. */
+export function imageRefOf(v) {
+  if (v === null || typeof v !== "object" || Array.isArray(v) || v.source !== contract.images.source || !imageHandleOk(v.handle)) return null;
+  return { source: contract.images.source, handle: v.handle };
+}
+
+/**
+ * The app's PluginOutput.imageOrRef, for the fields that may carry a reference (poster, backdrop, still, a hero's image): a
+ * string is the Images rule's URL; an object is a reference only for a plugin that declares imageSource (ctx.imageRefs).
+ * The kit keeps a reference as `{ source: "plugin", handle }` (the app turns it into an address of its own).
+ */
+function imageOrRef(v, ctx) {
+  if (typeof v === "string") return image(v, ctx.servers);
+  if (ctx.imageRefs) return imageRefOf(v) || "";
+  return "";
+}
+
+const B64 = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+const B64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+/**
+ * What the app's PluginImages.decodeAnswer keeps of an `image` answer: `{ bytes: Buffer, mime }`, or throws an Error saying
+ * why Kino would show the placeholder (canonical base64 of at most maxBytes decoded bytes, a mime of contract.images.mimes,
+ * and bytes that really are that type).
+ */
+export function imageAnswer(value) {
+  const lim = contract.images;
+  if (value === null || typeof value !== "object" || Array.isArray(value)) throw new Error("image didn't return { bytes, mime }");
+  if (typeof value.mime !== "string" || !lim.mimes.includes(value.mime)) throw new Error(`image: mime must be one of ${lim.mimes.join(", ")}`);
+  const text = value.bytes;
+  if (typeof text !== "string" || !text) throw new Error("image: bytes must be a base64 string");
+  if (text.length > Math.ceil(lim.maxBytes / 3) * 4) throw new Error(`image: over ${lim.maxBytes} bytes once decoded`);
+  const pad = text.endsWith("==") ? 2 : text.endsWith("=") ? 1 : 0;
+  const last = pad ? B64_ALPHABET.indexOf(text[text.length - pad - 1]) : 0;
+  if (!B64.test(text) || (pad && (last & (pad === 2 ? 15 : 3)) !== 0)) throw new Error("image: bytes is not canonical base64 (standard alphabet, padded, no whitespace)");
+  const bytes = Buffer.from(text, "base64");
+  if (!bytes.length || bytes.length > lim.maxBytes) throw new Error(`image: over ${lim.maxBytes} bytes once decoded`);
+  const sig = {
+    "image/jpeg": (b) => b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff,
+    "image/png": (b) => b.length >= 8 && [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a].every((x, i) => b[i] === x),
+    "image/webp": (b) => b.length >= 12 && b.toString("latin1", 0, 4) === "RIFF" && b.toString("latin1", 8, 12) === "WEBP",
+  }[value.mime];
+  if (!sig(bytes)) throw new Error(`image: the bytes are not ${value.mime}`);
+  return { bytes, mime: value.mime };
+}
+
 function sameServer(server, u) {
   let s;
   try { s = new URL(server); } catch { return false; }
@@ -733,7 +790,8 @@ function strings(v, max, maxChars) {
   return out;
 }
 
-function items(list, max, { allowSeries, allowLive, allowAudio, allowAdult, servers }, drop) {
+function items(list, max, ctx, drop) {
+  const { allowSeries, allowLive, allowAudio, allowAdult } = ctx;
   const out = [];
   const seen = new Set();
   (Array.isArray(list) ? list : []).forEach((x, i) => {
@@ -760,7 +818,7 @@ function items(list, max, { allowSeries, allowLive, allowAudio, allowAdult, serv
     const ids = x.ids && typeof x.ids === "object" ? x.ids : {};
     out.push({
       id, ref: x.ref, title, kind: x.kind, year: text(x.year, 10),
-      poster: image(x.poster, servers), backdrop: image(x.backdrop, servers),
+      poster: imageOrRef(x.poster, ctx), backdrop: imageOrRef(x.backdrop, ctx),
       overview: text(x.overview, o().maxTextChars), lang: text(x.lang, 20), quality: text(x.quality, 20),
       originalTitle: text(x.originalTitle, o().maxTitleChars),
       genres: strings(x.genres, o().maxGenres, o().maxGenreChars),
@@ -846,7 +904,7 @@ function section(value, ctx, drop) {
   if (value.hero !== null && typeof value.hero === "object" && !Array.isArray(value.hero)) {
     const title = strictText(value.hero.title, o().maxTitleChars);
     if (!title) drop("section: a hero without title dropped");
-    else hero = { title, image: image(value.hero.image, ctx.servers), text: strictText(value.hero.text, lim.maxHeroTextChars) };
+    else hero = { title, image: imageOrRef(value.hero.image, ctx), text: strictText(value.hero.text, lim.maxHeroTextChars) };
   }
   return { tabs, tab, hero, rows: rows(Array.isArray(value.rows) ? value.rows : [], ctx, (m) => drop(`section ${m}`)) };
 }
@@ -875,7 +933,7 @@ function categories(value, ctx, drop) {
   return out;
 }
 
-function episodes(value, drop, servers) {
+function episodes(value, drop, servers, imageRefs = false) {
   if (value === null || typeof value !== "object" || Array.isArray(value)) throw new Error("the episode list is not valid JSON");
   if (!Array.isArray(value.episodes)) throw new Error("the plugin returned zero episodes");
   const seen = new Set();
@@ -892,7 +950,7 @@ function episodes(value, drop, servers) {
     eps.push({
       season, number: e.number, ref: e.ref, title: text(e.title, o().maxTitleChars),
       // The same image and length rules as an item's poster and runtimeMinutes (PluginOutput.episodes).
-      still: image(e.still, servers), overview: text(e.overview, o().maxTextChars),
+      still: imageOrRef(e.still, { servers, imageRefs }), overview: text(e.overview, o().maxTextChars),
       airDate: re(o().airDatePattern).test(text(e.airDate, 10)) ? text(e.airDate, 10) : "",
       runtimeMinutes: Number.isInteger(e.runtimeMinutes) && e.runtimeMinutes >= o().minRuntimeMinutes && e.runtimeMinutes <= o().maxRuntimeMinutes ? e.runtimeMinutes : 0,
     });
@@ -2118,6 +2176,8 @@ export function checkOutput(fn, value, manifest, servers = [], { liveChannel = f
     // 18+ entries are apiVersion 6: kept and marked (shown behind the person's 18+ code); below it, dropped.
     allowAdult: Number.isInteger(manifest.apiVersion) && manifest.apiVersion >= o().adultApiVersion,
     servers,
+    // imageSource (apiVersion 13): a poster, backdrop, still or hero image may be { source: "plugin", handle }.
+    imageRefs: allowsImageRefs(manifest),
   };
   const liveAdult = Number.isInteger(manifest.apiVersion) && manifest.apiVersion >= live().adultApiVersion;
   const json = JSON.stringify(value === undefined ? null : value);
@@ -2129,7 +2189,9 @@ export function checkOutput(fn, value, manifest, servers = [], { liveChannel = f
     case "home": return { value: rows(parsed, { ...ctx, homeLive: Number.isInteger(manifest.apiVersion) && manifest.apiVersion >= o().homeLiveApiVersion }, drop), drops };
     case "section": return { value: section(parsed, ctx, drop), drops };
     case "categories": return { value: categories(parsed, ctx, drop), drops };
-    case "episodes": return { value: episodes(parsed, drop, servers), drops };
+    case "episodes": return { value: episodes(parsed, drop, servers, ctx.imageRefs), drops };
+    // imageSource (apiVersion 13): what the app keeps of an image answer, or the reason it shows the placeholder.
+    case "image": return { value: imageAnswer(parsed), drops };
     // Widevine is the `drm` capability (apiVersion 2 by the manifest rules): without it every DRM-shaped key refuses the stream.
     case "resolve": return { value: stream(parsed, { manifest, servers, allowDrm: manifest.capabilities.includes("drm"), liveChannel, drop }), drops };
     case "sign": {
