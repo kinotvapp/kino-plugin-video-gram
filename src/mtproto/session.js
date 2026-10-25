@@ -224,8 +224,9 @@ export class Session {
     const result = entry.result;
     entry.result = null;
     if (entry.hex) return result;
-    big.release(result.length);
-    return fromHex(result);
+    const bytes = fromHex(result);
+    big.release(result.length); // after its last use
+    return bytes;
   }
 
   /**

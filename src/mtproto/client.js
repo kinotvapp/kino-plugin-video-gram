@@ -120,8 +120,7 @@ export class TelegramClient {
    */
   reset() {
     return this.serial(async () => {
-      for (const a of this.ahead.values()) { if (a.entry.done && a.entry.result) big.release(a.entry.result.length); else a.session.forget(a.entry); }
-      this.ahead.clear();
+      for (const [k, a] of [...this.ahead]) this.dropAhead(k, a);
       for (const dc of [...this.conns.keys()]) await this.drop(dc);
     });
   }
@@ -222,8 +221,15 @@ export class TelegramClient {
   async drop(dc) {
     const c = this.conns.get(dc);
     this.conns.delete(dc);
-    for (const [k, a] of this.ahead) if (a.dc === dc) this.ahead.delete(k); // their answers die with the connection
+    for (const [k, a] of [...this.ahead]) if (a.dc === dc) this.dropAhead(k, a); // their answers die with the connection
     if (c) await c.transport.close();
+  }
+
+  /** Forgets one chunk read ahead: an answered one gives its result back, one in flight is abandoned. */
+  dropAhead(k, a) {
+    this.ahead.delete(k);
+    if (a.entry.done) { if (a.entry.result) big.release(a.entry.result.length); a.entry.result = null; }
+    else a.session.forget(a.entry);
   }
 
   /**
@@ -233,17 +239,18 @@ export class TelegramClient {
    */
   async invoke(dc, body, { retry = true, hex = false, deadline, trace, after, before } = {}) {
     const c = await this.conn(dc, deadline);
-    // `before` makes room on the connection first (a chunk request waits for fewer than 3 in flight). When the room does
-    // not come (requests that never answer), the connection goes: that takes them off the wire, and a new one (stored
-    // key, no key exchange, no login) starts with nothing in flight.
-    if (before && (await before(c)) === false) {
-      this.log("no room on the connection: reconnecting");
-      await this.drop(dc);
-      return this.invoke(dc, body, { retry, hex, deadline, trace, after });
-    }
     const wrapped = c.inited ? body : invokeWithLayer(LAYER, initConnection({ apiId: this.apiId, ...this.device }, body));
     const wait = this.budget(deadline);
     try {
+      // `before` makes room on the connection first (a chunk request waits for fewer than 3 in flight). When the room
+      // does not come (requests that never answer), the connection goes: that takes them off the wire, and a new one
+      // (stored key, no key exchange, no login) starts with nothing in flight. A failure while waiting (a socket that
+      // closed) is handled below like any other.
+      if (before && (await before(c)) === false) {
+        this.log("no room on the connection: reconnecting");
+        await this.drop(dc);
+        return this.invoke(dc, body, { retry, hex, deadline, trace, after });
+      }
       const started = this.now();
       const entry = await c.session.request(wrapped, { hex, trace });
       this.maxInflight = Math.max(this.maxInflight, c.session.maxInflight);
@@ -257,7 +264,7 @@ export class TelegramClient {
       const e = thrown && typeof thrown === "object" ? thrown : { code: undefined, thrown };
       if (e.code === "closed" && retry) {
         await this.drop(dc);
-        return this.invoke(dc, body, { retry: false, hex, deadline, trace, before });
+        return this.invoke(dc, body, { retry: false, hex, deadline, trace, before, after });
       }
       // A connection in an unknown state is never used again: the next call reconnects with the stored key.
       if (e.code === "timeout" || e.code === "closed" || e.code === "protocol" || !isServerAnswer(e) || c.session.broken) await this.drop(dc);
@@ -362,11 +369,7 @@ export class TelegramClient {
     // Chunks read ahead are kept by offset: a read asking a shorter limit there (the file's last chunk) uses them too.
     const doc = String(loc.id) + ":" + toHex(loc.fileReference) + ":";
     const keyOf = (o) => doc + o;
-    const dropAhead = (k, a) => {
-      this.ahead.delete(k);
-      if (a.entry.done) { if (a.entry.result) big.release(a.entry.result.length); a.entry.result = null; }
-      else a.session.forget(a.entry);
-    };
+    const dropAhead = (k, a) => this.dropAhead(k, a);
     return this.serial(async () => {
       if (!this.homeDc) throw mtError("invalid_request", "connect first");
       let dc = Number(loc.dcId) || this.homeDc;
@@ -405,9 +408,8 @@ export class TelegramClient {
           try {
             const until = Math.min(this.now() + AHEAD_WAIT_MS, deadline === undefined ? Infinity : deadline - MIN_LEFT_MS);
             let answer = await c.session.settle(pre.entry, until); // read-aheads are always asked as hex
-            const file = parseUploadFileHex(answer);
-            big.release(answer.length); // its last use: what is returned below is a slice of it
-            answer = null;
+            let file;
+            try { file = parseUploadFileHex(answer); } finally { big.release(answer.length); answer = null; } // its last use
             if (file.ctor === CTOR.uploadFile) {
               if (trace) trace.pipe = "hit";
               if (ahead.length) { try { await sendAhead(c); } catch (e) { this.log("request ahead not sent (" + describeError(e) + ")"); } } // keep the pipe full

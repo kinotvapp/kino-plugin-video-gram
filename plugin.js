@@ -509,8 +509,12 @@ const BIG = 65536;
 const big = {
   live: 0,
   peak: 0,
-  hold(n) { if (n >= BIG) { this.live += n; if (this.live > this.peak) this.peak = this.live; } return n; },
-  release(n) { if (n >= BIG) this.live = Math.max(0, this.live - n); },
+  /** Counts a string of `n` characters (when it is big); answers what it counted, for a symmetric release. */
+  hold(n) { if (n >= BIG) { this.live += n; if (this.live > this.peak) this.peak = this.live; return n; } return 0; },
+  /** The opposite of hold(n). No clamp: a release with no matching hold shows as a negative live count. */
+  release(n) { if (n >= BIG) this.live -= n; },
+  /** Takes back exactly what hold() answered (a sum of holds of different sizes). */
+  releaseCounted(counted) { this.live -= counted; },
   reset() { this.live = 0; this.peak = 0; },
 };
 return { big };
@@ -1586,8 +1590,9 @@ class Session {
     const result = entry.result;
     entry.result = null;
     if (entry.hex) return result;
-    big.release(result.length);
-    return fromHex(result);
+    const bytes = fromHex(result);
+    big.release(result.length); // after its last use
+    return bytes;
   }
 
   /**
@@ -1900,8 +1905,7 @@ class TelegramClient {
    */
   reset() {
     return this.serial(async () => {
-      for (const a of this.ahead.values()) { if (a.entry.done && a.entry.result) big.release(a.entry.result.length); else a.session.forget(a.entry); }
-      this.ahead.clear();
+      for (const [k, a] of [...this.ahead]) this.dropAhead(k, a);
       for (const dc of [...this.conns.keys()]) await this.drop(dc);
     });
   }
@@ -2002,8 +2006,15 @@ class TelegramClient {
   async drop(dc) {
     const c = this.conns.get(dc);
     this.conns.delete(dc);
-    for (const [k, a] of this.ahead) if (a.dc === dc) this.ahead.delete(k); // their answers die with the connection
+    for (const [k, a] of [...this.ahead]) if (a.dc === dc) this.dropAhead(k, a); // their answers die with the connection
     if (c) await c.transport.close();
+  }
+
+  /** Forgets one chunk read ahead: an answered one gives its result back, one in flight is abandoned. */
+  dropAhead(k, a) {
+    this.ahead.delete(k);
+    if (a.entry.done) { if (a.entry.result) big.release(a.entry.result.length); a.entry.result = null; }
+    else a.session.forget(a.entry);
   }
 
   /**
@@ -2013,17 +2024,18 @@ class TelegramClient {
    */
   async invoke(dc, body, { retry = true, hex = false, deadline, trace, after, before } = {}) {
     const c = await this.conn(dc, deadline);
-    // `before` makes room on the connection first (a chunk request waits for fewer than 3 in flight). When the room does
-    // not come (requests that never answer), the connection goes: that takes them off the wire, and a new one (stored
-    // key, no key exchange, no login) starts with nothing in flight.
-    if (before && (await before(c)) === false) {
-      this.log("no room on the connection: reconnecting");
-      await this.drop(dc);
-      return this.invoke(dc, body, { retry, hex, deadline, trace, after });
-    }
     const wrapped = c.inited ? body : invokeWithLayer(LAYER, initConnection({ apiId: this.apiId, ...this.device }, body));
     const wait = this.budget(deadline);
     try {
+      // `before` makes room on the connection first (a chunk request waits for fewer than 3 in flight). When the room
+      // does not come (requests that never answer), the connection goes: that takes them off the wire, and a new one
+      // (stored key, no key exchange, no login) starts with nothing in flight. A failure while waiting (a socket that
+      // closed) is handled below like any other.
+      if (before && (await before(c)) === false) {
+        this.log("no room on the connection: reconnecting");
+        await this.drop(dc);
+        return this.invoke(dc, body, { retry, hex, deadline, trace, after });
+      }
       const started = this.now();
       const entry = await c.session.request(wrapped, { hex, trace });
       this.maxInflight = Math.max(this.maxInflight, c.session.maxInflight);
@@ -2037,7 +2049,7 @@ class TelegramClient {
       const e = thrown && typeof thrown === "object" ? thrown : { code: undefined, thrown };
       if (e.code === "closed" && retry) {
         await this.drop(dc);
-        return this.invoke(dc, body, { retry: false, hex, deadline, trace, before });
+        return this.invoke(dc, body, { retry: false, hex, deadline, trace, before, after });
       }
       // A connection in an unknown state is never used again: the next call reconnects with the stored key.
       if (e.code === "timeout" || e.code === "closed" || e.code === "protocol" || !isServerAnswer(e) || c.session.broken) await this.drop(dc);
@@ -2142,11 +2154,7 @@ class TelegramClient {
     // Chunks read ahead are kept by offset: a read asking a shorter limit there (the file's last chunk) uses them too.
     const doc = String(loc.id) + ":" + toHex(loc.fileReference) + ":";
     const keyOf = (o) => doc + o;
-    const dropAhead = (k, a) => {
-      this.ahead.delete(k);
-      if (a.entry.done) { if (a.entry.result) big.release(a.entry.result.length); a.entry.result = null; }
-      else a.session.forget(a.entry);
-    };
+    const dropAhead = (k, a) => this.dropAhead(k, a);
     return this.serial(async () => {
       if (!this.homeDc) throw mtError("invalid_request", "connect first");
       let dc = Number(loc.dcId) || this.homeDc;
@@ -2185,9 +2193,8 @@ class TelegramClient {
           try {
             const until = Math.min(this.now() + AHEAD_WAIT_MS, deadline === undefined ? Infinity : deadline - MIN_LEFT_MS);
             let answer = await c.session.settle(pre.entry, until); // read-aheads are always asked as hex
-            const file = parseUploadFileHex(answer);
-            big.release(answer.length); // its last use: what is returned below is a slice of it
-            answer = null;
+            let file;
+            try { file = parseUploadFileHex(answer); } finally { big.release(answer.length); answer = null; } // its last use
             if (file.ctor === CTOR.uploadFile) {
               if (trace) trace.pipe = "hit";
               if (ahead.length) { try { await sendAhead(c); } catch (e) { this.log("request ahead not sent (" + describeError(e) + ")"); } } // keep the pipe full
@@ -3900,6 +3907,7 @@ async function readTimed(arg, started) {
   // under 1.5 s left, and never waits for its turn past it), so connect + getFile + refetch + a retry fit inside it.
   let refetched = false, waited = false;
   let hex = "";
+  let counted = 0; // what big.hold counted of `hex` (pieces of any size): given back exactly
   try {
     const list = pieces(offset, want);
     // The file's last chunk: Kino reads it early (after the first, for the index of an mp4 at its end), out of order;
@@ -3911,7 +3919,8 @@ async function readTimed(arg, started) {
       ? Array.from({ length: AHEAD }, (_, k) => offset + (k + 1) * CHUNK).filter((o) => o < size).map((o) => ({ offset: o, limit: CHUNK }))
       : [];
     const attempt = () => withSession(c, loadShell(c), async (live) => {
-      big.release(hex.length); // a second attempt starts over
+      big.releaseCounted(counted); // a second attempt starts over
+      counted = 0;
       hex = "";
       for (const piece of list) {
         for (;;) {
@@ -3919,7 +3928,7 @@ async function readTimed(arg, started) {
             const tg = trace ? Date.now() : 0;
             if (trace) trace.tries++;
             const got = await live.client.getFile(locOf(row.data), piece.offset, piece.limit, { hex: true, deadline, trace, ahead: refetched ? [] : ahead, abandon: !tail });
-            big.hold(got.length); // the read's own copy, until it is base64 (the client hands it over uncounted)
+            counted += big.hold(got.length); // the read's own copy, until it is base64 (the client hands it over uncounted)
             hex += got;
             if (trace) trace.getfile += Date.now() - tg;
             break;
@@ -3969,14 +3978,23 @@ async function readTimed(arg, started) {
         throw Object.assign(shellError("unavailable", "read failed twice"), { cause: e2, detail: e2 });
       }
     }
+  } catch (e) {
+    big.releaseCounted(counted); // a read that failed lets its copy go
+    counted = 0;
+    hex = "";
+    throw e;
   } finally {
     saveSession();
   }
-  if (hex.length < want * 2) throw shellError("unavailable", "short read: " + hex.length / 2 + " of " + want + " bytes");
+  if (hex.length < want * 2) {
+    big.releaseCounted(counted);
+    throw shellError("unavailable", "short read: " + hex.length / 2 + " of " + want + " bytes");
+  }
   const tb = trace ? Date.now() : 0;
   const bytes = base64Of(hex.length === want * 2 ? hex : hex.slice(0, want * 2));
   big.hold(bytes.length); big.release(bytes.length); // the answer, handed to Kino as the call returns
-  big.release(hex.length);
+  big.releaseCounted(counted);
+  counted = 0;
   hex = "";
   if (trace) { trace.b64 = Date.now() - tb; logRead(trace, { offset, length, bytes: want }); }
   return { bytes };

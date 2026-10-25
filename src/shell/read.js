@@ -75,6 +75,7 @@ async function readTimed(arg, started) {
   // under 1.5 s left, and never waits for its turn past it), so connect + getFile + refetch + a retry fit inside it.
   let refetched = false, waited = false;
   let hex = "";
+  let counted = 0; // what big.hold counted of `hex` (pieces of any size): given back exactly
   try {
     const list = pieces(offset, want);
     // The file's last chunk: Kino reads it early (after the first, for the index of an mp4 at its end), out of order;
@@ -86,7 +87,8 @@ async function readTimed(arg, started) {
       ? Array.from({ length: AHEAD }, (_, k) => offset + (k + 1) * CHUNK).filter((o) => o < size).map((o) => ({ offset: o, limit: CHUNK }))
       : [];
     const attempt = () => withSession(c, loadShell(c), async (live) => {
-      big.release(hex.length); // a second attempt starts over
+      big.releaseCounted(counted); // a second attempt starts over
+      counted = 0;
       hex = "";
       for (const piece of list) {
         for (;;) {
@@ -94,7 +96,7 @@ async function readTimed(arg, started) {
             const tg = trace ? Date.now() : 0;
             if (trace) trace.tries++;
             const got = await live.client.getFile(locOf(row.data), piece.offset, piece.limit, { hex: true, deadline, trace, ahead: refetched ? [] : ahead, abandon: !tail });
-            big.hold(got.length); // the read's own copy, until it is base64 (the client hands it over uncounted)
+            counted += big.hold(got.length); // the read's own copy, until it is base64 (the client hands it over uncounted)
             hex += got;
             if (trace) trace.getfile += Date.now() - tg;
             break;
@@ -144,14 +146,23 @@ async function readTimed(arg, started) {
         throw Object.assign(shellError("unavailable", "read failed twice"), { cause: e2, detail: e2 });
       }
     }
+  } catch (e) {
+    big.releaseCounted(counted); // a read that failed lets its copy go
+    counted = 0;
+    hex = "";
+    throw e;
   } finally {
     saveSession();
   }
-  if (hex.length < want * 2) throw shellError("unavailable", "short read: " + hex.length / 2 + " of " + want + " bytes");
+  if (hex.length < want * 2) {
+    big.releaseCounted(counted);
+    throw shellError("unavailable", "short read: " + hex.length / 2 + " of " + want + " bytes");
+  }
   const tb = trace ? Date.now() : 0;
   const bytes = base64Of(hex.length === want * 2 ? hex : hex.slice(0, want * 2));
   big.hold(bytes.length); big.release(bytes.length); // the answer, handed to Kino as the call returns
-  big.release(hex.length);
+  big.releaseCounted(counted);
+  counted = 0;
   hex = "";
   if (trace) { trace.b64 = Date.now() - tb; logRead(trace, { offset, length, bytes: want }); }
   return { bytes };
