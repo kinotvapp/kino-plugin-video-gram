@@ -354,20 +354,24 @@ export class TelegramClient {
    * 4096, limit a multiple of 4096 dividing 1 MiB, never across a 1 MiB boundary (Telegram's rules, checked here first).
    * Follows FILE_MIGRATE_n; FLOOD_WAIT_n, FILE_REFERENCE_EXPIRED... come back as typed errors. With `{ hex: true }`
    * the bytes come back as a hex string, sliced out of the decrypted answer with no JS pass over them.
+   * With `{ thumbSize: "m" }` it reads the document's thumbnail of that type instead (thumb_size in the location):
+   * nothing is read ahead for it and it never touches the file's chunks read ahead.
    */
-  getFile(loc, offset, limit, { hex = false, deadline, trace, ahead = [], abandon = false } = {}) {
+  getFile(loc, offset, limit, { hex = false, deadline, trace, ahead = [], abandon = false, thumbSize = "" } = {}) {
     try {
       if (!loc || loc.id === undefined || loc.accessHash === undefined || !(loc.fileReference && typeof loc.fileReference.length === "number")) {
         throw mtError("invalid_request", "a location needs id, accessHash and fileReference");
       }
+      if (typeof thumbSize !== "string" || !/^[A-Za-z0-9]{0,4}$/.test(thumbSize)) throw mtError("invalid_request", "a thumb size is 1 to 4 letters or digits");
       checkRange(offset, limit);
     } catch (e) {
       return Promise.reject(e);
     }
-    const location = inputDocumentFileLocation({ id: BigInt(loc.id), accessHash: BigInt(loc.accessHash), fileReference: loc.fileReference });
+    if (thumbSize) { ahead = []; abandon = false; }
+    const location = inputDocumentFileLocation({ id: BigInt(loc.id), accessHash: BigInt(loc.accessHash), fileReference: loc.fileReference, thumbSize });
     const body = uploadGetFile(location, offset, limit);
     // Chunks read ahead are kept by offset: a read asking a shorter limit there (the file's last chunk) uses them too.
-    const doc = String(loc.id) + ":" + toHex(loc.fileReference) + ":";
+    const doc = String(loc.id) + ":" + toHex(loc.fileReference) + ":" + (thumbSize ? "t" + thumbSize + ":" : "");
     const keyOf = (o) => doc + o;
     const dropAhead = (k, a) => this.dropAhead(k, a);
     return this.serial(async () => {

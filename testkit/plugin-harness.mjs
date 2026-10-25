@@ -41,11 +41,11 @@ function configOf(values) {
  * fresh copy of the plugin (a new sandbox: module state gone, as after an idle close or a settings change) with those
  * settings. Logs of every runtime (console and kino.log) are collected in `logs`.
  */
-export function device({ lang = "es-CO" } = {}) {
+export function device({ lang = "es-CO", metaFixture = null } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "tg-plugin-"));
   const file = join(dir, "plugin.js");
   writeFileSync(file, testBundle());
-  const { kino: base } = createKino(MANIFEST, { env: {}, config: {} });
+  const { kino: base } = createKino(MANIFEST, { env: {}, config: {}, metaFixture });
   const logs = [];
   const sink = (...a) => logs.push(a.map((x) => (typeof x === "string" ? x : JSON.stringify(x))).join(" "));
   const pluginConsole = { log: sink, info: sink, warn: sink, error: sink };
@@ -53,8 +53,8 @@ export function device({ lang = "es-CO" } = {}) {
   return {
     base,
     logs,
-    async runtime(values = {}, { lang: runtimeLang = lang, catalog = base.catalog, crypto = base.crypto } = {}) {
-      const kino = Object.freeze({ ...base, lang: runtimeLang, config: configOf(values), log: kinoLog, catalog, crypto });
+    async runtime(values = {}, { lang: runtimeLang = lang, catalog = base.catalog, crypto = base.crypto, meta = base.meta } = {}) {
+      const kino = Object.freeze({ ...base, lang: runtimeLang, config: configOf(values), log: kinoLog, catalog, crypto, meta: meta === null ? undefined : meta });
       const { plugin } = await loadPlugin(file, kino, { console: pluginConsole });
       // Answers cross into Kino as JSON (README section 4), so they come back here as JSON too (main-realm values).
       const calls = {};

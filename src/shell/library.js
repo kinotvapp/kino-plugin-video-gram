@@ -16,6 +16,7 @@ import { shellError, kindOf } from "./errors.js";
 import { t, minutes, videoCount } from "./text.js";
 import { logRefresh } from "./timing.js";
 import { lastOpenTiming } from "./live.js";
+import { nameOf, carry, displayTitle, posterOf, backdropOf, enrichStep } from "./enrich.js";
 
 export const SLOTS = 8;
 export const REFRESH_MS = 5 * 60 * 1000;
@@ -30,7 +31,7 @@ const HLS = /mpegurl/i;
 
 // ---- shell state (tg.shell) ----
 
-const freshShell = (fp) => ({ v: 1, fp, slots: [], titles: {}, applied: [], top: {}, purge: [], indexedAt: 0, incomplete: false, count: 0, unslotted: 0, error: null, refused: null, channelErrors: 0 });
+const freshShell = (fp) => ({ v: 1, fp, slots: [], titles: {}, applied: [], top: {}, purge: [], indexedAt: 0, incomplete: false, count: 0, unslotted: 0, error: null, refused: null, channelErrors: 0, en: { off: 0, at: 0, done: false } });
 
 export function loadShell(c) {
   const s = readJson(KEYS.shell);
@@ -54,8 +55,13 @@ const channelChatId = (rawId) => String(-(1000000000000n + BigInt(rawId)));
 
 // ---- catalog rows ----
 
-/** A discovery entry as a catalog item: id "<chat>:<msg>", the title, the date as `sort`, a small `data`. */
+/**
+ * A discovery entry as a catalog item: id "<chat>:<msg>", the title (every name it goes by, for search), the date as
+ * `sort`, a small `data`: the parsed name (`n`) and its lookup key (`pk`), the thumbnail's type and size (`th`, never
+ * its bytes); TMDB's answer (`tm`) is added by the enrichment pass.
+ */
 export function rowOf(e) {
+  const named = nameOf(e.fileName, e.text || e.caption, e.title);
   const data = {
     chatId: e.chatId,
     msgId: e.msgId,
@@ -66,8 +72,11 @@ export function rowOf(e) {
     height: Number.isFinite(e.height) ? e.height : null,
     caption: clip(e.caption, 120),
     doc: { id: e.doc.id, accessHash: e.doc.accessHash, fileReference: e.doc.fileReference, dcId: e.doc.dcId },
+    n: named.n,
+    pk: named.pk,
   };
-  return { id: String(e.key).slice(0, 128), title: clip(e.title, 300) || "Video " + e.msgId, sort: Number.isSafeInteger(e.date) ? e.date : 0, data };
+  if (e.thumb) data.th = { t: e.thumb.t, s: e.thumb.s };
+  return { id: String(e.key).slice(0, 128), title: clip(named.title, 300) || "Video " + e.msgId, sort: Number.isSafeInteger(e.date) ? e.date : 0, data };
 }
 
 async function upsertAll(rows) {
@@ -119,16 +128,30 @@ function sizeText(bytes) {
   return Math.max(1, Math.round(bytes / 1024)) + " KB";
 }
 
+/** The card's picture: TMDB's poster (a plain URL) when the row has one, else Telegram's thumbnail through `image`. */
+export function posterFor(row) {
+  const p = posterOf(row);
+  if (p) return p;
+  return row.data && row.data.th ? { source: "plugin", handle: "t:" + row.id } : null;
+}
+
 /** A catalog row as a Kino item: id from the row id (only Item id characters), ref = the row id. */
 export function itemOf(row) {
   const d = row.data || {};
-  const item = { id: ("v" + row.id.replace(":", "_")).slice(0, 128), ref: row.id, title: clip(row.title, 200) || "Video", kind: "movie" };
+  const item = { id: ("v" + row.id.replace(":", "_")).slice(0, 128), ref: row.id, title: clip(displayTitle(d, row.title), 200) || "Video", kind: "movie" };
+  const poster = posterFor(row);
+  if (poster) item.poster = poster;
+  const backdrop = backdropOf(row);
+  if (backdrop) item.backdrop = backdrop;
+  const year = d.tm && d.tm.y ? d.tm.y : d.n && d.n.year ? String(d.n.year) : null;
+  if (year) item.year = year;
   const badges = [];
   if (d.duration > 0) badges.push(clock(d.duration));
   if (d.size > 0) badges.push(sizeText(d.size));
   if (badges.length) item.badges = badges;
   if (d.height > 0) item.quality = d.height + "p";
-  if (d.caption && d.caption !== row.title) item.overview = d.caption;
+  if (d.tm && d.tm.o) item.overview = d.tm.o;
+  else if (d.caption && d.caption !== row.title && d.caption !== item.title) item.overview = d.caption;
   if (d.duration > 0) item.runtimeMinutes = Math.min(1000, Math.max(1, Math.round(d.duration / 60)));
   return item;
 }
@@ -186,12 +209,17 @@ function assignSlots(shell, channels) {
 
 /** Applies one refresh's changes to the catalog: only videos of active channels, never an HLS playlist. */
 async function applyChanges(shell, changes, active) {
-  const rows = [];
+  let rows = [];
   for (const e of changes.upserted) {
     if (!active.has(e.chatId) || HLS.test(String(e.mime))) continue;
     rows.push(rowOf(e));
     shell.top[e.chatId] = Math.max(shell.top[e.chatId] || 0, e.msgId);
   }
+  // An edited message keeps its TMDB answer while it would ask the same thing (an edited caption with tmdb:<id> asks again).
+  const old = new Map();
+  for (let i = 0; i < rows.length; i += BATCH) for (const r of await kino.catalog.get(rows.slice(i, i + BATCH).map((x) => x.id))) old.set(r.id, r);
+  rows = rows.map((r) => carry(old.get(r.id), r));
+  if (rows.some((r) => !(r.data && r.data.tm))) shell.en = { off: 0, at: 0, done: false }; // new rows to ask about: the walk starts over (newest first)
   await upsertAll(rows);
   await removeAll(changes.removed);
   for (const chatId of changes.droppedChats) {
@@ -267,7 +295,10 @@ async function runRefresh({ force = false } = {}) {
     const pending = shell.incomplete || togglesPending;
     const blocked = problemOf(shell, now);
     if (!force && blocked && (blocked.kind === "flood" || blocked.kind === "budget")) return { shell, added, problem: blocked };
-    if (!force && !pending && shell.indexedAt && now - shell.indexedAt < REFRESH_MS) return { shell, added, problem: blocked };
+    if (!force && !pending && shell.indexedAt && now - shell.indexedAt < REFRESH_MS) {
+      await enrich(shell, started);
+      return { shell, added, problem: blocked };
+    }
 
     const deadline = started + REFRESH_BUDGET_MS;
     networked = true;
@@ -304,6 +335,7 @@ async function runRefresh({ force = false } = {}) {
     }, { deadline });
     shell.refused = null;
     if (!shell.incomplete) shell.indexedAt = now;
+    await enrich(shell, started);
     return { shell, added, networked, problem: problemOf(shell, now) };
   } catch (e) {
     shell = shell || loadShell(c);
@@ -329,6 +361,14 @@ async function runRefresh({ force = false } = {}) {
     const o = lastOpenTiming() !== openBefore ? lastOpenTiming() : null; // a connect of this refresh, or the live one reused
     logRefresh({ total: Date.now() - started, connect: o ? o.connect : 0, loginms: o ? o.loginms : 0, login: o ? o.login : networked ? "reused" : "-", ...tm, added, incomplete: shell && shell.incomplete });
   }
+}
+
+/** The TMDB pass of a refresh (bounded, never throws): only rows of active channels, never the device mark. */
+async function enrich(shell, started) {
+  const active = activeChats(shell);
+  const t0 = Date.now();
+  const asked = await enrichStep(shell, started, { skip: (row) => row.id === DEVICE_ROW || !active.has(chatOfId(row.id)) });
+  if (asked) kino.log("tmdb lookups=" + asked + " ms=" + (Date.now() - t0) + (shell.en && shell.en.done ? " done" : ""));
 }
 
 /** Forgets this device: the session, the discovery state, the shell state and the catalog. */

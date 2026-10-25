@@ -37,7 +37,7 @@ test("the published plugin.js is the bundle of src/plugin.js, one ES module Kino
   assert.doesNotMatch(built, /^\s*import\s/m);
   assert.deepEqual(scanMissingGlobals(built), []);
   assert.ok(built.length < 1024 * 1024, "Kino's entry file limit is 1 MB");
-  for (const name of ["home", "search", "browse", "resolve", "read", "details", "section", "categories", "settingsStatus", "action", "validateSettings"]) {
+  for (const name of ["home", "search", "browse", "resolve", "read", "details", "section", "categories", "settingsStatus", "action", "validateSettings", "image"]) {
     assert.match(built, new RegExp("^export async function " + name + "\\(", "m"), name);
   }
 });

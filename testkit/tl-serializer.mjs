@@ -39,10 +39,22 @@ export const attrAnimated = () => u32(0x11b58939);
 
 // document#8fd4c4d8 flags:# id:long access_hash:long file_reference:bytes date:int mime_type:string size:long
 //   thumbs:flags.0?Vector<PhotoSize> video_thumbs:flags.1?Vector<VideoSize> dc_id:int attributes:Vector<DocumentAttribute>
-// photoSizeEmpty#e17e23c type:string  (used for the thumbs vector)
+// photoSizeEmpty#e17e23c type:string  (thumbs: true)
+// photoSize#75c78e60 type:string w:int h:int size:int
+// photoStrippedSize#e0b0bc2e type:string bytes:bytes
+// photoSizeProgressive#fa3efb95 type:string w:int h:int sizes:Vector<int>
+// photoCachedSize#21e1ad6 type:string w:int h:int bytes:bytes
+// thumbs: false, true (one photoSizeEmpty "s"), or a list of { type, w, h, size } | { type, stripped: bytes } |
+// { type, w, h, sizes: [...] } | { type, w, h, cached: bytes }.
+function photoSize(t) {
+  if (t.stripped) return cat(u32(0xe0b0bc2e), str(t.type), tlBytes(t.stripped));
+  if (t.cached) return cat(u32(0x021e1ad6), str(t.type), i32(t.w), i32(t.h), tlBytes(t.cached));
+  if (t.sizes) return cat(u32(0xfa3efb95), str(t.type), i32(t.w), i32(t.h), vecInt(t.sizes));
+  return cat(u32(0x75c78e60), str(t.type), i32(t.w), i32(t.h), i32(t.size));
+}
 export const document = ({ id, accessHash, fileReference, date, mime, size, dcId = 2, attributes = [], thumbs = false }) =>
-  cat(u32(0x8fd4c4d8), u32(bit(thumbs, 0)), i64(id), i64(accessHash), tlBytes(fileReference), i32(date), str(mime), i64(size),
-    thumbs && vec([cat(u32(0x0e17e23c), str("s"))]), i32(dcId), vec(attributes));
+  cat(u32(0x8fd4c4d8), u32(bit(!!thumbs, 0)), i64(id), i64(accessHash), tlBytes(fileReference), i32(date), str(mime), i64(size),
+    thumbs && vec(Array.isArray(thumbs) ? thumbs.map(photoSize) : [cat(u32(0x0e17e23c), str("s"))]), i32(dcId), vec(attributes));
 // documentEmpty#36f8c871 id:long
 export const documentEmpty = (id) => cat(u32(0x36f8c871), i64(id));
 
@@ -166,6 +178,6 @@ export function messageWithDocument({ id, peer, date, text = "", post = true, do
   if (doc.video) attrs.push(attrVideo(doc.video));
   if (doc.animated) attrs.push(attrAnimated());
   if (doc.fileName !== undefined) attrs.push(attrFilename(doc.fileName));
-  const d = document({ id: doc.id, accessHash: doc.accessHash, fileReference: doc.fileReference, date, mime: doc.mime, size: doc.size, dcId: doc.dcId || 2, attributes: attrs, thumbs: !!doc.thumbs });
+  const d = document({ id: doc.id, accessHash: doc.accessHash, fileReference: doc.fileReference, date, mime: doc.mime, size: doc.size, dcId: doc.dcId || 2, attributes: attrs, thumbs: Array.isArray(doc.thumbs) ? doc.thumbs : !!doc.thumbs });
   return message({ id, peer, date, text, post, media: mediaDocument(d, { video: !!doc.video }) });
 }

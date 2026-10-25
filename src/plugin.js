@@ -6,8 +6,10 @@
 // scripts/build.mjs (`npm run build`): the published plugin.js.
 import { guard, shellError } from "./shell/errors.js";
 import { credentials } from "./shell/live.js";
-import { refresh, forget, homeRows, browsePage, searchPage, rowFor, loadShell, channelTabs, statusLines } from "./shell/library.js";
+import { refresh, forget, homeRows, browsePage, searchPage, rowFor, loadShell, channelTabs, statusLines, posterFor } from "./shell/library.js";
 import { read as readBytes } from "./shell/read.js";
+import { image as imageBytes } from "./shell/image.js";
+import { displayTitle, backdropOf } from "./shell/enrich.js";
 import { t, videoCount, minutes } from "./shell/text.js";
 
 const MIME_FIX = { "application/x-matroska": "video/x-matroska", "application/mp4": "video/mp4" };
@@ -50,7 +52,7 @@ export async function resolve(ref) {
     const mime = playableMime(d.mime);
     const stream = { source: "plugin", handle: row.id, size: d.size, mime };
     if (d.duration > 0) stream.durationMs = Math.round(d.duration * 1000);
-    const media = { title: row.title.slice(0, 120), sizeBytes: d.size };
+    const media = { title: displayTitle(d, row.title).slice(0, 120), sizeBytes: d.size };
     if (CONTAINER[mime]) media.container = CONTAINER[mime];
     if (d.width > 0 && d.height > 0) media.video = { width: d.width, height: d.height };
     stream.media = media;
@@ -67,13 +69,26 @@ export async function read(arg) {
   return guard(() => readBytes(arg));
 }
 
+/** imageSource: Telegram's thumbnail of a video TMDB has no poster for ({ handle: "t:<row id>" }). */
+export async function image(arg) {
+  return guard(() => imageBytes(arg));
+}
+
 export async function details(ref) {
   return guard(async () => {
     if (typeof ref !== "string" || ref.startsWith("setup:")) return null;
     let row;
     try { row = await rowFor(ref); } catch { return null; }
     const out = {};
-    if (row.data.caption) out.overview = row.data.caption;
+    const tm = row.data.tm;
+    if (tm && tm.o) out.overview = tm.o;
+    else if (row.data.caption) out.overview = row.data.caption;
+    const year = tm && tm.y ? tm.y : row.data.n && row.data.n.year ? String(row.data.n.year) : null;
+    if (year) out.year = year;
+    const poster = posterFor(row);
+    if (poster) out.poster = poster;
+    const backdrop = backdropOf(row);
+    if (backdrop) out.backdrop = backdrop;
     if (row.data.duration > 0) out.runtimeMinutes = Math.min(1000, Math.max(1, Math.round(row.data.duration / 60)));
     return Object.keys(out).length ? out : null;
   });

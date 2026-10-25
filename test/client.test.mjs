@@ -362,3 +362,20 @@ test("unknown server constructors in a container do not break the call", async (
   await c.close();
 });
 
+
+test("getFile with a thumbSize asks the document's thumbnail (thumb_size in the location), never reads ahead, and keeps it apart from the file's chunks", async () => {
+  const THUMB = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(9000, 7)]);
+  tg.addFile({ ...DOC, dc: 2, data: DATA, thumbs: { m: THUMB } });
+  const c = await newClient().connect(2);
+  await c.botLogin(CREDS);
+  const loc = { ...DOC, dcId: 2 };
+  const thumb = await c.getFile(loc, 0, 262144, { thumbSize: "m", hex: true, ahead: [{ offset: MiB, limit: MiB }] });
+  assert.equal(thumb, THUMB.toString("hex"));
+  assert.deepEqual(tg.dc(2).stats.thumbs, ["m"]);
+  assert.equal(tg.dc(2).stats.getFile, 1, "no read-ahead for a thumbnail");
+  const first = await c.getFile(loc, 0, 4096);
+  assert.ok(Buffer.from(first).equals(DATA.subarray(0, 4096)), "the file's own bytes, not the thumbnail's");
+  await assert.rejects(c.getFile(loc, 0, 262144, { thumbSize: "y" }), (e) => e.rpc === "LOCATION_INVALID");
+  await assert.rejects(c.getFile(loc, 0, 262144, { thumbSize: "a b" }), (e) => e.code === "invalid_request");
+  await c.close();
+});

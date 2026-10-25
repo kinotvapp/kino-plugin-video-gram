@@ -8,8 +8,10 @@ phone talks to Telegram directly.
 This is for **your own** channel. It is not a catalogue of films, and it is not meant to share one.
 
 - Plugin id `telegram-library`. Requires Kino with **apiVersion 13** (Kino 0.9.75 or newer). Both numbers are **provisional**: the app release that carries `socket`, `byteSource` and `catalog` is not out yet, and they may still change. Phone first.
-- Capabilities: `home`, `search`, `browse`, `scopedSearch`, `resolve`, `socket`, `byteSource`, `catalog`, plus its own
-  section, categories (one tile per channel), `details` and a theme. No `download`, no `storageLarge`.
+- Capabilities: `home`, `search`, `browse`, `scopedSearch`, `resolve`, `socket`, `byteSource`, `catalog`, `imageSource`,
+  plus its own section, categories (one tile per channel), `details` and a theme. No `download`, no `storageLarge`.
+- Posters: TMDB's, through Kino's own TMDB access (`kino.meta`: the plugin has no TMDB key and no TMDB host); when TMDB
+  does not know the video, Telegram's own thumbnail of it, through the plugin's `image` export.
 - Hosts: `pluto`, `venus`, `aurora`, `vesta` and `flora` `.web.telegram.org` (Telegram's five data centres, over WebSocket). Nothing else.
 
 ## Setup (Español)
@@ -37,7 +39,18 @@ Qué esperar:
 - **Videos nuevos: toca *Actualizar ahora*.** Es la forma segura de traer lo último que publicaste. Kino también
   revisa tus canales al abrir Inicio, como mucho cada 5 minutos, pero Kino guarda las filas de Inicio varias horas.
 - **Lectura anticipada.** Kino pide a Telegram los siguientes trozos del video mientras ves uno. Si el video guarda su índice al final y ese índice es grande (más de 1 MiB), o si saltas a otro punto, esa lectura anticipada se descarta y se vuelve a pedir lo que haga falta.
-- **Buscar** funciona sin internet, sobre el índice de este aparato, sin importar tildes ni mayúsculas.
+- **Buscar** funciona sin internet, sobre el índice de este aparato, sin importar tildes ni mayúsculas. Encuentra un
+  video por el título de TMDB y también por el nombre de su archivo.
+- **Pósters y nombres.** Kino limpia el nombre del archivo (`El.Laberinto.del.Fauno.2006.1080p.BluRay.mkv` se muestra
+  como *El Laberinto del Fauno*, 2006; `Dark.S03E08.mkv` como *Dark S03E08*) y le pregunta a TMDB, con el acceso de la
+  propia Kino, por ese título: si lo encuentra, muestra su póster, su título y su sinopsis. Si TMDB no lo conoce (un
+  video familiar, una grabación de pantalla), muestra la miniatura que Telegram guarda del video. Kino pregunta por unos
+  pocos videos cada vez que abre Inicio, así que una biblioteca grande se completa poco a poco; un video que TMDB no
+  conoce no se vuelve a preguntar en dos semanas.
+- **Si el póster no es el correcto**, edita la descripción del video en Telegram y agrega el número de TMDB de la
+  película o serie: `tmdb:603`, `{tmdb-603}`, `[tmdbid=603]` o el enlace de themoviedb.org (por ejemplo
+  `https://www.themoviedb.org/movie/603` o `/tv/1399` para una serie). Para una serie también sirve `{tmdb-tv-1399}`.
+  También puedes ponerlo en el nombre del archivo. Luego toca *Actualizar ahora*.
 - **Límites.** Un bot solo ve lo que se publicó en canales donde es administrador. Telegram limita los inicios de
   sesión de un bot: Kino inicia sesión una sola vez por aparato y como mucho 3 veces por hora; si Telegram pide
   esperar, Kino te dice cuántos minutos. Las listas HLS (m3u8) no se muestran.
@@ -70,7 +83,17 @@ What to expect:
 - **New videos: tap *Refresh now*.** It is the reliable way to bring in what you just posted. Kino also checks your
   channels when Home opens, at most every 5 minutes, but Kino keeps Home rows for hours.
 - **Read-ahead.** Kino asks Telegram for the next pieces of the video while you watch one. When the video keeps its index at the end and that index is big (over 1 MiB), or when you jump elsewhere, that read-ahead is dropped and asked again as needed.
-- **Search** works offline, over this device's index, ignoring accents and case.
+- **Search** works offline, over this device's index, ignoring accents and case. It finds a video by its TMDB title
+  and by its file name.
+- **Posters and names.** Kino cleans the file name (`El.Laberinto.del.Fauno.2006.1080p.BluRay.mkv` shows as *El
+  Laberinto del Fauno*, 2006; `Dark.S03E08.mkv` as *Dark S03E08*) and asks TMDB, through Kino's own access, about that
+  title: when it finds it, it shows its poster, title and overview. When TMDB does not know it (a family video, a
+  screen recording), it shows the thumbnail Telegram keeps of the video. Kino asks about a few videos each time Home
+  opens, so a big library fills in little by little; a video TMDB does not know is not asked about again for two weeks.
+- **When the poster is wrong**, edit the video's caption in Telegram and add the TMDB number of the film or series:
+  `tmdb:603`, `{tmdb-603}`, `[tmdbid=603]` or the themoviedb.org link (for example `https://www.themoviedb.org/movie/603`,
+  or `/tv/1399` for a series). For a series `{tmdb-tv-1399}` works too. It can also go in the file name. Then tap
+  *Refresh now*.
 - **Limits.** A bot only sees what was posted in channels it administers. Telegram limits bot logins: Kino logs in once
   per device and at most 3 times an hour; when Telegram asks to wait, Kino tells you for how many minutes. HLS
   playlists (m3u8) are not listed.
@@ -86,7 +109,15 @@ What to expect:
 | Telegram auth key + server salt per DC, the bot login (`tg.session`) | `kino.storage` | **no** (owner decision: one session per device, `AUTH_KEY_DUPLICATED` otherwise) | the password-protected backup carries `kino.storage`; see "Restores" below |
 | Login budget (`mtproto.botLogins`) | `kino.storage` | no | yes |
 | Update state and known channels (`tg.discovery`), channel slots and the index marker (`tg.shell`) | `kino.storage` | no | yes |
-| The video index (one row per video) | `kino.catalog` (SQLite, one file for this plugin) | no | no: rebuilt from Telegram when it comes back empty |
+| The video index (one row per video), with each video's parsed name, its thumbnail's type and size (never its bytes) and TMDB's answer (poster path, title, year, 160 characters of overview, TMDB id, or a miss with its date) | `kino.catalog` (SQLite, one file for this plugin) | no | no: rebuilt from Telegram when it comes back empty |
+| A thumbnail reference in a saved title (`{ source: "plugin", handle: "t:<chat>:<message>" }`) | wherever Kino keeps the title's poster (library, history, lists) | yes, as part of those rows | yes |
+
+**Pictures.** A TMDB poster is a plain `https://image.tmdb.org/t/p/w342/...` URL that Kino loads itself (images are
+display only, not checked against `hosts`). A Telegram thumbnail goes through the plugin's `image` export: the handle
+is only the catalog row id (chat and message number, no access hash, no file reference, no secret), and the rest is
+looked up in this device's catalog. On another device, or after a restore, such a saved picture shows Kino's
+placeholder until the plugin lists the video again there. A picture never costs a bot login: without a stored login on
+this device it is skipped.
 
 **Restores.** Each install has a random device id, kept both in `tg.session` and in one row of `kino.catalog`, which
 is never in a backup. A stored session is used only when both ids match. So a backup restored on another device (a

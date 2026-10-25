@@ -6,11 +6,12 @@
 // hex becomes base64 with two native AES-CTR passes (b64.js). The JS passes left per chunk are upstream: the app's
 // prelude decoding the WebSocket frame, and the transport's one toHex of it (src/mtproto/transport.js).
 import { CHUNK } from "../mtproto/client.js";
-import { toBase64, fromHex } from "../mtproto/bytes.js";
+import { fromHex } from "../mtproto/bytes.js";
 import { credentials, withSession, saveSession } from "./live.js";
 import { loadShell, rowFor, rowOf } from "./library.js";
+import { carry } from "./enrich.js";
 import { shellError } from "./errors.js";
-import { hexToBase64Native } from "./b64.js";
+import { base64Of } from "./b64.js";
 import { newTrace, logRead, logReadFailure, logRecovery } from "./timing.js";
 import { isServerAnswer } from "../mtproto/errors.js";
 import { big } from "../mtproto/big.js";
@@ -36,16 +37,8 @@ export function pieces(offset, want) {
   return out;
 }
 
-const locOf = (d) => ({ id: d.doc.id, accessHash: d.doc.accessHash, fileReference: fromHex(d.doc.fileReference), dcId: d.doc.dcId });
+export const locOf = (d) => ({ id: d.doc.id, accessHash: d.doc.accessHash, fileReference: fromHex(d.doc.fileReference), dcId: d.doc.dcId });
 
-function base64Of(hex) {
-  try {
-    return hexToBase64Native(hex);
-  } catch (e) {
-    kino.log("native base64 failed (" + (e && e.code) + "), using the JS codec");
-    return toBase64(fromHex(hex));
-  }
-}
 
 export async function read(arg) {
   const started = Date.now();
@@ -110,7 +103,7 @@ async function readTimed(arg, started) {
                 await kino.catalog.remove([row.id]);
                 throw shellError("not_found", "the message is gone");
               }
-              row = rowOf(fresh);
+              row = carry(row, rowOf(fresh)); // the TMDB answer stays with the row
               await kino.catalog.upsert([row]);
               continue;
             }

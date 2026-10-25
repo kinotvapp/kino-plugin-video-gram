@@ -76,8 +76,10 @@ export class FakeTelegram {
     return this.dcs.get(id);
   }
   /** A file served by DC `dc`: bytes `data`, file reference `fileReference`. */
-  addFile({ id, accessHash, fileReference, dc, data }) {
-    this.files.set(String(id), { accessHash: BigInt(accessHash), fileReference: Buffer.from(fileReference), dc, data: Buffer.from(data) });
+  addFile({ id, accessHash, fileReference, dc, data, thumbs = {} }) {
+    // `thumbs`: the document's thumbnails by type letter ({ m: Buffer }), served by getFile with that thumb_size.
+    const t = Object.fromEntries(Object.entries(thumbs).map(([k, v]) => [k, Buffer.from(v)]));
+    this.files.set(String(id), { accessHash: BigInt(accessHash), fileReference: Buffer.from(fileReference), dc, data: Buffer.from(data), thumbs: t });
   }
   install() {
     this.fake = installFakeWebSocket((url) => {
@@ -396,9 +398,10 @@ class DcConnection {
       r.int();
       if (r.int() !== CTOR.inputDocumentFileLocation) throw { rpc: [400, "LOCATION_INVALID"] };
       const id = r.long(), accessHash = r.long(), fileReference = Buffer.from(r.bytes());
-      r.string();
+      const thumbSize = r.string();
       const offset = Number(r.long()), limit = r.int();
       dc.stats.getFile++;
+      if (thumbSize) (dc.stats.thumbs = dc.stats.thumbs || []).push(thumbSize);
       (dc.stats.getFileOffsets = dc.stats.getFileOffsets || []).push(offset);
       if (!entry.authorized) throw { rpc: [401, "AUTH_KEY_UNREGISTERED"] };
       const f = dc.cluster.files.get(id.toString());
@@ -406,7 +409,9 @@ class DcConnection {
       if (f.dc !== dc.id) throw { rpc: [303, "FILE_MIGRATE_" + f.dc] };
       if (!f.fileReference.equals(fileReference)) throw { rpc: [400, "FILE_REFERENCE_EXPIRED"] };
       if (offset % 4096 || limit % 4096 || 1048576 % limit || Math.floor(offset / 1048576) !== Math.floor((offset + limit - 1) / 1048576)) throw { rpc: [400, "LIMIT_INVALID"] };
-      return new Writer().int(CTOR.uploadFile).int(0xb3cea0e4).int(dc.now()).bytes(f.data.subarray(offset, offset + limit)).done();
+      const source = thumbSize ? f.thumbs[thumbSize] : f.data;
+      if (!source) throw { rpc: [400, "LOCATION_INVALID"] };
+      return new Writer().int(CTOR.uploadFile).int(0xb3cea0e4).int(dc.now()).bytes(source.subarray(offset, offset + limit)).done();
     }
     const call = readApiCall(ctor, r);
     if (call) {

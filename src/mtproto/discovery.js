@@ -35,7 +35,7 @@ const VERSION = 1;
 const CHANNEL_LIMIT = 100;
 const BATCH = 100;
 const DEFAULT_BUDGET_BYTES = 160000;
-const MAX_TITLE = 200, MAX_CAPTION = 200, MAX_CHAT_TITLE = 100;
+const MAX_TITLE = 200, MAX_CAPTION = 200, MAX_CHAT_TITLE = 100, MAX_TEXT = 1000;
 const cap = (s, n) => { s = String(s || ""); return s.length > n ? s.slice(0, n) : s; };
 // Errors that belong to one answer (one channel, or the common box) and must not stop the others.
 const ISOLATED = new Set(["protocol", "rpc_error", "bot_method_invalid"]);
@@ -47,10 +47,11 @@ const KEEP_UPDATES = new Set([
   "updateNewMessage", "updateEditMessage", "updateDeleteMessages",
   "updateNewChannelMessage", "updateEditChannelMessage", "updateDeleteChannelMessages", "updateChannel", "updateChannelTooLong",
 ]);
-// Types inside messages/chats/users the index never reads.
+// Types inside messages/chats/users the index never reads. PhotoSize is read: a document's thumbs give the card picture
+// (thumbOf; a few small objects per video, the stripped/cached bytes among them at most a few KB).
 const SKIP_TYPES = new Set([
   "MessageEntity", "ReplyMarkup", "MessageReactions", "MessageReplies", "MessageFwdHeader", "MessageReplyHeader", "MessageAction",
-  "RestrictionReason", "FactCheck", "PhotoSize", "VideoSize", "Photo", "ChatPhoto", "UserProfilePhoto", "UserStatus", "PeerColor",
+  "RestrictionReason", "FactCheck", "VideoSize", "Photo", "ChatPhoto", "UserProfilePhoto", "UserStatus", "PeerColor",
   "EmojiStatus", "ChatAdminRights", "ChatBannedRights", "Username", "ForumTopic", "PeerNotifySettings", "DraftMessage", "EncryptedMessage",
 ]);
 const skip = (name, type) => (type === "Update" ? !KEEP_UPDATES.has(name) : SKIP_TYPES.has(type));
@@ -88,6 +89,28 @@ function titleFrom(fileName, caption, msgId) {
   return cap(firstLine(caption) || "Video " + msgId, MAX_TITLE);
 }
 
+const THUMB_MAX_BYTES = 262144; // Kino's cap for a picture a plugin serves (contract images.maxBytes)
+const THUMB_ORDER = ["m", "x", "s"];
+/**
+ * The document's best small thumbnail to show on a card, as { t: type letter, s: bytes, w, h }, or null: a downloadable
+ * photoSize (or the largest step of a progressive one) of at most 256 KB, "m" (320 px) first, then "x", then "s", then
+ * the largest other one. Stripped, cached and path sizes are never picked (their bytes are inline, not downloadable).
+ */
+export function thumbOf(doc) {
+  const list = [];
+  for (const t of (doc && doc.thumbs) || []) {
+    if (!t || typeof t.type !== "string" || !/^[A-Za-z0-9]{1,4}$/.test(t.type)) continue;
+    let size = null;
+    if (t._ === "photoSize") size = Number(t.size);
+    else if (t._ === "photoSizeProgressive" && Array.isArray(t.sizes) && t.sizes.length) size = Math.max(...t.sizes.map(Number));
+    if (!Number.isSafeInteger(size) || size < 1 || size > THUMB_MAX_BYTES) continue;
+    list.push({ t: t.type, s: size, w: Number(t.w) || 0, h: Number(t.h) || 0 });
+  }
+  if (!list.length) return null;
+  for (const type of THUMB_ORDER) { const hit = list.find((x) => x.t === type); if (hit) return hit; }
+  return list.sort((a, b) => b.s - a.s)[0];
+}
+
 /**
  * A Message as an IndexEntry when it carries a video document, else null. Text is capped to keep the saved index
  * small: title and caption (its first non-empty line) at most 200 characters, chatTitle at most 100.
@@ -109,6 +132,7 @@ export function videoEntry(msg, chatTitle = "") {
   const chatId = chatIdOf(msg.peer_id);
   if (chatId === null) return null;
   const caption = msg.message || "";
+  const thumb = thumbOf(doc);
   return {
     key: chatId + ":" + msg.id,
     chatId,
@@ -123,6 +147,10 @@ export function videoEntry(msg, chatTitle = "") {
     height: video ? video.h : null,
     date: msg.date,
     doc: { id: String(doc.id), accessHash: String(doc.access_hash), fileReference: toHex(doc.file_reference), dcId: doc.dc_id },
+    // For the shell's name parsing (a TMDB marker may sit on any line of the caption) and card picture.
+    ...(fileName ? { fileName: cap(fileName, MAX_TITLE) } : {}),
+    ...(caption && caption.trim() !== firstLine(caption) ? { text: cap(caption, MAX_TEXT) } : {}),
+    ...(thumb ? { thumb } : {}),
   };
 }
 
