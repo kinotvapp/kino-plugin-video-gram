@@ -28,6 +28,9 @@ export const loginFp = (c) => digest("login\n" + c.apiId + "\n" + c.apiHash + "\
 
 let live = null;       // { fp, device, client, discovery, saved, ready }
 let connecting = null; // the one connect in flight: every caller of this runtime waits on it
+/** The last connect's timing, for the refresh line: { connect, loginms, login: "new" | "reused" }. */
+let lastOpen = null;
+export const lastOpenTiming = () => lastOpen;
 
 // ---- the device mark ----
 //
@@ -114,6 +117,7 @@ async function open(c, shell, deadline) {
   const fp = sessionFp(c);
   if (live && live.fp !== fp) await close();
   if (shell.refused && shell.refused.fp === loginFp(c)) throw shellError(shell.refused.kind, "login refused before");
+  const t0 = Date.now();
   if (!live) {
     const device = await checkDevice();
     const stored = readJson(KEYS.session);
@@ -131,9 +135,12 @@ async function open(c, shell, deadline) {
     }
     live = { fp, device, client, saved, ready: false, discovery: createDiscovery({ client, store: kinoStore, persistEntries: false, log: (m) => kino.log("discovery: " + m) }) };
   }
+  const t1 = Date.now();
+  let who = null;
   try {
-    await live.client.botLogin({ apiHash: c.apiHash, botToken: c.botToken, deadline });
+    who = await live.client.botLogin({ apiHash: c.apiHash, botToken: c.botToken, deadline });
   } finally {
+    lastOpen = { connect: t1 - t0, loginms: Date.now() - t1, login: who && who.reused ? "reused" : who ? "new" : "-" };
     saveSession();
   }
   live.ready = true;

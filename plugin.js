@@ -572,7 +572,7 @@ class Transport {
   }
 
   /** The next packet's payload as hex. Throws `timeout` after `timeoutMs`, `closed` when the socket ends. */
-  async recvHex(timeoutMs = 20000, now = () => Date.now()) {
+  async recvHex(timeoutMs = 20000, now = () => Date.now(), trace) {
     const deadline = now() + timeoutMs;
     for (;;) {
       if (this.bufHex.length >= 8) {
@@ -591,14 +591,23 @@ class Transport {
       const left = deadline - now();
       if (left <= 0) throw mtError("timeout", "no answer from DC " + this.dc);
       let frame;
+      const t0 = trace ? Date.now() : 0;
       try {
         frame = await this.ws.recv(Math.min(left, 60000));
       } catch (e) {
         this.closed = true;
         throw mtError(e && e.code === "limit" ? "protocol" : "closed", "socket closed: " + (e && e.message), { cause: e && e.code });
       }
-      if (frame === null) continue;
-      this.bufHex += this.dec.processHex(toHex(frame));
+      if (frame === null) { if (trace) trace.wsrecv += Date.now() - t0; continue; }
+      if (!trace) { this.bufHex += this.dec.processHex(toHex(frame)); continue; }
+      // Timing (the shell's TIMING switch): numbers only, never the data.
+      const t1 = Date.now();
+      trace.wsrecv += t1 - t0; trace.frames++; trace.frameBytes += frame.length;
+      if (!trace.firstFrameAt) trace.firstFrameAt = t1;
+      const fh = toHex(frame);
+      const t2 = Date.now();
+      this.bufHex += this.dec.processHex(fh);
+      trace.tohex += t2 - t1; trace.ctr += Date.now() - t2;
     }
   }
 
@@ -1326,8 +1335,8 @@ class Session {
   }
 
   /** One transport packet -> its message [{ id, seqno, hex }] (empty when it belongs to one of our older sessions). */
-  async recvMessages(deadline) {
-    const hex = await this.t.recvHex(Math.max(1, deadline - this.now()), this.now);
+  async recvMessages(deadline, trace) {
+    const hex = await this.t.recvHex(Math.max(1, deadline - this.now()), this.now, trace);
     if (hex.length === 8) throw fromTransportError(readI32LE(fromHex(hex), 0));
     if (hex.length < 48 + 64) throw protocol("short packet");
     if (hex.slice(0, 16) !== this.akId) throw protocol("answer under another auth key");
@@ -1335,8 +1344,11 @@ class Session {
     const encHex = hex.slice(48);
     if ((encHex.length / 2) % 16 !== 0) throw protocol("encrypted data not a multiple of 16");
     const { key, iv } = this.keyIv(msgKey, 8);
+    const t0 = trace ? Date.now() : 0;
     const plainHex = igeDecryptHex(encHex, key, iv);
+    const t1 = trace ? Date.now() : 0;
     if (sha256Hex(this.ak.slice(192, 256) + plainHex).slice(16, 48) !== msgKey) throw protocol("msg_key mismatch");
+    if (trace) { trace.ige += t1 - t0; trace.mac += Date.now() - t1; }
     const sid = plainHex.slice(16, 32);
     if (sid !== this.sessionId) {
       if (this.oldSessions.has(sid)) { this.log("message for an older session ignored"); return []; }
@@ -1355,10 +1367,11 @@ class Session {
    * error (errors.js), `timeout` past the deadline, `bad_msg` when the server keeps refusing the message. With
    * `hex: true` the result comes back as a hex string instead of a Uint8Array.
    */
-  async call(body, { timeoutMs = this.timeoutMs, hex: wantHex = false } = {}) {
+  async call(body, { timeoutMs = this.timeoutMs, hex: wantHex = false, trace } = {}) {
     await this.flushAcks();
     const deadline = this.now() + timeoutMs;
     let reqId = await this.send(body);
+    if (trace && !trace.sentAt) trace.sentAt = Date.now();
     let resends = 0;
     const resend = async (why) => {
       if (++resends > MAX_RESENDS) throw mtError("bad_msg", "the server keeps refusing the message (" + why + ")", { badMsgCode: why });
@@ -1366,7 +1379,7 @@ class Session {
     };
     for (;;) {
       if (this.now() >= deadline) throw mtError("timeout", "no answer in " + timeoutMs + " ms");
-      const queue = await this.recvMessages(deadline);
+      const queue = await this.recvMessages(deadline, trace);
       while (queue.length) {
         const m = queue.shift();
         if (m.seqno & 1) this.pendingAcks.push(m.id);
@@ -1386,14 +1399,20 @@ class Session {
           continue;
         }
         if (ctor === CTOR.gzipPacked) {
+          const tg = trace ? Date.now() : 0;
           queue.unshift({ id: m.id, seqno: 0, hex: gunzipHex(hexBytesAt(m.hex, 4).hex) });
+          if (trace) trace.gunzip += Date.now() - tg;
           continue;
         }
         if (ctor === CTOR.rpcResult) {
           const to = new Reader(fromHex(m.hex.slice(8, 24))).long();
           if (to !== reqId) continue; // a late answer to an earlier call
           let result = m.hex.slice(24);
-          if (result.length >= 8 && hexU32(result, 0) === CTOR.gzipPacked) result = gunzipHex(hexBytesAt(result, 4).hex);
+          if (result.length >= 8 && hexU32(result, 0) === CTOR.gzipPacked) {
+            const tg = trace ? Date.now() : 0;
+            result = gunzipHex(hexBytesAt(result, 4).hex);
+            if (trace) trace.gunzip += Date.now() - tg;
+          }
           if (result.length >= 8 && hexU32(result, 0) === CTOR.rpcError) throw fromRpcError(parseRpcError(new Reader(fromHex(result))));
           return wantHex ? result : fromHex(result);
         }
@@ -1613,10 +1632,12 @@ class TelegramClient {
    * dropped unsent when its turn comes too late, and a caller queued behind a busy client gets a typed timeout at its
    * deadline instead of waiting for its turn (`kino.sleep` polls; it is only used while the client is busy).
    */
-  serial(fn, deadline) {
+  serial(fn, deadline, trace) {
+    const queuedAt = trace ? Date.now() : 0;
     const busy = this.pending > 0;
     this.pending = (this.pending || 0) + 1;
     const turn = () => {
+      if (trace) trace.queue += Date.now() - queuedAt;
       if (deadline !== undefined && this.now() > deadline - MIN_LEFT_MS) throw mtError("timeout", "no time left before the caller's deadline", { deadline: true });
       return fn();
     };
@@ -1710,18 +1731,18 @@ class TelegramClient {
    * A closed socket is retried once on a new connection unless `retry` is false (the bot login retries by itself, so
    * that every attempt spends the budget). `hex` answers the result as a hex string (Session.call).
    */
-  async invoke(dc, body, { retry = true, hex = false, deadline } = {}) {
+  async invoke(dc, body, { retry = true, hex = false, deadline, trace } = {}) {
     const c = await this.conn(dc, deadline);
     const wrapped = c.inited ? body : invokeWithLayer(LAYER, initConnection({ apiId: this.apiId, ...this.device }, body));
     const wait = this.budget(deadline);
     try {
-      const res = await c.session.call(wrapped, { timeoutMs: wait.ms, hex });
+      const res = await c.session.call(wrapped, { timeoutMs: wait.ms, hex, trace });
       c.inited = true;
       return res;
     } catch (e) {
       if (e.code === "closed" && retry) {
         await this.drop(dc);
-        return this.invoke(dc, body, { retry: false, hex, deadline });
+        return this.invoke(dc, body, { retry: false, hex, deadline, trace });
       }
       if (e.code === "timeout" || e.code === "closed" || e.code === "protocol") await this.drop(dc);
       if (e.code === "timeout" && wait.clamped) e.deadline = true; // the caller's deadline, not the server's silence alone
@@ -1811,7 +1832,7 @@ class TelegramClient {
    * Follows FILE_MIGRATE_n; FLOOD_WAIT_n, FILE_REFERENCE_EXPIRED... come back as typed errors. With `{ hex: true }`
    * the bytes come back as a hex string, sliced out of the decrypted answer with no JS pass over them.
    */
-  getFile(loc, offset, limit, { hex = false, deadline } = {}) {
+  getFile(loc, offset, limit, { hex = false, deadline, trace } = {}) {
     try {
       if (!loc || loc.id === undefined || loc.accessHash === undefined || !(loc.fileReference && typeof loc.fileReference.length === "number")) {
         throw mtError("invalid_request", "a location needs id, accessHash and fileReference");
@@ -1827,8 +1848,10 @@ class TelegramClient {
       for (let attempt = 0; attempt < 4; attempt++) {
         try {
           await this.authorize(dc, deadline);
-          const answer = await this.invoke(dc, body, { hex, deadline });
+          const answer = await this.invoke(dc, body, { hex, deadline, trace });
+          const tp = trace ? Date.now() : 0;
           const file = hex ? parseUploadFileHex(answer) : parseUploadFile(answer);
+          if (trace) trace.parse += Date.now() - tp;
           if (file.ctor === CTOR.uploadFileCdnRedirect) throw mtError("protocol", "CDN redirects are not supported");
           if (file.ctor !== CTOR.uploadFile) throw mtError("protocol", "unexpected answer to upload.getFile");
           return hex ? file.bytesHex : file.bytes;
@@ -1839,7 +1862,7 @@ class TelegramClient {
         }
       }
       throw mtError("protocol", "too many redirects for one chunk");
-    }, deadline);
+    }, deadline, trace);
   }
 
   async close() {
@@ -2548,6 +2571,7 @@ function createDiscovery({ client, store, budgetBytes = DEFAULT_BUDGET_BYTES, pe
       if (saved.truncated) out.truncated = true;
       if (incomplete) out.incomplete = true;
       if (floodWait !== undefined) out.floodWait = floodWait;
+      out.pages = pages;
       if (index instanceof Journal) out.changes = index.changes();
       return out;
     });
@@ -2758,6 +2782,9 @@ const loginFp = (c) => digest("login\n" + c.apiId + "\n" + c.apiHash + "\n" + c.
 
 let live = null;       // { fp, device, client, discovery, saved, ready }
 let connecting = null; // the one connect in flight: every caller of this runtime waits on it
+/** The last connect's timing, for the refresh line: { connect, loginms, login: "new" | "reused" }. */
+let lastOpen = null;
+const lastOpenTiming = () => lastOpen;
 
 // ---- the device mark ----
 //
@@ -2844,6 +2871,7 @@ async function open(c, shell, deadline) {
   const fp = sessionFp(c);
   if (live && live.fp !== fp) await close();
   if (shell.refused && shell.refused.fp === loginFp(c)) throw shellError(shell.refused.kind, "login refused before");
+  const t0 = Date.now();
   if (!live) {
     const device = await checkDevice();
     const stored = readJson(KEYS.session);
@@ -2861,9 +2889,12 @@ async function open(c, shell, deadline) {
     }
     live = { fp, device, client, saved, ready: false, discovery: createDiscovery({ client, store: kinoStore, persistEntries: false, log: (m) => kino.log("discovery: " + m) }) };
   }
+  const t1 = Date.now();
+  let who = null;
   try {
-    await live.client.botLogin({ apiHash: c.apiHash, botToken: c.botToken, deadline });
+    who = await live.client.botLogin({ apiHash: c.apiHash, botToken: c.botToken, deadline });
   } finally {
+    lastOpen = { connect: t1 - t0, loginms: Date.now() - t1, login: who && who.reused ? "reused" : who ? "new" : "-" };
     saveSession();
   }
   live.ready = true;
@@ -2906,7 +2937,47 @@ const hasStoredLogin = (c) => {
   const home = s.state.dcs[String(s.state.homeDc)];
   return !!(home && home.loggedIn);
 };
-return { credentials, sessionFp, loginFp, DEVICE_ROW, deviceMark, markDevice, checkDevice, saveSession, connect, withSession, close, forgetSession, hasStoredLogin };
+return { credentials, sessionFp, loginFp, lastOpenTiming, DEVICE_ROW, deviceMark, markDevice, checkDevice, saveSession, connect, withSession, close, forgetSession, hasStoredLogin };
+})();
+
+// ---- src/shell/timing.js ----
+const __mod_src_shell_timing = (() => {
+// Timing lines for the device logs (Kino's "Registro" and logcat KinoPlugin/<id>): one line per read and per refresh,
+// numbers and short codes only. Never a setting, a key, an id, a file reference or any data. Set TIMING to false to
+// switch them off (the core then gets no trace and measures nothing).
+const TIMING = true;
+
+/** A read's trace: every field is a duration in ms or a count; the core adds to it (src/mtproto/*). */
+const newTrace = () => (TIMING ? { start: Date.now(), queue: 0, sentAt: 0, firstFrameAt: 0, wsrecv: 0, frames: 0, frameBytes: 0, tohex: 0, ctr: 0, ige: 0, mac: 0, gunzip: 0, parse: 0, getfile: 0, b64: 0, tries: 0 } : undefined);
+
+const n = (v) => (Number.isFinite(v) ? Math.round(v) : 0);
+
+/** `read off=<offset> len=<asked> bytes=<answered> total=<ms> queue=… net=… wsrecv=… frames=… framebytes=… tohex=… ctr=… ige=… mac=… gunzip=… parse=… getfile=… b64=… tries=…` */
+function logRead(trace, { offset, length, bytes }) {
+  if (!trace) return;
+  const net = trace.sentAt && trace.firstFrameAt ? trace.firstFrameAt - trace.sentAt : 0;
+  kino.log(`read off=${n(offset)} len=${n(length)} bytes=${n(bytes)} total=${n(Date.now() - trace.start)} queue=${n(trace.queue)} net=${n(net)} wsrecv=${n(trace.wsrecv)} frames=${n(trace.frames)} framebytes=${n(trace.frameBytes)} tohex=${n(trace.tohex)} ctr=${n(trace.ctr)} ige=${n(trace.ige)} mac=${n(trace.mac)} gunzip=${n(trace.gunzip)} parse=${n(trace.parse)} getfile=${n(trace.getfile)} b64=${n(trace.b64)} tries=${n(trace.tries)}`);
+}
+
+const word = (v, re) => (typeof v === "string" && re.test(v) ? v : "-");
+
+/** One warn line per failed read (always on, also with TIMING off): the typed code and Telegram's RPC name, no data. */
+function logReadFailure(e, { offset, length, started }) {
+  const code = word(e && (e.shell || e.code), /^[a-z_]{1,40}$/);
+  const rpc = word(e && e.rpc, /^[A-Z0-9_]{1,60}$/);
+  const extra = [];
+  if (e && Number.isFinite(e.seconds)) extra.push("seconds=" + n(e.seconds));
+  if (e && Number.isFinite(e.dc)) extra.push("dc=" + n(e.dc));
+  if (e && e.deadline === true) extra.push("deadline=1");
+  console.warn(`read failed off=${n(offset)} len=${n(length)} ms=${n(Date.now() - started)} code=${code} rpc=${rpc}${extra.length ? " " + extra.join(" ") : ""}`);
+}
+
+/** `refresh total=… connect=… login=<new|reused|-> loginms=… pages=… disc=… upsert=… purge=… added=… incomplete=0|1 result=<ok|code>` */
+function logRefresh(r) {
+  if (!TIMING) return;
+  kino.log(`refresh total=${n(r.total)} connect=${n(r.connect)} login=${word(r.login, /^(new|reused|-)$/)} loginms=${n(r.loginms)} pages=${n(r.pages)} disc=${n(r.disc)} upsert=${n(r.upsert)} purge=${n(r.purge)} added=${n(r.added)} incomplete=${r.incomplete ? 1 : 0} result=${word(r.result, /^[a-z_]{1,40}$/)}`);
+}
+return { TIMING, newTrace, logRead, logReadFailure, logRefresh };
 })();
 
 // ---- src/shell/library.js ----
@@ -2927,6 +2998,8 @@ const { withSession, credentials, saveSession, loginFp, sessionFp, forgetSession
 const { KEYS, readJson, writeJson, remove } = __mod_src_shell_store;
 const { shellError, kindOf } = __mod_src_shell_errors;
 const { t, minutes, videoCount } = __mod_src_shell_text;
+const { logRefresh } = __mod_src_shell_timing;
+const { lastOpenTiming } = __mod_src_shell_live;
 
 const SLOTS = 8;
 const REFRESH_MS = 5 * 60 * 1000;
@@ -3164,13 +3237,17 @@ async function runRefresh({ force = false } = {}) {
   let shell = null;
   let added = 0;
   let networked = false;
+  const tm = { pages: 0, disc: 0, upsert: 0, purge: 0, result: "skipped" };
+  const openBefore = lastOpenTiming();
   try {
     await checkDevice(); // first: a restored storage from another device is dropped before anything reads it
     shell = loadShell(c);
     if (shell.fp !== sessionFp(c)) { await resetIndex(shell); shell.fp = sessionFp(c); shell.error = null; shell.refused = null; }
     const active0 = activeChats(shell);
     const togglesPending = [...active0].some((x) => !shell.applied.includes(x)) || shell.applied.some((x) => !active0.has(x));
+    let tp = Date.now();
     await purgeStep(shell); // what an earlier toggle left to remove: no network needed
+    tm.purge += Date.now() - tp;
     const pending = shell.incomplete || togglesPending;
     const blocked = problemOf(shell, now);
     if (!force && blocked && (blocked.kind === "flood" || blocked.kind === "budget")) return { shell, added, problem: blocked };
@@ -3178,16 +3255,23 @@ async function runRefresh({ force = false } = {}) {
 
     const deadline = started + REFRESH_BUDGET_MS;
     networked = true;
+    tm.result = "ok";
     await withSession(c, shell, async (live) => {
       await applyToggles(shell, live);
+      tp = Date.now();
       await purgeStep(shell);
+      tm.purge += Date.now() - tp;
       // A second pass only when the first gave an active slot to a channel it had not scanned (slot 1 starts on).
       for (let pass = 0; pass < 2 && Date.now() < deadline; pass++) {
         const active = activeChats(shell);
+        const td = Date.now();
         const res = await live.discovery.refresh({ maxPages: MAX_PAGES, deadline, commit: false, shouldScan: (rawId) => active.has(channelChatId(rawId)) });
+        const tu = Date.now();
+        tm.disc += tu - td; tm.pages += res.pages || 0;
         // The catalog first, then the discovery's progress: a write that fails (or a call cut off in between) leaves
         // the update state where it was, and the next refresh reads those pages again (upserts are idempotent).
         added += await applyChanges(shell, res.changes, active);
+        tm.upsert += Date.now() - tu;
         res.commit();
         shell.channelErrors = (res.errors || []).filter((x) => x.scope === "channel").length;
         assignSlots(shell, res.state.channels);
@@ -3207,6 +3291,7 @@ async function runRefresh({ force = false } = {}) {
     return { shell, added, networked, problem: problemOf(shell, now) };
   } catch (e) {
     shell = shell || loadShell(c);
+    tm.result = e && e.code === "timeout" && e.deadline === true ? "deadline" : String(kindOf(e));
     if (e && e.code === "timeout" && e.deadline === true) {
       // Out of the call's time (a slow connect or login): not an error, the next call goes on; the rows stay.
       kino.log("refresh stopped at its deadline");
@@ -3225,6 +3310,8 @@ async function runRefresh({ force = false } = {}) {
       saveSession();
       saveShell(shell);
     }
+    const o = lastOpenTiming() !== openBefore ? lastOpenTiming() : null; // a connect of this refresh, or the live one reused
+    logRefresh({ total: Date.now() - started, connect: o ? o.connect : 0, loginms: o ? o.loginms : 0, login: o ? o.login : networked ? "reused" : "-", ...tm, added, incomplete: shell && shell.incomplete });
   }
 }
 
@@ -3387,6 +3474,7 @@ const { credentials, withSession, saveSession } = __mod_src_shell_live;
 const { loadShell, rowFor, rowOf } = __mod_src_shell_library;
 const { shellError } = __mod_src_shell_errors;
 const { hexToBase64Native } = __mod_src_shell_b64;
+const { newTrace, logRead, logReadFailure } = __mod_src_shell_timing;
 
 const SHORT_FLOOD_S = 5;     // a FLOOD_WAIT this short is waited out once inside the read (kino.sleep: 5 s at most)
 const READ_BUDGET_MS = 17000; // everything a read does (getFile, refetch, retries) ends before this; Kino gives it 20 s
@@ -3421,7 +3509,18 @@ function base64Of(hex) {
 
 async function read(arg) {
   const started = Date.now();
+  const { offset, length } = arg || {};
+  try {
+    return await readTimed(arg, started);
+  } catch (e) {
+    logReadFailure(e, { offset, length, started }); // the typed code and Telegram's RPC name: the phone log tells why
+    throw e;
+  }
+}
+
+async function readTimed(arg, started) {
   const { handle, offset, length } = arg || {};
+  const trace = newTrace();
   if (typeof handle !== "string" || handle.length < 1 || handle.length > 512) throw shellError("invalid", "handle must be 1 to 512 characters");
   if (!Number.isSafeInteger(offset) || offset < 0 || offset % 4096 !== 0) throw shellError("invalid", "offset must be a non-negative multiple of 4096");
   if (!Number.isSafeInteger(length) || length < 1 || length > CHUNK) throw shellError("invalid", "length must be 1 to 1048576");
@@ -3442,7 +3541,10 @@ async function read(arg) {
       for (const piece of pieces(offset, want)) {
         for (;;) {
           try {
-            hex += await live.client.getFile(locOf(row.data), piece.offset, piece.limit, { hex: true, deadline });
+            const tg = trace ? Date.now() : 0;
+            if (trace) trace.tries++;
+            hex += await live.client.getFile(locOf(row.data), piece.offset, piece.limit, { hex: true, deadline, trace });
+            if (trace) trace.getfile += Date.now() - tg;
             break;
           } catch (e) {
             const left = deadline - Date.now();
@@ -3471,7 +3573,10 @@ async function read(arg) {
     saveSession();
   }
   if (hex.length < want * 2) throw shellError("unavailable", "short read: " + hex.length / 2 + " of " + want + " bytes");
-  return { bytes: base64Of(hex.length === want * 2 ? hex : hex.slice(0, want * 2)) };
+  const tb = trace ? Date.now() : 0;
+  const bytes = base64Of(hex.length === want * 2 ? hex : hex.slice(0, want * 2));
+  if (trace) { trace.b64 = Date.now() - tb; logRead(trace, { offset, length, bytes: want }); }
+  return { bytes };
 }
 return { pieces, read };
 })();

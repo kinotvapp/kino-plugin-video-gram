@@ -11,6 +11,7 @@ import { credentials, withSession, saveSession } from "./live.js";
 import { loadShell, rowFor, rowOf } from "./library.js";
 import { shellError } from "./errors.js";
 import { hexToBase64Native } from "./b64.js";
+import { newTrace, logRead, logReadFailure } from "./timing.js";
 
 const SHORT_FLOOD_S = 5;     // a FLOOD_WAIT this short is waited out once inside the read (kino.sleep: 5 s at most)
 const READ_BUDGET_MS = 17000; // everything a read does (getFile, refetch, retries) ends before this; Kino gives it 20 s
@@ -45,7 +46,18 @@ function base64Of(hex) {
 
 export async function read(arg) {
   const started = Date.now();
+  const { offset, length } = arg || {};
+  try {
+    return await readTimed(arg, started);
+  } catch (e) {
+    logReadFailure(e, { offset, length, started }); // the typed code and Telegram's RPC name: the phone log tells why
+    throw e;
+  }
+}
+
+async function readTimed(arg, started) {
   const { handle, offset, length } = arg || {};
+  const trace = newTrace();
   if (typeof handle !== "string" || handle.length < 1 || handle.length > 512) throw shellError("invalid", "handle must be 1 to 512 characters");
   if (!Number.isSafeInteger(offset) || offset < 0 || offset % 4096 !== 0) throw shellError("invalid", "offset must be a non-negative multiple of 4096");
   if (!Number.isSafeInteger(length) || length < 1 || length > CHUNK) throw shellError("invalid", "length must be 1 to 1048576");
@@ -66,7 +78,10 @@ export async function read(arg) {
       for (const piece of pieces(offset, want)) {
         for (;;) {
           try {
-            hex += await live.client.getFile(locOf(row.data), piece.offset, piece.limit, { hex: true, deadline });
+            const tg = trace ? Date.now() : 0;
+            if (trace) trace.tries++;
+            hex += await live.client.getFile(locOf(row.data), piece.offset, piece.limit, { hex: true, deadline, trace });
+            if (trace) trace.getfile += Date.now() - tg;
             break;
           } catch (e) {
             const left = deadline - Date.now();
@@ -95,5 +110,8 @@ export async function read(arg) {
     saveSession();
   }
   if (hex.length < want * 2) throw shellError("unavailable", "short read: " + hex.length / 2 + " of " + want + " bytes");
-  return { bytes: base64Of(hex.length === want * 2 ? hex : hex.slice(0, want * 2)) };
+  const tb = trace ? Date.now() : 0;
+  const bytes = base64Of(hex.length === want * 2 ? hex : hex.slice(0, want * 2));
+  if (trace) { trace.b64 = Date.now() - tb; logRead(trace, { offset, length, bytes: want }); }
+  return { bytes };
 }

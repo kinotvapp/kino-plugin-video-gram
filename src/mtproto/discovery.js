@@ -428,6 +428,7 @@ export function createDiscovery({ client, store, budgetBytes = DEFAULT_BUDGET_BY
       if (saved.truncated) out.truncated = true;
       if (incomplete) out.incomplete = true;
       if (floodWait !== undefined) out.floodWait = floodWait;
+      out.pages = pages;
       if (index instanceof Journal) out.changes = index.changes();
       return out;
     });

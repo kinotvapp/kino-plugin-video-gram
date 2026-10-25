@@ -106,10 +106,12 @@ export class TelegramClient {
    * dropped unsent when its turn comes too late, and a caller queued behind a busy client gets a typed timeout at its
    * deadline instead of waiting for its turn (`kino.sleep` polls; it is only used while the client is busy).
    */
-  serial(fn, deadline) {
+  serial(fn, deadline, trace) {
+    const queuedAt = trace ? Date.now() : 0;
     const busy = this.pending > 0;
     this.pending = (this.pending || 0) + 1;
     const turn = () => {
+      if (trace) trace.queue += Date.now() - queuedAt;
       if (deadline !== undefined && this.now() > deadline - MIN_LEFT_MS) throw mtError("timeout", "no time left before the caller's deadline", { deadline: true });
       return fn();
     };
@@ -203,18 +205,18 @@ export class TelegramClient {
    * A closed socket is retried once on a new connection unless `retry` is false (the bot login retries by itself, so
    * that every attempt spends the budget). `hex` answers the result as a hex string (Session.call).
    */
-  async invoke(dc, body, { retry = true, hex = false, deadline } = {}) {
+  async invoke(dc, body, { retry = true, hex = false, deadline, trace } = {}) {
     const c = await this.conn(dc, deadline);
     const wrapped = c.inited ? body : invokeWithLayer(LAYER, initConnection({ apiId: this.apiId, ...this.device }, body));
     const wait = this.budget(deadline);
     try {
-      const res = await c.session.call(wrapped, { timeoutMs: wait.ms, hex });
+      const res = await c.session.call(wrapped, { timeoutMs: wait.ms, hex, trace });
       c.inited = true;
       return res;
     } catch (e) {
       if (e.code === "closed" && retry) {
         await this.drop(dc);
-        return this.invoke(dc, body, { retry: false, hex, deadline });
+        return this.invoke(dc, body, { retry: false, hex, deadline, trace });
       }
       if (e.code === "timeout" || e.code === "closed" || e.code === "protocol") await this.drop(dc);
       if (e.code === "timeout" && wait.clamped) e.deadline = true; // the caller's deadline, not the server's silence alone
@@ -304,7 +306,7 @@ export class TelegramClient {
    * Follows FILE_MIGRATE_n; FLOOD_WAIT_n, FILE_REFERENCE_EXPIRED... come back as typed errors. With `{ hex: true }`
    * the bytes come back as a hex string, sliced out of the decrypted answer with no JS pass over them.
    */
-  getFile(loc, offset, limit, { hex = false, deadline } = {}) {
+  getFile(loc, offset, limit, { hex = false, deadline, trace } = {}) {
     try {
       if (!loc || loc.id === undefined || loc.accessHash === undefined || !(loc.fileReference && typeof loc.fileReference.length === "number")) {
         throw mtError("invalid_request", "a location needs id, accessHash and fileReference");
@@ -320,8 +322,10 @@ export class TelegramClient {
       for (let attempt = 0; attempt < 4; attempt++) {
         try {
           await this.authorize(dc, deadline);
-          const answer = await this.invoke(dc, body, { hex, deadline });
+          const answer = await this.invoke(dc, body, { hex, deadline, trace });
+          const tp = trace ? Date.now() : 0;
           const file = hex ? parseUploadFileHex(answer) : parseUploadFile(answer);
+          if (trace) trace.parse += Date.now() - tp;
           if (file.ctor === CTOR.uploadFileCdnRedirect) throw mtError("protocol", "CDN redirects are not supported");
           if (file.ctor !== CTOR.uploadFile) throw mtError("protocol", "unexpected answer to upload.getFile");
           return hex ? file.bytesHex : file.bytes;
@@ -332,7 +336,7 @@ export class TelegramClient {
         }
       }
       throw mtError("protocol", "too many redirects for one chunk");
-    }, deadline);
+    }, deadline, trace);
   }
 
   async close() {

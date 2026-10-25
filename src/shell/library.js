@@ -14,6 +14,8 @@ import { withSession, credentials, saveSession, loginFp, sessionFp, forgetSessio
 import { KEYS, readJson, writeJson, remove } from "./store.js";
 import { shellError, kindOf } from "./errors.js";
 import { t, minutes, videoCount } from "./text.js";
+import { logRefresh } from "./timing.js";
+import { lastOpenTiming } from "./live.js";
 
 export const SLOTS = 8;
 export const REFRESH_MS = 5 * 60 * 1000;
@@ -251,13 +253,17 @@ async function runRefresh({ force = false } = {}) {
   let shell = null;
   let added = 0;
   let networked = false;
+  const tm = { pages: 0, disc: 0, upsert: 0, purge: 0, result: "skipped" };
+  const openBefore = lastOpenTiming();
   try {
     await checkDevice(); // first: a restored storage from another device is dropped before anything reads it
     shell = loadShell(c);
     if (shell.fp !== sessionFp(c)) { await resetIndex(shell); shell.fp = sessionFp(c); shell.error = null; shell.refused = null; }
     const active0 = activeChats(shell);
     const togglesPending = [...active0].some((x) => !shell.applied.includes(x)) || shell.applied.some((x) => !active0.has(x));
+    let tp = Date.now();
     await purgeStep(shell); // what an earlier toggle left to remove: no network needed
+    tm.purge += Date.now() - tp;
     const pending = shell.incomplete || togglesPending;
     const blocked = problemOf(shell, now);
     if (!force && blocked && (blocked.kind === "flood" || blocked.kind === "budget")) return { shell, added, problem: blocked };
@@ -265,16 +271,23 @@ async function runRefresh({ force = false } = {}) {
 
     const deadline = started + REFRESH_BUDGET_MS;
     networked = true;
+    tm.result = "ok";
     await withSession(c, shell, async (live) => {
       await applyToggles(shell, live);
+      tp = Date.now();
       await purgeStep(shell);
+      tm.purge += Date.now() - tp;
       // A second pass only when the first gave an active slot to a channel it had not scanned (slot 1 starts on).
       for (let pass = 0; pass < 2 && Date.now() < deadline; pass++) {
         const active = activeChats(shell);
+        const td = Date.now();
         const res = await live.discovery.refresh({ maxPages: MAX_PAGES, deadline, commit: false, shouldScan: (rawId) => active.has(channelChatId(rawId)) });
+        const tu = Date.now();
+        tm.disc += tu - td; tm.pages += res.pages || 0;
         // The catalog first, then the discovery's progress: a write that fails (or a call cut off in between) leaves
         // the update state where it was, and the next refresh reads those pages again (upserts are idempotent).
         added += await applyChanges(shell, res.changes, active);
+        tm.upsert += Date.now() - tu;
         res.commit();
         shell.channelErrors = (res.errors || []).filter((x) => x.scope === "channel").length;
         assignSlots(shell, res.state.channels);
@@ -294,6 +307,7 @@ async function runRefresh({ force = false } = {}) {
     return { shell, added, networked, problem: problemOf(shell, now) };
   } catch (e) {
     shell = shell || loadShell(c);
+    tm.result = e && e.code === "timeout" && e.deadline === true ? "deadline" : String(kindOf(e));
     if (e && e.code === "timeout" && e.deadline === true) {
       // Out of the call's time (a slow connect or login): not an error, the next call goes on; the rows stay.
       kino.log("refresh stopped at its deadline");
@@ -312,6 +326,8 @@ async function runRefresh({ force = false } = {}) {
       saveSession();
       saveShell(shell);
     }
+    const o = lastOpenTiming() !== openBefore ? lastOpenTiming() : null; // a connect of this refresh, or the live one reused
+    logRefresh({ total: Date.now() - started, connect: o ? o.connect : 0, loginms: o ? o.loginms : 0, login: o ? o.login : networked ? "reused" : "-", ...tm, added, incomplete: shell && shell.incomplete });
   }
 }
 

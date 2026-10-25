@@ -73,8 +73,8 @@ export class Session {
   }
 
   /** One transport packet -> its message [{ id, seqno, hex }] (empty when it belongs to one of our older sessions). */
-  async recvMessages(deadline) {
-    const hex = await this.t.recvHex(Math.max(1, deadline - this.now()), this.now);
+  async recvMessages(deadline, trace) {
+    const hex = await this.t.recvHex(Math.max(1, deadline - this.now()), this.now, trace);
     if (hex.length === 8) throw fromTransportError(readI32LE(fromHex(hex), 0));
     if (hex.length < 48 + 64) throw protocol("short packet");
     if (hex.slice(0, 16) !== this.akId) throw protocol("answer under another auth key");
@@ -82,8 +82,11 @@ export class Session {
     const encHex = hex.slice(48);
     if ((encHex.length / 2) % 16 !== 0) throw protocol("encrypted data not a multiple of 16");
     const { key, iv } = this.keyIv(msgKey, 8);
+    const t0 = trace ? Date.now() : 0;
     const plainHex = igeDecryptHex(encHex, key, iv);
+    const t1 = trace ? Date.now() : 0;
     if (sha256Hex(this.ak.slice(192, 256) + plainHex).slice(16, 48) !== msgKey) throw protocol("msg_key mismatch");
+    if (trace) { trace.ige += t1 - t0; trace.mac += Date.now() - t1; }
     const sid = plainHex.slice(16, 32);
     if (sid !== this.sessionId) {
       if (this.oldSessions.has(sid)) { this.log("message for an older session ignored"); return []; }
@@ -102,10 +105,11 @@ export class Session {
    * error (errors.js), `timeout` past the deadline, `bad_msg` when the server keeps refusing the message. With
    * `hex: true` the result comes back as a hex string instead of a Uint8Array.
    */
-  async call(body, { timeoutMs = this.timeoutMs, hex: wantHex = false } = {}) {
+  async call(body, { timeoutMs = this.timeoutMs, hex: wantHex = false, trace } = {}) {
     await this.flushAcks();
     const deadline = this.now() + timeoutMs;
     let reqId = await this.send(body);
+    if (trace && !trace.sentAt) trace.sentAt = Date.now();
     let resends = 0;
     const resend = async (why) => {
       if (++resends > MAX_RESENDS) throw mtError("bad_msg", "the server keeps refusing the message (" + why + ")", { badMsgCode: why });
@@ -113,7 +117,7 @@ export class Session {
     };
     for (;;) {
       if (this.now() >= deadline) throw mtError("timeout", "no answer in " + timeoutMs + " ms");
-      const queue = await this.recvMessages(deadline);
+      const queue = await this.recvMessages(deadline, trace);
       while (queue.length) {
         const m = queue.shift();
         if (m.seqno & 1) this.pendingAcks.push(m.id);
@@ -133,14 +137,20 @@ export class Session {
           continue;
         }
         if (ctor === CTOR.gzipPacked) {
+          const tg = trace ? Date.now() : 0;
           queue.unshift({ id: m.id, seqno: 0, hex: gunzipHex(hexBytesAt(m.hex, 4).hex) });
+          if (trace) trace.gunzip += Date.now() - tg;
           continue;
         }
         if (ctor === CTOR.rpcResult) {
           const to = new Reader(fromHex(m.hex.slice(8, 24))).long();
           if (to !== reqId) continue; // a late answer to an earlier call
           let result = m.hex.slice(24);
-          if (result.length >= 8 && hexU32(result, 0) === CTOR.gzipPacked) result = gunzipHex(hexBytesAt(result, 4).hex);
+          if (result.length >= 8 && hexU32(result, 0) === CTOR.gzipPacked) {
+            const tg = trace ? Date.now() : 0;
+            result = gunzipHex(hexBytesAt(result, 4).hex);
+            if (trace) trace.gunzip += Date.now() - tg;
+          }
           if (result.length >= 8 && hexU32(result, 0) === CTOR.rpcError) throw fromRpcError(parseRpcError(new Reader(fromHex(result))));
           return wantHex ? result : fromHex(result);
         }

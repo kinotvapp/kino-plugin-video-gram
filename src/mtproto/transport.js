@@ -101,7 +101,7 @@ export class Transport {
   }
 
   /** The next packet's payload as hex. Throws `timeout` after `timeoutMs`, `closed` when the socket ends. */
-  async recvHex(timeoutMs = 20000, now = () => Date.now()) {
+  async recvHex(timeoutMs = 20000, now = () => Date.now(), trace) {
     const deadline = now() + timeoutMs;
     for (;;) {
       if (this.bufHex.length >= 8) {
@@ -120,14 +120,23 @@ export class Transport {
       const left = deadline - now();
       if (left <= 0) throw mtError("timeout", "no answer from DC " + this.dc);
       let frame;
+      const t0 = trace ? Date.now() : 0;
       try {
         frame = await this.ws.recv(Math.min(left, 60000));
       } catch (e) {
         this.closed = true;
         throw mtError(e && e.code === "limit" ? "protocol" : "closed", "socket closed: " + (e && e.message), { cause: e && e.code });
       }
-      if (frame === null) continue;
-      this.bufHex += this.dec.processHex(toHex(frame));
+      if (frame === null) { if (trace) trace.wsrecv += Date.now() - t0; continue; }
+      if (!trace) { this.bufHex += this.dec.processHex(toHex(frame)); continue; }
+      // Timing (the shell's TIMING switch): numbers only, never the data.
+      const t1 = Date.now();
+      trace.wsrecv += t1 - t0; trace.frames++; trace.frameBytes += frame.length;
+      if (!trace.firstFrameAt) trace.firstFrameAt = t1;
+      const fh = toHex(frame);
+      const t2 = Date.now();
+      this.bufHex += this.dec.processHex(fh);
+      trace.tohex += t2 - t1; trace.ctr += Date.now() - t2;
     }
   }
 
