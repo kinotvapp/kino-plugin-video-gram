@@ -430,7 +430,7 @@ export async function validate(dirArg, { run = null, args = [], config = {}, rep
         const lazy = run === "resolve" && Array.isArray(output.alternatives) ? output.alternatives.find((a) => a.ref !== undefined) : undefined;
         if (lazy) {
           try {
-            const copy = checkOutput("resolve", await call(plugin, "resolve", [lazy.ref]), m, servers);
+            const copy = checkOutput("resolve", await call(plugin, "resolve", [lazy.ref]), m, servers, { alternative: true });
             if (copy.value.alternatives) notes.push(`resolve(${JSON.stringify(lazy.ref)}): its own alternatives are ignored for a lazy copy (no recursion)`);
           } catch (e) {
             problems.push(`resolve(${JSON.stringify(lazy.ref)}) (a lazy copy): ${e.message}`);

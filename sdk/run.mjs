@@ -74,11 +74,12 @@
 // goes to stderr.
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { createHash } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { checkOutput, checkSettingsOutput, contract, markSearchHits, segmentSkip, validateManifest } from "./contract.mjs";
+import { checkOutput, checkSettingsOutput, contract, markSearchHits, readRangeProblem, segmentSkip, validateManifest } from "./contract.mjs";
 import { contrast, formatRatio, resolvePalette } from "./palette.mjs";
-import { createKino, errorReport, signingLane } from "./kino-shim.mjs";
+import { askImage, askRead, createKino, errorReport, signingLane } from "./kino-shim.mjs";
 import { loadPlugin, missingGlobalLines, scanMissingGlobals } from "./sandbox.mjs";
 import { actionEvent, checkPanelOutput, fakeContext, langOf, PLAYER_EVENTS, TRIGGERS } from "./panel.mjs";
 import { channelLines, download, guideFor, keepStart, loadPlaylist, summarisePlaylist, summaryLines } from "./live-playlist.mjs";
@@ -99,6 +100,8 @@ const USAGE = "usage: node sdk/run.mjs [--config k=v] [--record f | --replay f] 
   + "       node sdk/run.mjs [--config k=v] <plugin folder> segments <ttID [durationMs] | tmdb:ID season episode [durationMs] | JSON>\n"
   + "       node sdk/run.mjs [--config k=v] [--raw] <plugin folder> meta <ttID | tmdb:ID | kitsu:ID | mal:ID | anilist:ID | JSON> [movie|series] [more ids] [lang=xx] [id=<source id>]\n"
   + "       node sdk/run.mjs [--context '<json>'] <plugin folder> <panel <ref> [tab] | panelAction <ref> <key> <press|change|submit|tab|open> ['<value json>'] ['<values json>'] | playerEvent <ref> <type> ['<detail json>']>\n"
+  + "       node sdk/run.mjs [--size <bytes>] <plugin folder> read <handle> <offset> <length>   (byteSource: one range, as Kino's proxy asks it)\n"
+  + "       node sdk/run.mjs [--out <file>] <plugin folder> image <handle>   (imageSource: the picture, written to a file)\n"
   + "       node sdk/run.mjs live playlist <url|file> [--epg <url|file>]\n"
   + "       env: KINO_META_FIXTURE=<json> (kino.meta), KINO_TMDB_KEY=<your TMDB key> or KINO_TMDB_FIXTURE=<json> (kino.tmdb), KINO_NUVIO_FIXTURE=<json> (kino.nuvio)";
 const here = dirname(fileURLToPath(import.meta.url));
@@ -159,7 +162,7 @@ function fail(message) {
 }
 
 export function parseArgs(argv) {
-  const opts = { config: {}, record: null, replay: null, raw: false, epg: null, live: false, retry: null, within: null, context: null, device: null };
+  const opts = { config: {}, record: null, replay: null, raw: false, epg: null, live: false, retry: null, within: null, context: null, device: null, size: null, out: null };
   const rest = [];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -171,6 +174,12 @@ export function parseArgs(argv) {
     } else if (a === "--record") opts.record = argv[++i];
     else if (a === "--replay") opts.replay = argv[++i];
     else if (a === "--raw") opts.raw = true;
+    else if (a === "--size") {
+      const n = Number(argv[++i]);
+      if (!Number.isSafeInteger(n) || n <= 0) throw new Error("--size needs the stream's whole length in bytes (a positive whole number)");
+      opts.size = n;
+    }
+    else if (a === "--out") opts.out = argv[++i];
     else if (a === "--context") {
       let c;
       try { c = JSON.parse(argv[++i] || ""); } catch (e) { throw new Error(`--context needs a JSON object: ${e.message}`); }
@@ -221,6 +230,7 @@ async function main() {
     fn = LIVE[rest[0]];
     rest = rest.slice(1);
   }
+  if (fn === "read" || fn === "image") return bytesCommand(fn, targetArg, rest, opts);
   if (!targetArg || !(FUNCTIONS.includes(fn) || SETTINGS_FUNCTIONS.includes(fn) || PANEL_FUNCTIONS.includes(fn) || fn === "sign" || fn === "theme" || Object.values(LIVE).includes(fn))) return fail(USAGE);
   if (opts.record && opts.replay) return fail("--record and --replay can't be used together");
   const target = resolve(targetArg);
@@ -735,6 +745,69 @@ function printMeta(answer, query, manifest, servers) {
 }
 
 /** The argument each function gets, exactly as the app builds it. */
+/**
+ * `read <handle> <offset> <length>` (byteSource) and `image <handle>` (imageSource): the plugin's export called through the
+ * shim exactly as Kino calls it (askRead / askImage: the same gates, range rules, timeout and answer checks). `read` prints
+ * the bytes' count, sha256 and first 32 bytes; without --size it takes the stream as long as the range (so it expects exactly
+ * `length` bytes). `image` writes the picture to --out (default image.<jpg|png|webp> in the plugin folder).
+ */
+async function bytesCommand(fn, targetArg, rest, opts) {
+  if (!targetArg) return fail(USAGE);
+  const target = resolve(targetArg);
+  let stat;
+  try { stat = statSync(target); } catch { return fail(`not found: ${targetArg}`); }
+  const dir = stat.isDirectory() ? target : dirname(target);
+  let manifestText;
+  try { manifestText = readFileSync(join(dir, "kino-plugin.json"), "utf8"); } catch (e) { return fail(`cannot read kino-plugin.json in ${dir}: ${e.message}`); }
+  const checked = validateManifest(manifestText);
+  if (!checked.ok) return fail(`kino-plugin.json: ${checked.field}: ${checked.message}`);
+  const manifest = checked.manifest;
+  const [handle, offsetArg, lengthArg] = rest;
+  if (typeof handle !== "string" || !handle) return fail(USAGE);
+  let offset = 0, length = 0, size = 0;
+  if (fn === "read") {
+    const cap = contract.byteSource;
+    if (!(manifest.apiVersion >= cap.apiVersion && manifest.capabilities.includes("byteSource"))) return fail(`read needs the "byteSource" capability at apiVersion ${cap.apiVersion} in kino-plugin.json`);
+    offset = Number(offsetArg);
+    length = Number(lengthArg);
+    size = opts.size ?? (Number.isSafeInteger(offset) && Number.isSafeInteger(length) ? offset + length : NaN);
+    const problem = readRangeProblem(offset, length, size);
+    if (problem) return fail(`read: Kino never asks this range: ${problem}`);
+  } else if (!(manifest.apiVersion >= contract.images.apiVersion && manifest.capabilities.includes(contract.images.capability))) {
+    return fail(`image needs the "${contract.images.capability}" capability at apiVersion ${contract.images.apiVersion} in kino-plugin.json`);
+  }
+  const configFile = join(here, "config.json");
+  const config = { ...(existsSync(configFile) ? JSON.parse(readFileSync(configFile, "utf8")) : {}), ...opts.config };
+  const { kino, saveTape } = createKino(manifest, {
+    storageFile: join(dir, ".kino-storage.json"), cookiesFile: join(dir, ".kino-cookies.json"), secretsFile: join(dir, ".kino-secrets.json"),
+    config, record: opts.record && resolve(opts.record), replay: opts.replay && resolve(opts.replay), device: opts.device,
+  });
+  globalThis.kino = kino;
+  const loaded = await loadPlugin(resolve(dir, manifest.entry), kino);
+  const plugin = loaded.plugin;
+  try {
+    if (fn === "read") {
+      const stream = { source: contract.byteSource.source, handle, size, mime: "application/octet-stream" };
+      const bytes = await askRead(plugin, manifest, stream, offset, length);
+      saveTape();
+      const sha = createHash("sha256").update(bytes).digest("hex");
+      process.stdout.write(`read ${JSON.stringify(handle)} at ${offset}, ${length} asked: ${bytes.length} bytes\nsha256 ${sha}\nfirst ${Math.min(32, bytes.length)}: ${bytes.subarray(0, 32).toString("hex")}\n`);
+      if (opts.size === null) stderr("· without --size the stream is taken as ending at offset + length: Kino would also accept a shorter final chunk");
+      return 0;
+    }
+    const img = await askImage(plugin, manifest, { source: contract.images.source, handle });
+    saveTape();
+    const ext = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" }[img.mime] || "bin";
+    const out = resolve(opts.out || join(dir, `image.${ext}`));
+    writeFileSync(out, img.bytes);
+    process.stdout.write(`image ${JSON.stringify(handle)}: ${img.mime}, ${img.bytes.length} bytes -> ${out}\n`);
+    return 0;
+  } catch (e) {
+    stderr(`${fn}: ${e && e.message}`);
+    return 1;
+  }
+}
+
 export async function call(plugin, fn, rest, opts = {}) {
   const arg = rest[0] === undefined ? "" : rest[0];
   if (fn === "sign") return plugin.sign(JSON.parse(arg));

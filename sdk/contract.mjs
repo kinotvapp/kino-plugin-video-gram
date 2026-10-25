@@ -406,6 +406,7 @@ function syncFieldError(o, caps, settings) {
     if (new Set(v.provision).size !== v.provision.length || !v.provision.every(valued)) return s.provision.badMessage;
     provision = v.provision;
   }
+  if (provision.some((n) => settings.some((x) => x.key === n && x.sync === false))) return s.provision.deviceOnlyMessage;
   if (!provision.includes(v.keySecret)) return s.provision.needsKeySecretMessage;
   return null;
 }
@@ -607,6 +608,12 @@ function validateSettings(list, apiVersion = contract.maxApiVersion) {
       if (o.type !== "action") return s.linkOnly.onlyActionMessage.replace("{key}", key);
       if (typeof o.linkOnly !== "boolean") return s.linkOnly.notBooleanMessage.replace("{key}", key);
     }
+    // apiVersion 13 `sync` (PluginSettings): a password may stay on this device with "sync": false; only on a password,
+    // only a boolean; ignored below it.
+    if (apiVersion >= s.sync.apiVersion && o.sync !== undefined && o.sync !== null) {
+      if (o.type !== "password") return s.sync.onlyPasswordMessage.replace("{key}", key);
+      if (typeof o.sync !== "boolean") return s.sync.notBooleanMessage.replace("{key}", key);
+    }
   }
   if (list.filter((o) => o.type === "link").length > s.configAids.maxLinks) return `The plugin has more than ${s.configAids.maxLinks} settings of type link`;
   if (list.filter((o) => o.type === "help").length > s.configAids.maxHelps) return `The plugin has more than ${s.configAids.maxHelps} settings of type help`;
@@ -719,6 +726,58 @@ function image(v, servers) {
 export function allowsImageRefs(manifest) {
   return Number.isInteger(manifest.apiVersion) && manifest.apiVersion >= contract.images.apiVersion &&
     Array.isArray(manifest.capabilities) && manifest.capabilities.includes(contract.images.capability);
+}
+
+// ---------- byteSource (apiVersion 13): a stream whose bytes the plugin serves through read() ----------
+
+/** The app's PluginOutput.allowsBytes: the manifest declares byteSource at apiVersion 13 or later. */
+export function allowsByteSource(manifest) {
+  const b = contract.byteSource;
+  return Number.isInteger(manifest.apiVersion) && manifest.apiVersion >= b.apiVersion &&
+    Array.isArray(manifest.capabilities) && manifest.capabilities.includes("byteSource");
+}
+
+/** ContractProblem.ByteStreamInvalid's English: what the app logs for a malformed `{ source: "plugin" }` stream. */
+export const BYTE_STREAM_INVALID = "the plugin stream's handle, size or mime is not valid";
+/** ContractProblem.ReadInvalid's English: a read answer that is not `{ bytes }` of exactly the length asked for. */
+export const READ_INVALID = "read didn't return the bytes asked for";
+
+/**
+ * The app's PluginOutput.byteSourceOf: `{ handle, size, mime }` of a `{ source: "plugin" }` stream, or null. handle: a
+ * string of 1 to maxHandleChars characters with no ISO control character (U+0000..U+001F, U+007F..U+009F); size: a
+ * positive whole number; mime: trimmed, matching contract.byteSource.mimePattern.
+ */
+export function byteSourceOf(v) {
+  const b = contract.byteSource;
+  if (v === null || typeof v !== "object" || Array.isArray(v)) return null;
+  const h = v.handle;
+  if (typeof h !== "string" || h.length < 1 || h.length > b.maxHandleChars || /[\u0000-\u001f\u007f-\u009f]/.test(h)) return null;
+  const size = v.size;
+  if (typeof size !== "number" || !Number.isInteger(size) || size <= 0) return null;
+  const mime = typeof v.mime === "string" ? v.mime.trim() : "";
+  if (!mime || !new RegExp(b.mimePattern).test(mime)) return null;
+  return { handle: h, size, mime };
+}
+
+/**
+ * The app's PluginByteStreams.decodeRead: the bytes of a `read` answer `{ bytes: <base64> }` (standard alphabet, padding
+ * optional, nothing else), which must be exactly min(length, size - offset) long; else an Error with READ_INVALID.
+ */
+export function readAnswer(value, offset, length, size) {
+  const text = value !== null && typeof value === "object" && !Array.isArray(value) ? value.bytes : undefined;
+  if (typeof text !== "string" || !/^[A-Za-z0-9+/]*={0,2}$/.test(text) || text.replace(/=+$/, "").length % 4 === 1) throw new Error(READ_INVALID);
+  const bytes = Buffer.from(text, "base64");
+  if (bytes.length !== Math.min(length, size - offset)) throw new Error(READ_INVALID);
+  return bytes;
+}
+
+/** Why Kino's proxy would never ask this range ([offset], [length] of a stream of [size] bytes), or null. */
+export function readRangeProblem(offset, length, size) {
+  const b = contract.byteSource;
+  if (!Number.isSafeInteger(offset) || offset < 0 || offset % b.alignmentBytes !== 0) return `offset must be a non-negative multiple of ${b.alignmentBytes}`;
+  if (!Number.isSafeInteger(length) || length < 1 || length > b.chunkBytes) return `length must be 1 to ${b.chunkBytes}`;
+  if (Number.isFinite(size) && offset >= size) return `offset ${offset} is past the end of the ${size}-byte stream`;
+  return null;
 }
 
 /** The app's PluginImageRef.validHandle: 1 to maxHandleChars characters, no control character. */
@@ -1222,8 +1281,13 @@ export function mediaOf(raw) {
   return empty ? null : out;
 }
 
-function stream(value, { manifest, servers, allowDrm, liveChannel = false, inline = false, drop = () => {} }) {
+function stream(value, { manifest, servers, allowDrm, liveChannel = false, inline = false, alternative = false, drop = () => {} }) {
   if (value === null || typeof value !== "object" || Array.isArray(value)) throw new Error("the plugin returned zero videos");
+  // byteSource (apiVersion 13, PluginOutput.stream's allowBytes): a movie's, an episode's or a track's own stream only, never a
+  // live channel's, an inline one or a lazy copy's. Anything else has `source` ignored and fails below like a missing url.
+  if (!liveChannel && !inline && !alternative && value.source === contract.byteSource.source && allowsByteSource(manifest)) {
+    return byteStream(value, manifest, servers, drop);
+  }
   // apiVersion 11, `externalResolve`: the answer is a hand-off to a resolver app, not a playable URL (PluginOutput.externalOf).
   // Read only from a plugin that declares both; anything else has its `external` ignored and fails below like a missing url.
   const external = !liveChannel && !inline ? externalOf(value.external, manifest) : null;
@@ -1304,6 +1368,46 @@ function stream(value, { manifest, servers, allowDrm, liveChannel = false, inlin
   if (media) out.media = media; else delete out.media;
   if (portable) out.portable = portable;
   return sig ? { ...out, ...sig } : out;
+}
+
+/**
+ * The app's PluginOutput.byteStreamOf: the byte source (or ByteStreamInvalid), with its subtitles, audio tracks, duration,
+ * skip times, label and media read as a url Stream's; nothing that needs a url of its own (drm, signing, alternatives,
+ * alternate hosts, an external hand-off, a portable copy).
+ */
+function byteStream(value, manifest, servers, drop) {
+  const bytes = byteSourceOf(value);
+  if (!bytes) throw new Error(BYTE_STREAM_INVALID);
+  const check = urlChecker(manifest, servers);
+  const anyPublic = liveStreamUrlAllowed(manifest, servers);
+  const sideOk = (url, what) => {
+    if (manifest.streamHostsAny) return anyPublic(url);
+    try { check(url, what); return true; } catch { return false; }
+  };
+  const subtitles = (Array.isArray(value.subtitles) ? value.subtitles : []).slice(0, o().maxSubtitles).filter((s) => sideOk(s && s.url, "the subtitle"));
+  const audioUrls = new Set();
+  const audioTracks = (Array.isArray(value.audioTracks) ? value.audioTracks : []).slice(0, o().maxAudioTracks).filter((a) => {
+    if (!sideOk(a && a.url, "the audio")) return false;
+    if (audioUrls.has(a.url)) return false;
+    audioUrls.add(a.url);
+    return true;
+  });
+  const durationMs = Number.isFinite(value.durationMs) && value.durationMs > 0 ? Math.floor(value.durationMs) : 0;
+  const expires = Number.isInteger(value.expiresInSeconds) && value.expiresInSeconds >= o().minExpiresInSeconds && value.expiresInSeconds <= o().maxExpiresInSeconds ? value.expiresInSeconds : 0;
+  for (const k of ["drm", "signing", "alternatives", "alternateHosts", "external", "portable", "url"]) {
+    if (value[k] !== undefined) drop(`resolve: ${k} is ignored on a { source: "plugin" } stream`);
+  }
+  const out = { source: contract.byteSource.source, ...bytes, headers: {}, subtitles, audioTracks, expiresInSeconds: expires, drm: null };
+  if (durationMs) out.durationMs = durationMs;
+  const skip = skipOf(value[o().skip.field], durationMs);
+  if (skip) out.skip = skip;
+  if ((manifest.apiVersion || 1) >= o().streamLabels.apiVersion) {
+    const label = labelOf(value, "resolve: label", drop);
+    if (label) out.label = label;
+  }
+  const media = mediaOf(value.media);
+  if (media) out.media = media;
+  return out;
 }
 
 /**
@@ -2163,7 +2267,7 @@ export function checkSyncAnswer(fn, value, manifest) {
   throw new Error(`not a sync export: ${fn}`);
 }
 
-export function checkOutput(fn, value, manifest, servers = [], { liveChannel = false, migrateInput = null, segmentsQuery = null } = {}) {
+export function checkOutput(fn, value, manifest, servers = [], { liveChannel = false, alternative = false, migrateInput = null, segmentsQuery = null } = {}) {
   const drops = [];
   const drop = (m) => { drops.push(m); };
   const ctx = {
@@ -2193,7 +2297,7 @@ export function checkOutput(fn, value, manifest, servers = [], { liveChannel = f
     // imageSource (apiVersion 13): what the app keeps of an image answer, or the reason it shows the placeholder.
     case "image": return { value: imageAnswer(parsed), drops };
     // Widevine is the `drm` capability (apiVersion 2 by the manifest rules): without it every DRM-shaped key refuses the stream.
-    case "resolve": return { value: stream(parsed, { manifest, servers, allowDrm: manifest.capabilities.includes("drm"), liveChannel, drop }), drops };
+    case "resolve": return { value: stream(parsed, { manifest, servers, allowDrm: manifest.capabilities.includes("drm"), liveChannel, alternative, drop }), drops };
     case "sign": {
       if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed) || parsed.headers === null || typeof parsed.headers !== "object" || Array.isArray(parsed.headers)) {
         throw new Error("sign didn't return { headers }");

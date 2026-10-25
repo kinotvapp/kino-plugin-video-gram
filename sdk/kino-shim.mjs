@@ -19,7 +19,7 @@ import { createCipheriv, createDecipheriv, createHash, createHmac, createPublicK
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { allowsImageRefs, anyFetchRefusal, anyHostBudget, contract, fetchAnyHost, hostMatches, imageAnswer, imageRefOf, isUserServer, kb, schemeAllowed, syncCallCap } from "./contract.mjs";
+import { allowsByteSource, allowsImageRefs, anyFetchRefusal, BYTE_STREAM_INVALID, byteSourceOf, readAnswer, readRangeProblem, anyHostBudget, contract, fetchAnyHost, hostMatches, imageAnswer, imageRefOf, isUserServer, kb, schemeAllowed, syncCallCap } from "./contract.mjs";
 import { decodeCipherKey } from "./seal.mjs";
 import { filterRelevant, shortQuery, sortBySimilarity } from "./kino-rank.mjs";
 
@@ -2153,6 +2153,41 @@ function catalogKino(state) {
 }
 
 export { CATALOG_DAMAGED };
+
+// ---------- byteSource (apiVersion 13): asking a plugin's read export as Kino's proxy does ----------
+
+const readTurns = new WeakMap();
+
+/**
+ * Asks `plugin`'s `read({ handle, offset, length })` for a range of `stream` (a resolve answer `{ source: "plugin", handle,
+ * size, mime }`) the way Kino's PluginByteStreams does: only for a manifest that declares byteSource at apiVersion 13 and a
+ * plugin that exports `read`; only ranges Kino's proxy asks (offset a multiple of contract.byteSource.alignmentBytes and inside
+ * the stream, length 1 to chunkBytes); one read at a time per plugin; at most readTimeoutMs; the answer checked by
+ * `readAnswer` (exactly min(length, size - offset) bytes). Resolves with a Buffer; rejects with an Error saying why the
+ * player would stop. What it does not mirror: the proxy's read-ahead, cache and seek scheduling.
+ */
+export async function askRead(plugin, manifest, stream, offset, length, { timeoutMs = contract.byteSource.readTimeoutMs } = {}) {
+  const b = contract.byteSource;
+  if (!allowsByteSource(manifest)) throw new Error(`the manifest does not declare "byteSource" at apiVersion ${b.apiVersion}: Kino ignores a { source: "plugin" } stream`);
+  if (!plugin || typeof plugin[b.export] !== "function") throw new Error(`the plugin does not export ${b.export}(): the install fails with "El plugin no carga: le falta ${b.export}"`);
+  const s = byteSourceOf(stream);
+  if (!s) throw new Error(BYTE_STREAM_INVALID);
+  const problem = readRangeProblem(offset, length, s.size);
+  if (problem) throw new Error(`Kino never asks this range: ${problem}`);
+  const before = readTurns.get(plugin) || Promise.resolve();
+  const run = before.catch(() => {}).then(async () => {
+    let timer;
+    const late = new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`read did not answer within ${timeoutMs / 1000} s: the video stops`)), timeoutMs); });
+    try {
+      const out = await Promise.race([Promise.resolve().then(() => plugin[b.export]({ handle: s.handle, offset, length })), late]);
+      return readAnswer(JSON.parse(JSON.stringify(out === undefined ? null : out)), offset, length, s.size);
+    } finally {
+      clearTimeout(timer);
+    }
+  });
+  readTurns.set(plugin, run);
+  return run;
+}
 
 // ---------- imageSource (apiVersion 13): asking a plugin's image export as Kino does ----------
 
