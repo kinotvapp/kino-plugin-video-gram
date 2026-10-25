@@ -35,6 +35,7 @@ const ES = {
   "status.flood": "Telegram pidió esperar {min}",
   "slot.free": "Libre: agrega el bot a otro canal",
   "slot.off": "{title} (desactivado)",
+  "slot.gone": "{title} (el bot ya no tiene acceso)",
   "index.none": "Todavía no hay videos",
   "index.count.one": "1 video",
   "index.count.many": "{n} videos",
@@ -79,6 +80,7 @@ const EN = {
   "status.flood": "Telegram asked to wait {min}",
   "slot.free": "Free: add the bot to another channel",
   "slot.off": "{title} (off)",
+  "slot.gone": "{title} (the bot lost access)",
   "index.none": "No videos yet",
   "index.count.one": "1 video",
   "index.count.many": "{n} videos",
@@ -1189,7 +1191,10 @@ const gcd = (a, b) => { while (b) [a, b] = [b, a % b]; return a; };
 
 /** Brent's variant of Pollard's rho with batched gcds: pq < 2^64 factors in a few thousand BigInt steps. */
 function factorPq(pq) {
+  // Telegram's pq is a product of two primes below 2^32 (so below 2^64): anything else is not a server of ours.
+  if (typeof pq !== "bigint" || pq < 4n || pq >= 1n << 64n) throw protocol("pq out of range");
   if (pq % 2n === 0n) return [2n, pq / 2n];
+  let steps = 0;
   for (let c = 1n; c < 64n; c++) {
     const f = (v) => (v * v + c) % pq;
     let y = 2n, x = 2n, ys = 2n, q = 1n, g = 1n, r = 1;
@@ -1202,8 +1207,11 @@ function factorPq(pq) {
         const lim = Math.min(m, r - k);
         for (let i = 0; i < lim; i++) { y = f(y); q = (q * (x > y ? x - y : y - x)) % pq; }
         g = gcd(q, pq);
+        steps += lim;
       }
       r *= 2;
+      // A semiprime below 2^64 falls in well under 2^20 steps; past it the input is not one (bounded CPU either way).
+      if (steps > 1 << 22) throw protocol("could not factor pq");
     }
     if (g === pq) {
       do { ys = f(ys); g = gcd(x > ys ? x - ys : ys - x, pq); } while (g === 1n);
@@ -1257,10 +1265,13 @@ function checkDhPrime(p, g) {
 }
 
 /** One unencrypted request (auth_key_id = 0) and its answer, as a Reader on the answer's body. */
-async function plainCall(t, body, { msgIds, timeoutMs }) {
+async function plainCall(t, body, { msgIds, timeoutMs, deadline, now = () => Date.now() }) {
   const w = new Writer().long(0n).long(msgIds.next()).int(body.length).raw(body).done();
   await t.sendHex(toHex(w));
-  const raw = fromHex(await t.recvHex(timeoutMs));
+  // With a deadline (the whole key exchange's), each answer waits only for what is left of it.
+  const wait = deadline === undefined ? timeoutMs : deadline - now();
+  if (wait < 1) throw mtError("timeout", "the key exchange ran out of time", { deadline: true });
+  const raw = fromHex(await t.recvHex(wait));
   if (raw.length === 4) throw fromTransportError(new Reader(raw).int32());
   const r = new Reader(raw);
   if (r.long() !== 0n) throw protocol("expected an unencrypted answer");
@@ -1279,7 +1290,8 @@ const inRange = (v, p) => v > 1n && v < p - 1n && v > LIMIT && v < p - LIMIT;
  */
 async function createAuthKey(t, { dc, publicKeys, now = () => Date.now(), timeoutMs = 20000, rand = random }) {
   const msgIds = new MsgIds(now);
-  const opts = { msgIds, timeoutMs };
+  // One deadline for the whole exchange (three round trips), not timeoutMs for each.
+  const opts = { msgIds, timeoutMs, deadline: now() + timeoutMs, now };
   const nonce = rand(16);
   let r = await plainCall(t, reqPqMulti(nonce), opts);
   if (r.int() !== CTOR.resPQ) throw protocol("expected resPQ");
@@ -1407,6 +1419,7 @@ class Session {
     this.pendingAcks = [];
     this.waiting = new Map();   // msg_id -> the request waiting for its answer
     this.abandoned = new Map(); // msg_id -> when it was given up: still on the wire, its answer is dropped unkept
+    this.seenIds = new Set();   // the last server msg_ids seen (duplicates are dropped)
     this.oldSessions = new Set();
     this.newSession();
   }
@@ -1478,6 +1491,11 @@ class Session {
     }
     const h = new Reader(fromHex(plainHex.slice(32, 64)));
     const id = h.long(), seqno = h.int(), len = h.int();
+    // A server message id is odd, and each is seen once: a duplicate (a replay) is dropped.
+    if ((id & 1n) !== 1n) { big.release(plainHex.length); throw protocol("server msg_id is not odd"); }
+    if (this.seenIds.has(id)) { big.release(plainHex.length); this.log("duplicate server message dropped"); return []; }
+    this.seenIds.add(id);
+    if (this.seenIds.size > 512) this.seenIds.delete(this.seenIds.values().next().value);
     const total = plainHex.length / 2;
     const padding = total - 32 - len;
     if (len % 4 !== 0 || padding < 12 || padding > 1024) { big.release(plainHex.length); throw protocol("bad message length"); }
@@ -1505,7 +1523,8 @@ class Session {
         });
       } catch (e) {
         big.release(encHex.length);
-        if (e && e.message === "the mac doesn't match") throw protocol("msg_key mismatch");
+        // The op's own words, or (should they change) any crypto_error of it: an answer that cannot be opened.
+        if (e && (e.message === "the mac doesn't match" || e.code === "crypto_error")) throw protocol("msg_key mismatch");
         throw e;
       }
       big.hold(plainHex.length);
@@ -1699,10 +1718,13 @@ class Session {
       const r = new Reader(mBody);
       r.int();
       switch (ctor) {
-        case CTOR.newSessionCreated:
-          r.long(); r.long();
+        case CTOR.newSessionCreated: {
+          const firstMsgId = r.long(); r.long();
           this.state.serverSalt = r.raw(8).slice();
+          // Requests sent before the server's new session began may never be answered: send those again.
+          for (const w of [...this.waiting.values()]) if (w.id < firstMsgId) await this.resend(w, 0);
           break;
+        }
         case CTOR.badServerSalt: {
           const bad = r.long(); r.int(); r.int();
           this.state.serverSalt = r.raw(8).slice();
@@ -2110,6 +2132,12 @@ class TelegramClient {
    * { reused: true, userId }. Follows USER_MIGRATE_n (the home DC changes only when the login there succeeds) and
    * retries once after a closed socket. Every attempt sent, migrations and retries included, spends a budget slot.
    */
+  /** Whether the home DC still needs a bot login (no key there yet, or a key not logged in). */
+  needsLogin() {
+    const home = this.homeDc ? this.dcs.get(this.homeDc) : null;
+    return !(home && home.loggedIn);
+  }
+
   botLogin({ apiId, apiHash, botToken, deadline }) {
     return this.serial(async () => {
       if (apiId !== undefined) this.apiId = Number(apiId);
@@ -2832,7 +2860,11 @@ function createDiscovery({ client, store, budgetBytes = DEFAULT_BUDGET_BYTES, pe
         titles.set(channelChatId(id), title);
         if (c.min || c.access_hash === undefined) { if (known) known.title = title; continue; } // a min hash is not usable
         if (known) { known.accessHash = String(c.access_hash); known.title = title; }
-        else st.channels[id] = { accessHash: String(c.access_hash), title, pts: 1 };
+        else {
+          // `seen`: the order in which the bot met its channels (1, 2, ...), for the shell's stable channel slots.
+          const seen = Object.values(st.channels).reduce((m, x) => Math.max(m, Number.isInteger(x.seen) ? x.seen : 0), 0) + 1;
+          st.channels[id] = { accessHash: String(c.access_hash), title, pts: 1, seen };
+        }
       } else if (c._ === "channelForbidden") {
         dropChannel(st, index, String(c.id));
       } else if (c._ === "chat" || c._ === "chatForbidden") {
@@ -2979,11 +3011,11 @@ function createDiscovery({ client, store, budgetBytes = DEFAULT_BUDGET_BYTES, pe
               await scanChannel(st, index, titles, id, spend, deadline);
             } catch (e) {
               if (e.code === "channel_invalid") {
-                log("channel " + id + " dropped: " + e.message);
+                log("a channel was dropped: " + (e && e.code));
                 dropChannel(st, index, id);
               } else if (ISOLATED.has(e.code)) {
                 // The failed page was not applied, so the channel's pts is still the last one fully read.
-                log("channel " + id + " skipped: " + e.message);
+                log("a channel was skipped: " + (e && e.code));
                 errors.push({ scope: "channel", channelId: id, ...errorOf(e) });
               } else {
                 throw e;
@@ -3165,7 +3197,7 @@ const __mod_src_shell_store = (() => {
 //   tg.shell           this shell's state: channel slots, purges, the index marker, last error   < 2 KB
 // The video entries are never here: they live in kino.catalog. No setting value is ever written here; `fp` is a
 // truncated SHA-256 of the api_id and the bot token, so a new bot starts from scratch.
-const KEYS = Object.freeze({ budget: "mtproto.botLogins", session: "tg.session", discovery: "tg.discovery", shell: "tg.shell" });
+const KEYS = Object.freeze({ budget: "mtproto.botLogins", session: "tg.session", discovery: "tg.discovery", shell: "tg.shell", login: "tg.login" });
 
 function readJson(key) {
   let raw = null;
@@ -3290,13 +3322,67 @@ function newClient(c) {
   });
 }
 
-/** Writes the client's state when it changed (a new DC key, a dropped one, a new salt, the login). */
+// ---- the stored session, encrypted ----
+//
+// tg.session holds this device's auth keys (one per DC) and the bot login: whoever reads them can act as the bot. Kino
+// keeps kino.storage as plain JSON and offers a plugin no keystore of its own (sealed secrets are the author's, fixed in
+// the manifest; password settings are what the person types), so the plugin encrypts the DC states itself: AES-256-GCM
+// under a key derived (HMAC-SHA256) from the bot token and the api_hash, with a random per-install salt kept beside it.
+// The fingerprint and the device mark stay readable (they hold no secret). A changed token or api_hash cannot open the
+// old blob: that is no session (a new one, one login inside the budget). Nothing of it is ever logged.
+const sessionKey = (c, salt) => kino.crypto.hmac("sha256", c.apiHash + "\n" + c.botToken, "tg.session\n" + salt, { keyEncoding: "utf8", inputEncoding: "utf8", outputEncoding: "hex" });
+
+function sealState(key, salt, state) {
+  const iv = kino.crypto.randomBytes(12);
+  const ct = kino.crypto.encrypt("aes-256-gcm", { key, keyEncoding: "hex", iv, ivEncoding: "hex", data: JSON.stringify(state), inputEncoding: "utf8", outputEncoding: "base64" });
+  return { salt, iv, ct };
+}
+
+/** The DC states of a stored session, or null when there are none or they cannot be opened (another token, tampering). */
+function openState(stored, c) {
+  if (!stored || typeof stored !== "object") return null;
+  if (stored.v === 1) return stored.state && stored.state.dcs ? stored.state : null; // 0.2.2 and older: plaintext, read once
+  if (stored.v !== 2 || typeof stored.salt !== "string" || typeof stored.iv !== "string" || typeof stored.ct !== "string") return null;
+  try {
+    const text = kino.crypto.decrypt("aes-256-gcm", { key: sessionKey(c, stored.salt), keyEncoding: "hex", iv: stored.iv, ivEncoding: "hex", data: stored.ct, inputEncoding: "base64", outputEncoding: "utf8" });
+    const state = JSON.parse(text);
+    return state && state.dcs ? state : null;
+  } catch {
+    kino.log("stored session cannot be opened (other settings or damaged): a new one");
+    return null;
+  }
+}
+
+/** Writes the client's state, encrypted, when it changed (a new DC key, a dropped one, a new salt, the login). */
 function saveSession() {
   if (!live) return;
   const state = live.client.exportState();
   const text = JSON.stringify(state);
   if (text === live.saved) return;
-  if (writeJson(KEYS.session, { v: 1, fp: live.fp, device: live.device, state })) live.saved = text;
+  if (writeJson(KEYS.session, { v: 2, fp: live.fp, device: live.device, ...sealState(live.key, live.salt, state) })) live.saved = text;
+}
+
+// ---- logins that must wait ----
+//
+// A login Telegram refused (token, api_id) or asked to delay (FLOOD_WAIT, or the device's own budget) is recorded in
+// tg.login for these exact settings, by whoever met it (Home, a read, a picture), and checked before every login: so
+// the player's retries of read() never send another importBotAuthorization while the wait runs.
+function loginBlocked(c) {
+  const rec = readJson(KEYS.login);
+  if (!rec || rec.fp !== loginFp(c)) return null;
+  if (rec.kind === "token" || rec.kind === "api_id") return shellError(rec.kind, "login refused before");
+  if ((rec.kind === "flood" || rec.kind === "budget") && Number(rec.until) > Date.now()) {
+    return shellError(rec.kind, "login must wait", { seconds: Math.max(1, Math.ceil((Number(rec.until) - Date.now()) / 1000)) });
+  }
+  return null;
+}
+function recordLoginFailure(c, e) {
+  const code = e && e.code;
+  const kind = code === "token_invalid" ? "token" : code === "api_id_invalid" ? "api_id" : code === "flood_wait" ? "flood" : code === "login_budget" ? "budget" : null;
+  if (!kind) return;
+  const rec = { fp: loginFp(c), kind };
+  if (kind === "flood" || kind === "budget") rec.until = Date.now() + Math.max(1, Number(e.seconds) || 60) * 1000;
+  writeJson(KEYS.login, rec);
 }
 
 /**
@@ -3304,15 +3390,17 @@ function saveSession() {
  * flight (cleared when it fails), so concurrent calls never build two clients or spend two logins. `shell.refused`
  * marks a login Telegram refused with these exact settings: it is not tried again.
  */
-function connect(c, shell, { deadline } = {}) {
+function connect(c, shell, { deadline, noLogin = false } = {}) {
   const fp = sessionFp(c);
   if (live && live.fp === fp && live.ready) return Promise.resolve(live);
-  if (!connecting) connecting = open(c, shell, deadline).finally(() => { connecting = null; });
+  // A picture never logs in: it opens on its own (Kino runs a plugin's calls one at a time) and gives up before a login.
+  if (noLogin) return open(c, shell, deadline, true);
+  if (!connecting) connecting = open(c, shell, deadline, false).finally(() => { connecting = null; });
   return connecting;
 }
 
 /** Connect and login, each request inside `deadline` (the first caller's: whoever joins waits on the same one). */
-async function open(c, shell, deadline) {
+async function open(c, shell, deadline, noLogin) {
   const fp = sessionFp(c);
   if (live && live.fp !== fp) await close();
   if (shell.refused && shell.refused.fp === loginFp(c)) throw shellError(shell.refused.kind, "login refused before");
@@ -3322,7 +3410,11 @@ async function open(c, shell, deadline) {
     const stored = readJson(KEYS.session);
     let client = newClient(c);
     let saved = null;
-    const state = stored && stored.v === 1 && stored.fp === fp && stored.device === device && stored.state && stored.state.dcs ? stored.state : null;
+    const mine = stored && stored.fp === fp && stored.device === device ? stored : null;
+    const state = mine ? openState(mine, c) : null;
+    if (noLogin && !state) throw shellError("unavailable", "no session on this device");
+    // The key that seals this device's session: the stored salt (or a new one), and the settings in use.
+    const salt = mine && mine.v === 2 && typeof mine.salt === "string" ? mine.salt : kino.crypto.randomBytes(16);
     try {
       await client.connect(state && state.homeDc ? state.homeDc : FIRST_DC, state || undefined, { deadline });
       saved = state ? JSON.stringify(state) : null;
@@ -3332,12 +3424,22 @@ async function open(c, shell, deadline) {
       client = newClient(c);
       await client.connect(FIRST_DC, undefined, { deadline });
     }
-    live = { fp, device, client, saved, ready: false, discovery: createDiscovery({ client, store: kinoStore, persistEntries: false, log: (m) => kino.log("discovery: " + m) }) };
+    live = { fp, device, client, saved: mine && mine.v === 2 ? saved : null, key: sessionKey(c, salt), salt, ready: false, discovery: createDiscovery({ client, store: kinoStore, persistEntries: false, log: (m) => kino.log("discovery: " + m) }) };
+    if (mine && mine.v === 1) saveSession(); // the old plaintext session is rewritten encrypted at once
   }
   const t1 = Date.now();
   let who = null;
+  if (live.client.needsLogin()) {
+    if (noLogin) throw shellError("unavailable", "no login on this device");
+    const blocked = loginBlocked(c);
+    if (blocked) throw blocked;
+  }
   try {
     who = await live.client.botLogin({ apiHash: c.apiHash, botToken: c.botToken, deadline });
+    if (who && !who.reused) remove(KEYS.login);
+  } catch (e) {
+    recordLoginFailure(c, e);
+    throw e;
   } finally {
     lastOpen = { connect: t1 - t0, loginms: Date.now() - t1, login: who && who.reused ? "reused" : who ? "new" : "-" };
     saveSession();
@@ -3383,8 +3485,10 @@ async function forgetSession() {
 
 const hasStoredLogin = (c) => {
   const s = readJson(KEYS.session);
-  if (!s || s.fp !== sessionFp(c) || !s.state || !s.state.dcs) return false;
-  const home = s.state.dcs[String(s.state.homeDc)];
+  if (!s || s.fp !== sessionFp(c)) return false;
+  const state = openState(s, c);
+  if (!state) return false;
+  const home = state.dcs[String(state.homeDc)];
   return !!(home && home.loggedIn);
 };
 return { credentials, sessionFp, loginFp, lastOpenTiming, DEVICE_ROW, deviceMark, markDevice, checkDevice, saveSession, connect, withSession, idleReset, close, forgetSession, hasStoredLogin };
@@ -3431,12 +3535,34 @@ function logRefresh(r) {
 return { TIMING, newTrace, logRead, logReadFailure, logRecovery, logRefresh };
 })();
 
+// ---- src/shell/clean.js ----
+const __mod_src_shell_clean = (() => {
+// Text from Telegram (file names, captions, channel titles) is the sender's: it may carry control characters or
+// Unicode direction overrides that would make a title read as something else on screen. They are removed before the
+// text reaches a catalog row or anything Kino shows: C0 and C1 controls, the bidi embeddings/overrides U+202A-U+202E,
+// the isolates U+2066-U+2069 and the marks U+200E/U+200F.
+const HOSTILE = /[\u0000-\u001f\u007f-\u009f\u200e\u200f\u202a-\u202e\u2066-\u2069]/g;
+
+/** `s` without control or direction characters (each becomes a space; runs of spaces are folded by the callers). */
+const cleanText = (s) => String(s ?? "").replace(HOSTILE, " ");
+
+/** Cleaned, whitespace folded, trimmed and cut to `n` characters without splitting a surrogate pair. */
+function clip(s, n) {
+  let x = cleanText(s).replace(/\s+/g, " ").trim().slice(0, n);
+  if (/[\uD800-\uDBFF]$/.test(x)) x = x.slice(0, -1);
+  return x;
+}
+return { cleanText, clip };
+})();
+
 // ---- src/shell/enrich.js ----
 const __mod_src_shell_enrich = (() => {
 // Names and TMDB: what a video's file name (or caption) says it is, and what Kino's own TMDB access (kino.meta) knows
 // about it. Pure pieces here (parseName, markerOf, queryOf, applyMeta, posterOf, displayTitle, needsLookup) plus the
 // bounded pass the refresh runs (enrichStep): a few lookups per refresh, never from search or read, the answer kept in
 // the catalog row's `data` (a hit for good, a miss for MISS_TTL_MS), so a family video is not asked again each time.
+
+const { clip } = __mod_src_shell_clean;
 
 const POSTER_BASE = "https://image.tmdb.org/t/p/w342";
 const BACKDROP_BASE = "https://image.tmdb.org/t/p/w780";
@@ -3446,7 +3572,8 @@ const MISS_TTL_MS = 14 * 86400000;    // a title TMDB did not know is asked agai
 const WALK_EVERY_MS = 86400000;              // a finished walk starts over at most once a day (only expired misses are asked)
 const MAX_LOOKUPS = 4;                       // kino.meta calls per pass (Kino allows 30 a minute)
 const ENRICH_MS = 6000;                      // no lookup starts once the pass has run this long
-const META_MAX_MS = 8000;                    // what one kino.meta may take (Kino's cap)
+const META_MAX_MS = 8000;                    // what one kino.meta call may take: contract kinoMeta.timeoutMs (8 s; the 6 s of
+                                             // timeoutsMs.meta / kinoMeta.providerTimeoutMs are the meta EXPORT's, not this call's)
 const CALL_SAFE_MS = 18000;                  // a lookup must end before this, from the start of the call (Home has 20 s)
 const SCAN_PAGES = 5;                        // catalog pages (100 rows) looked at per pass
 const PAGE = 100;
@@ -3596,7 +3723,7 @@ function queryOf(n, byTitle) {
 const keyOf = (q) => (q ? (q.ids ? q.type + "|" + q.ids.tmdb : q.type + "|" + q.title.toLowerCase() + "|" + (q.year || "")) : "");
 
 const pathOf = (url) => { const m = typeof url === "string" ? TMDB_IMAGE.exec(url) : null; return m ? m[1] : null; };
-const clip = (s, n) => { let x = String(s || "").replace(/\s+/g, " ").trim().slice(0, n); if (/[\uD800-\uDBFF]$/.test(x)) x = x.slice(0, -1); return x; };
+
 
 /** The catalog title: every name the video goes by, so a search finds it by TMDB's title or by its file's. */
 function searchTitle(names) {
@@ -3734,7 +3861,13 @@ async function enrichStep(shell, started, { skip = () => false } = {}) {
   }
   return asked;
 }
-return { MISS_TTL_MS, markerOf, parseName, queryOf, keyOf, applyMeta, needsLookup, posterOf, backdropOf, displayTitle, nameOf, carry, enrichStep };
+
+/** TMDB lookups on (the default) or off: the "Buscar pósters en TMDB" setting. Off means no kino.meta call at all. */
+const tmdbOn = () => kino.config.get("tmdb") !== false;
+
+/** The row as shown: without TMDB's answer (`data.tm`) when TMDB is off, so the Telegram thumbnail and name show. */
+const viewOf = (row) => (tmdbOn() || !row || !row.data || !row.data.tm ? row : { ...row, data: { ...row.data, tm: undefined } });
+return { MISS_TTL_MS, markerOf, parseName, queryOf, keyOf, applyMeta, needsLookup, posterOf, backdropOf, displayTitle, nameOf, carry, enrichStep, tmdbOn, viewOf };
 })();
 
 // ---- src/shell/library.js ----
@@ -3757,7 +3890,8 @@ const { shellError, kindOf } = __mod_src_shell_errors;
 const { t, minutes, videoCount } = __mod_src_shell_text;
 const { logRefresh } = __mod_src_shell_timing;
 const { lastOpenTiming } = __mod_src_shell_live;
-const { nameOf, carry, displayTitle, posterOf, backdropOf, enrichStep } = __mod_src_shell_enrich;
+const { nameOf, carry, displayTitle, posterOf, backdropOf, enrichStep, tmdbOn, viewOf } = __mod_src_shell_enrich;
+const { clip, cleanText } = __mod_src_shell_clean;
 
 const SLOTS = 8;
 const REFRESH_MS = 5 * 60 * 1000;
@@ -3772,7 +3906,7 @@ const HLS = /mpegurl/i;
 
 // ---- shell state (tg.shell) ----
 
-const freshShell = (fp) => ({ v: 1, fp, slots: [], titles: {}, applied: [], top: {}, purge: [], indexedAt: 0, incomplete: false, count: 0, unslotted: 0, error: null, refused: null, channelErrors: 0, en: { off: 0, at: 0, done: false } });
+const freshShell = (fp) => ({ v: 1, fp, slots: [], missing: [], titles: {}, applied: [], top: {}, purge: [], indexedAt: 0, incomplete: false, count: 0, unslotted: 0, error: null, refused: null, channelErrors: 0, en: { off: 0, at: 0, done: false } });
 
 function loadShell(c) {
   const s = readJson(KEYS.shell);
@@ -3785,11 +3919,11 @@ const saveShell = (s) => writeJson(KEYS.shell, s);
 /** The chats (Bot API ids, "-100...") whose toggle is on. */
 function activeChats(shell) {
   const on = new Set();
-  shell.slots.forEach((chatId, i) => { if (chatId && kino.config.get("ch" + (i + 1)) === true) on.add(chatId); });
+  const missing = new Set(shell.missing || []);
+  shell.slots.forEach((chatId, i) => { if (chatId && !missing.has(chatId) && kino.config.get("ch" + (i + 1)) === true) on.add(chatId); });
   return on;
 }
 
-const clip = (s, n) => { let x = String(s || "").replace(/\s+/g, " ").trim().slice(0, n); if (/[\uD800-\uDBFF]$/.test(x)) x = x.slice(0, -1); return x; };
 const chatOfId = (id) => String(id).slice(0, String(id).lastIndexOf(":"));
 const msgOfId = (id) => Number(String(id).slice(String(id).lastIndexOf(":") + 1));
 const channelChatId = (rawId) => String(-(1000000000000n + BigInt(rawId)));
@@ -3802,7 +3936,8 @@ const channelChatId = (rawId) => String(-(1000000000000n + BigInt(rawId)));
  * its bytes); TMDB's answer (`tm`) is added by the enrichment pass.
  */
 function rowOf(e) {
-  const named = nameOf(e.fileName, e.text || e.caption, e.title);
+  // The sender's text, without control or direction characters, before anything is derived from it.
+  const named = nameOf(cleanText(e.fileName || ""), cleanText(e.text || e.caption || ""), cleanText(e.title || ""));
   const data = {
     chatId: e.chatId,
     msgId: e.msgId,
@@ -3871,6 +4006,7 @@ function sizeText(bytes) {
 
 /** The card's picture: TMDB's poster (a plain URL) when the row has one, else Telegram's thumbnail through `image`. */
 function posterFor(row) {
+  row = viewOf(row);
   const p = posterOf(row);
   if (p) return p;
   return row.data && row.data.th ? { source: "plugin", handle: "t:" + row.id } : null;
@@ -3878,6 +4014,7 @@ function posterFor(row) {
 
 /** A catalog row as a Kino item: id from the row id (only Item id characters), ref = the row id. */
 function itemOf(row) {
+  row = viewOf(row); // without TMDB's answer when the person turned TMDB off
   const d = row.data || {};
   const item = { id: ("v" + row.id.replace(":", "_")).slice(0, 128), ref: row.id, title: clip(displayTitle(d, row.title), 200) || "Video", kind: "movie" };
   const poster = posterFor(row);
@@ -3924,7 +4061,7 @@ function noticeFor(problem, now = Date.now()) {
 /** Starts over for another bot: the index and the discovery state go (this device keeps its mark). */
 async function resetIndex(shell) {
   remove(KEYS.discovery);
-  shell.slots = []; shell.titles = {}; shell.applied = []; shell.top = {}; shell.purge = [];
+  shell.slots = []; shell.missing = []; shell.titles = {}; shell.applied = []; shell.top = {}; shell.purge = [];
   shell.indexedAt = 0; shell.incomplete = false; shell.count = 0; shell.unslotted = 0; shell.channelErrors = 0;
   const mark = await deviceMark();
   try { await kino.catalog.clear(); } catch (e) { kino.log("catalog clear failed: " + (e && e.code)); }
@@ -3937,15 +4074,26 @@ async function countVideos() {
   return Math.max(0, n - ((await kino.catalog.get([DEVICE_ROW])).length));
 }
 
-/** The slots: the first SLOTS channels the discovery knows, by ascending channel id; the titles of all of them. */
+/**
+ * The slots, STABLE and first-seen: a slot keeps its channel for good; a channel the bot meets for the first time is
+ * appended to the first free slot (in the order the bot met them, `seen`), and its toggle starts off (only slot 1's
+ * toggle starts on, and slot 1 is the first channel the bot ever met). Why: anyone who learns the bot's username can
+ * make it an administrator of their own channel. With stable slots such a channel lands in a later slot, switched off,
+ * and can never take the owner's slot or push it out (a 9th channel just gets no slot). A channel the bot lost keeps
+ * its slot, marked missing, so that slot is never handed to a newcomer whose videos would then show switched on.
+ */
 function assignSlots(shell, channels) {
-  const ids = Object.keys(channels || {}).sort((a, b) => { const x = BigInt(a), y = BigInt(b); return x < y ? -1 : x > y ? 1 : 0; });
+  const order = (id) => (Number.isInteger(channels[id].seen) ? channels[id].seen : Number.MAX_SAFE_INTEGER);
+  const ids = Object.keys(channels || {}).sort((a, b) => order(a) - order(b) || (BigInt(a) < BigInt(b) ? -1 : BigInt(a) > BigInt(b) ? 1 : 0));
+  const known = new Set();
   for (const rawId of ids) {
     const chatId = channelChatId(rawId);
+    known.add(chatId);
     shell.titles[chatId] = clip(channels[rawId].title, 100);
+    if (!shell.slots.includes(chatId) && shell.slots.length < SLOTS) shell.slots.push(chatId);
   }
-  shell.slots = ids.slice(0, SLOTS).map(channelChatId);
-  shell.unslotted = Math.max(0, ids.length - SLOTS);
+  shell.missing = shell.slots.filter((chatId) => !known.has(chatId));
+  shell.unslotted = [...known].filter((chatId) => !shell.slots.includes(chatId)).length;
 }
 
 /** Applies one refresh's changes to the catalog: only videos of active channels, never an HLS playlist. */
@@ -4106,6 +4254,7 @@ async function runRefresh({ force = false } = {}) {
 
 /** The TMDB pass of a refresh (bounded, never throws): only rows of active channels, never the device mark. */
 async function enrich(shell, started) {
+  if (!tmdbOn()) return; // the person turned TMDB off: no kino.meta call, nothing of the videos leaves for TMDB
   const active = activeChats(shell);
   const t0 = Date.now();
   const asked = await enrichStep(shell, started, { skip: (row) => row.id === DEVICE_ROW || !active.has(chatOfId(row.id)) });
@@ -4141,7 +4290,11 @@ async function recent(active, offset, want) {
 }
 
 /** The Home rows: a notice when something is wrong, "Recientes", then one row per active channel. */
-async function homeRows({ shell, problem }) {
+/** Time as the shell sees it (a test may give kino a clock; production kino has none). */
+const nowMs = () => (typeof kino.now === "function" ? kino.now() : Date.now());
+const HOME_BUDGET_MS = 17000; // Kino gives home() 20 s: the rows stop being built here, whatever the refresh took
+
+async function homeRows({ shell, problem }, started = nowMs()) {
   const c = credentials();
   if (!c.complete) return [noticeFor({ kind: "config" })];
   const active = activeChats(shell);
@@ -4152,6 +4305,8 @@ async function homeRows({ shell, problem }) {
     rows.push({ id: "recent", title: t("row.recent"), ref: "recent", items: top.items.map(itemOf) });
     for (const chatId of shell.slots) {
       if (!active.has(chatId)) continue;
+      // A channel's own row is optional: past the budget Home answers with what it has (never a timeout).
+      if (nowMs() - started > HOME_BUDGET_MS) { kino.log("home: channel rows skipped, out of time"); break; }
       const r = await scanChat(chatId, shell.top[chatId] || 0, ROW_ITEMS);
       if (r.items.length) rows.push({ id: "c" + chatId, title: clip(shell.titles[chatId] || chatId, 200), ref: "chan:" + chatId, items: r.items.map(itemOf) });
     }
@@ -4199,7 +4354,7 @@ async function rowFor(ref) {
   const shell = loadShell(credentials());
   const [row] = typeof ref === "string" && ref.length <= 128 ? await kino.catalog.get([ref]) : [];
   if (!row || !activeChats(shell).has(chatOfId(row.id))) throw shellError("not_found", "no such video");
-  return row;
+  return viewOf(row);
 }
 
 const channelTabs = (shell) => shell.slots.filter((x) => activeChats(shell).has(x)).map((chatId) => ({ chatId, title: shell.titles[chatId] || chatId }));
@@ -4220,7 +4375,7 @@ function statusLines() {
     const key = "ch" + (i + 1) + "_name";
     if (!chatId) { out[key] = t("slot.free"); continue; }
     const title = shell.titles[chatId] || chatId;
-    out[key] = kino.config.get("ch" + (i + 1)) === true ? title : t("slot.off", { title });
+    out[key] = (shell.missing || []).includes(chatId) ? t("slot.gone", { title }) : kino.config.get("ch" + (i + 1)) === true ? title : t("slot.off", { title });
   }
   const parts = [shell.count > 0 ? videoCount(shell.count) : t("index.none")];
   if (shell.indexedAt) {
@@ -4234,7 +4389,7 @@ function statusLines() {
   out.index_status = parts.join(" · ").slice(0, 200);
   return out;
 }
-return { SLOTS, REFRESH_MS, loadShell, activeChats, rowOf, posterFor, itemOf, countVideos, refresh, forget, homeRows, browsePage, searchPage, rowFor, channelTabs, statusLines, chatOfId, msgOfId };
+return { SLOTS, REFRESH_MS, loadShell, activeChats, rowOf, posterFor, itemOf, countVideos, refresh, forget, nowMs, homeRows, browsePage, searchPage, rowFor, channelTabs, statusLines, chatOfId, msgOfId };
 })();
 
 // ---- src/shell/b64.js ----
@@ -4476,7 +4631,7 @@ async function image(arg) {
   const deadline = started + IMAGE_BUDGET_MS;
   let hex;
   try {
-    const live = await connect(c, loadShell(c), { deadline });
+    const live = await connect(c, loadShell(c), { deadline, noLogin: true }); // never a login for a picture
     let refetched = false;
     for (;;) {
       try {
@@ -4519,7 +4674,7 @@ return { image };
 // scripts/build.mjs (`npm run build`): the published plugin.js.
 const { guard, shellError } = __mod_src_shell_errors;
 const { credentials } = __mod_src_shell_live;
-const { refresh, forget, homeRows, browsePage, searchPage, rowFor, loadShell, channelTabs, statusLines, posterFor } = __mod_src_shell_library;
+const { refresh, forget, homeRows, browsePage, searchPage, rowFor, loadShell, channelTabs, statusLines, posterFor, nowMs } = __mod_src_shell_library;
 const { read: readBytes } = __mod_src_shell_read;
 const { image: imageBytes } = __mod_src_shell_image;
 const { displayTitle, backdropOf } = __mod_src_shell_enrich;
@@ -4535,8 +4690,9 @@ const CONTAINER = { "video/mp4": "mp4", "video/x-matroska": "matroska", "video/w
 
 export async function home() {
   await null;
+  const started = nowMs();
   try {
-    return await homeRows(await refresh());
+    return await homeRows(await refresh(), started);
   } catch (e) {
     kino.log("home failed: " + (e && e.code ? e.code : "error"));
     return [{ id: "notice", title: t("row.notice"), items: [{ id: "setup-unavailable", ref: "setup:unavailable", title: t("setup.unavailable"), kind: "movie" }] }];

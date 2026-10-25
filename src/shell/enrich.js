@@ -3,6 +3,8 @@
 // bounded pass the refresh runs (enrichStep): a few lookups per refresh, never from search or read, the answer kept in
 // the catalog row's `data` (a hit for good, a miss for MISS_TTL_MS), so a family video is not asked again each time.
 
+import { clip } from "./clean.js";
+
 const POSTER_BASE = "https://image.tmdb.org/t/p/w342";
 const BACKDROP_BASE = "https://image.tmdb.org/t/p/w780";
 const TMDB_IMAGE = /^https:\/\/image\.tmdb\.org\/t\/p\/[a-z0-9]{1,12}(\/[A-Za-z0-9_-]{1,80}\.(?:jpg|jpeg|png|webp))$/;
@@ -11,7 +13,8 @@ export const MISS_TTL_MS = 14 * 86400000;    // a title TMDB did not know is ask
 const WALK_EVERY_MS = 86400000;              // a finished walk starts over at most once a day (only expired misses are asked)
 const MAX_LOOKUPS = 4;                       // kino.meta calls per pass (Kino allows 30 a minute)
 const ENRICH_MS = 6000;                      // no lookup starts once the pass has run this long
-const META_MAX_MS = 8000;                    // what one kino.meta may take (Kino's cap)
+const META_MAX_MS = 8000;                    // what one kino.meta call may take: contract kinoMeta.timeoutMs (8 s; the 6 s of
+                                             // timeoutsMs.meta / kinoMeta.providerTimeoutMs are the meta EXPORT's, not this call's)
 const CALL_SAFE_MS = 18000;                  // a lookup must end before this, from the start of the call (Home has 20 s)
 const SCAN_PAGES = 5;                        // catalog pages (100 rows) looked at per pass
 const PAGE = 100;
@@ -161,7 +164,7 @@ export function queryOf(n, byTitle) {
 export const keyOf = (q) => (q ? (q.ids ? q.type + "|" + q.ids.tmdb : q.type + "|" + q.title.toLowerCase() + "|" + (q.year || "")) : "");
 
 const pathOf = (url) => { const m = typeof url === "string" ? TMDB_IMAGE.exec(url) : null; return m ? m[1] : null; };
-const clip = (s, n) => { let x = String(s || "").replace(/\s+/g, " ").trim().slice(0, n); if (/[\uD800-\uDBFF]$/.test(x)) x = x.slice(0, -1); return x; };
+
 
 /** The catalog title: every name the video goes by, so a search finds it by TMDB's title or by its file's. */
 function searchTitle(names) {
@@ -299,3 +302,9 @@ export async function enrichStep(shell, started, { skip = () => false } = {}) {
   }
   return asked;
 }
+
+/** TMDB lookups on (the default) or off: the "Buscar pósters en TMDB" setting. Off means no kino.meta call at all. */
+export const tmdbOn = () => kino.config.get("tmdb") !== false;
+
+/** The row as shown: without TMDB's answer (`data.tm`) when TMDB is off, so the Telegram thumbnail and name show. */
+export const viewOf = (row) => (tmdbOn() || !row || !row.data || !row.data.tm ? row : { ...row, data: { ...row.data, tm: undefined } });

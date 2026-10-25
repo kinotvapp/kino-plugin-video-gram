@@ -63,7 +63,7 @@ test("the manifest passes the kit's validator, every setting has its English tex
   const r = await validate(root);
   assert.deepEqual(r.problems, []);
   assert.equal(r.ok, true);
-  assert.ok(r.notes.some((n) => n === "English texts: 34 of 34"), r.notes.join("\n"));
+  assert.ok(r.notes.some((n) => n === "English texts: 36 of 36"), r.notes.join("\n"));
   assert.ok(!r.notes.some((n) => /falls back|cae|fallback/i.test(n)), "no theme fallback: " + r.notes.join("\n"));
   assert.deepEqual(MANIFEST.hosts, ["pluto.web.telegram.org", "venus.web.telegram.org", "aurora.web.telegram.org", "vesta.web.telegram.org", "flora.web.telegram.org"]);
   for (const c of ["download", "storageLarge"]) assert.ok(!MANIFEST.capabilities.includes(c), c + " is not declared");

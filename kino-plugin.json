@@ -1,7 +1,7 @@
 {
   "id": "telegram-library",
   "name": "Telegram Library",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "apiVersion": 13,
   "entry": "plugin.js",
   "description": "Tu biblioteca personal: los videos de tus canales privados de Telegram, con tu propio bot, en Kino. Your personal library: the videos of your private Telegram channels, with your own bot.",
@@ -86,8 +86,8 @@
       "type": "section",
       "label": "Canales",
       "labelEn": "Channels",
-      "hint": "Kino muestra solo los canales que actives (hasta 8). El primero que encuentre empieza activo. Los cambios se aplican en la próxima actualización.",
-      "hintEn": "Kino shows only the channels you turn on (up to 8). The first one found starts on. Changes apply at the next refresh."
+      "hint": "Kino muestra solo los canales que actives (hasta 8). Cada canal nuevo llega desactivado, salvo el primero que ve el bot. Cualquiera que conozca el bot puede agregarlo a su canal: revisa aquí cuáles activas.",
+      "hintEn": "Kino shows only the channels you turn on (up to 8). Each new channel arrives off, except the very first one the bot sees. Anyone who knows the bot can add it to their channel: check here which ones you turn on."
     },
     {
       "key": "ch1_name",
@@ -206,6 +206,15 @@
       "type": "status",
       "label": "Videos",
       "labelEn": "Videos"
+    },
+    {
+      "key": "tmdb",
+      "type": "toggle",
+      "label": "Buscar pósters en TMDB",
+      "labelEn": "Look up posters on TMDB",
+      "default": true,
+      "hint": "Envía el nombre de cada video a TMDB por Kino",
+      "hintEn": "Sends each video's name to TMDB through Kino"
     },
     {
       "key": "refresh",

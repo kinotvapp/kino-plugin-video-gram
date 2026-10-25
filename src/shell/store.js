@@ -5,7 +5,7 @@
 //   tg.shell           this shell's state: channel slots, purges, the index marker, last error   < 2 KB
 // The video entries are never here: they live in kino.catalog. No setting value is ever written here; `fp` is a
 // truncated SHA-256 of the api_id and the bot token, so a new bot starts from scratch.
-export const KEYS = Object.freeze({ budget: "mtproto.botLogins", session: "tg.session", discovery: "tg.discovery", shell: "tg.shell" });
+export const KEYS = Object.freeze({ budget: "mtproto.botLogins", session: "tg.session", discovery: "tg.discovery", shell: "tg.shell", login: "tg.login" });
 
 export function readJson(key) {
   let raw = null;

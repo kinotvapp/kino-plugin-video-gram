@@ -30,12 +30,13 @@ This is for **your own** channel. It is not a catalogue of films, and it is not 
 Qué esperar:
 
 - **Canales.** Kino muestra solo los canales que actives en la pestaña del plugin (hasta 8). Los lugares Canal 1 a
-  Canal 8 son los canales del bot ordenados por su número de canal de Telegram, así que en todos tus aparatos el
-  mismo lugar es el mismo canal (una vez que cada aparato vio los mismos canales). El Canal 1 empieza activo; los
-  demás, desactivados. Si el bot llega a un canal con un número menor, los lugares se corren, y los interruptores se
-  quedan en su lugar: quedan aplicados a otros canales, así que un canal que tenías activo puede quedar desactivado
-  (y otro activarse). Revisa la pestaña del plugin cuando agregues el bot a un canal nuevo. Al desactivar uno,
-  sus videos salen del índice; al activarlo de nuevo, se vuelve a leer desde el principio.
+  Canal 8 van en el orden en que el bot conoció cada canal y no se mueven: un canal nuevo ocupa el siguiente lugar
+  libre y llega **desactivado**. Solo el Canal 1 (el primer canal que vio el bot) empieza activo. Si el bot pierde un
+  canal, ese lugar queda marcado "(el bot ya no tiene acceso)" y no se le da a otro canal. Al desactivar uno, sus
+  videos salen del índice; al activarlo de nuevo, se vuelve a leer desde el principio.
+- **Desconocidos.** Cualquiera que conozca el nombre de tu bot puede agregarlo a su propio canal, y Telegram no le
+  pregunta al bot. Por eso un canal nuevo nunca aparece en Inicio hasta que tú lo actives, y nunca le quita el lugar
+  a uno tuyo. Si ves en la pestaña del plugin un canal que no es tuyo, déjalo desactivado.
 - **Videos nuevos: toca *Actualizar ahora*.** Es la forma segura de traer lo último que publicaste. Kino también
   revisa tus canales al abrir Inicio, como mucho cada 5 minutos, pero Kino guarda las filas de Inicio varias horas.
 - **Lectura anticipada.** Kino pide a Telegram los siguientes trozos del video mientras ves uno. Si el video guarda su índice al final y ese índice es grande (más de 1 MiB), o si saltas a otro punto, esa lectura anticipada se descarta y se vuelve a pedir lo que haga falta.
@@ -54,9 +55,13 @@ Qué esperar:
 - **Límites.** Un bot solo ve lo que se publicó en canales donde es administrador. Telegram limita los inicios de
   sesión de un bot: Kino inicia sesión una sola vez por aparato y como mucho 3 veces por hora; si Telegram pide
   esperar, Kino te dice cuántos minutos. Las listas HLS (m3u8) no se muestran.
-- **Privacidad.** Todo queda en el aparato. El api_id, el api_hash y el token se guardan cifrados como contraseñas del
-  plugin (y viajan sellados a tus otros aparatos vinculados). La sesión de Telegram (la clave de este aparato) no se
-  sincroniza: cada aparato abre la suya. El índice de videos queda solo en este aparato.
+- **Privacidad.** Tus videos van solo entre el aparato y Telegram. El api_id, el api_hash y el token se guardan
+  cifrados como contraseñas del plugin (y viajan sellados a tus otros aparatos vinculados). La sesión de Telegram (la
+  clave de este aparato) se guarda cifrada con una clave que sale de tu token y tu api_hash, y no se sincroniza: cada
+  aparato abre la suya. El índice de videos queda solo en este aparato. **Lo que sí sale:** para buscar pósters, el
+  nombre limpio de cada video (sacado del nombre del archivo o de su descripción) va a TMDB a través de Kino, y los
+  pósters se cargan de `image.tmdb.org`. Si no quieres eso, apaga **Buscar pósters en TMDB** en la pestaña del plugin:
+  entonces no se le pregunta nada a TMDB y solo se ven las miniaturas de Telegram.
 
 ## Setup (English)
 
@@ -74,12 +79,13 @@ Qué esperar:
 What to expect:
 
 - **Channels.** Kino shows only the channels you turn on in the plugin's tab (up to 8). Places Channel 1 to Channel 8
-  are the bot's channels ordered by their Telegram channel number, so the same place is the same channel on all your
-  devices (once each device has seen the same channels). Channel 1 starts on; the others start off. When the bot
-  joins a channel with a lower number, the places shift and the switches stay where they are: they then apply to
-  other channels, so a channel you had on can turn off (and another one turn on). Check the plugin's tab after you
-  add the bot to a new channel. Turning one off removes its videos from the index; turning
-  it on again reads it from the start.
+  follow the order in which the bot met each channel and never move: a new channel takes the next free place and
+  arrives **off**. Only Channel 1 (the first channel the bot saw) starts on. When the bot loses a channel, its place
+  is marked "(the bot lost access)" and is not given to another channel. Turning one off removes its videos from the
+  index; turning it on again reads it from the start.
+- **Strangers.** Anyone who knows your bot's name can add it to their own channel, and Telegram does not ask the bot.
+  That is why a new channel never shows in Home until you turn it on, and never takes the place of one of yours. If
+  the plugin's tab lists a channel that is not yours, leave it off.
 - **New videos: tap *Refresh now*.** It is the reliable way to bring in what you just posted. Kino also checks your
   channels when Home opens, at most every 5 minutes, but Kino keeps Home rows for hours.
 - **Read-ahead.** Kino asks Telegram for the next pieces of the video while you watch one. When the video keeps its index at the end and that index is big (over 1 MiB), or when you jump elsewhere, that read-ahead is dropped and asked again as needed. When you leave a video and come back later, the plugin frees what the last play left before starting the new one.
@@ -97,17 +103,21 @@ What to expect:
 - **Limits.** A bot only sees what was posted in channels it administers. Telegram limits bot logins: Kino logs in once
   per device and at most 3 times an hour; when Telegram asks to wait, Kino tells you for how many minutes. HLS
   playlists (m3u8) are not listed.
-- **Privacy.** Everything stays on the device. The api_id, the api_hash and the token are stored encrypted as the
-  plugin's password settings (and travel sealed to your other paired devices). The Telegram session (this device's
-  key) is not synced: each device opens its own. The video index stays on this device only.
+- **Privacy.** Your videos go only between the device and Telegram. The api_id, the api_hash and the token are stored
+  encrypted as the plugin's password settings (and travel sealed to your other paired devices). The Telegram session
+  (this device's key) is stored encrypted under a key derived from your token and api_hash, and is not synced: each
+  device opens its own. The video index stays on this device only. **What does leave:** to find posters, each video's
+  cleaned name (taken from its file name or caption) goes to TMDB through Kino, and posters load from
+  `image.tmdb.org`. If you do not want that, turn off **Look up posters on TMDB** in the plugin's tab: TMDB is then
+  never asked, and only Telegram's thumbnails show.
 
 ## Where things live (for developers)
 
 | What | Where | Synced | In a backup |
 | --- | --- | --- | --- |
 | api_id, api_hash, bot token | the plugin's `password` settings (Keystore-encrypted) | yes, sealed end to end, like every plugin password | as Kino backs up settings |
-| Telegram auth key + server salt per DC, the bot login (`tg.session`) | `kino.storage` | **no** (owner decision: one session per device, `AUTH_KEY_DUPLICATED` otherwise) | the password-protected backup carries `kino.storage`; see "Restores" below |
-| Login budget (`mtproto.botLogins`) | `kino.storage` | no | yes |
+| Telegram auth key + server salt per DC, the bot login (`tg.session`, AES-256-GCM under HMAC-SHA256(api_hash + bot token, per-install random salt)) | `kino.storage` | **no** (owner decision: one session per device, `AUTH_KEY_DUPLICATED` otherwise) | the password-protected backup carries `kino.storage`; see "Restores" below |
+| Login budget (`mtproto.botLogins`) and a login Telegram refused or asked to delay (`tg.login`: kind and until when, never the token) | `kino.storage` | no | yes |
 | Update state and known channels (`tg.discovery`), channel slots and the index marker (`tg.shell`) | `kino.storage` | no | yes |
 | The video index (one row per video), with each video's parsed name, its thumbnail's type and size (never its bytes) and TMDB's answer (poster path, title, year, 160 characters of overview, TMDB id, or a miss with its date) | `kino.catalog` (SQLite, one file for this plugin) | no | no: rebuilt from Telegram when it comes back empty |
 | A thumbnail reference in a saved title (`{ source: "plugin", handle: "t:<chat>:<message>" }`) | wherever Kino keeps the title's poster (library, history, lists) | yes, as part of those rows | yes |
@@ -128,6 +138,8 @@ would put the catalog file in a backup too (the id would travel with the key). A
 damaged loses the id as well, which costs one new login.
 
 All `kino.storage` keys together stay in the low kilobytes (measured: about 2 KB with 8 channels), far from the
-256 KB limit. The auth key is a secret: it never leaves the device except inside Kino's own password-protected backup.
+256 KB limit. The auth key is a secret: it is stored encrypted and never leaves the device except inside Kino's own
+password-protected backup. A different token or api_hash cannot open it (a new session is made), and a damaged one is
+dropped the same way.
 
 Development notes, the layout of the sources and how to run the tests: [DEVELOPERS.md](DEVELOPERS.md).

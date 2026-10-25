@@ -29,7 +29,7 @@ export async function image(arg) {
   const deadline = started + IMAGE_BUDGET_MS;
   let hex;
   try {
-    const live = await connect(c, loadShell(c), { deadline });
+    const live = await connect(c, loadShell(c), { deadline, noLogin: true }); // never a login for a picture
     let refetched = false;
     for (;;) {
       try {

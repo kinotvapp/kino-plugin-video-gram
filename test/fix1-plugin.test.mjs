@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { FakeTelegram } from "../testkit/fake-dc.mjs";
 import { FakeBotWorld } from "../testkit/fake-world.mjs";
 import { device } from "../testkit/plugin-harness.mjs";
+import { openSession } from "../testkit/session-open.mjs";
 
 const MiB = 1048576;
 const SETTINGS = { api_id: "918273645", api_hash: "0f1e2d3c4b5a69788796a5b4c3d2e1f0", bot_token: "7012345678:AAFake-Token_value-ZZ0123456789abcdefXY" };
@@ -25,7 +26,7 @@ function postVideo(channel, { name, size = 5000, dc = 2 }) {
 const newDevice = (o) => { const d = device(o); devs.push(d); return d; };
 const stats = () => tg.dc(2).stats;
 const flat = (rows) => rows.flatMap((r) => r.items);
-const sessionKeyId = (d) => JSON.parse(d.base.storage.get("tg.session")).state.dcs["2"].authKeyId;
+const sessionKeyId = (d) => openSession(d.base.storage.get("tg.session"), SETTINGS).dcs["2"].authKeyId; // tg.session is encrypted (v2)
 /** A backup of `from`'s kino.storage restored on `to` (kino.catalog is never in a backup). */
 function restore(from, to) {
   for (const k of to.base.storage.keys()) to.base.storage.remove(k);
@@ -205,7 +206,7 @@ test("I4 Home and Actualizar ahora at the same time: one refresh pass, a consist
 
 // ---- I5: slots from the channel set, the same on every device ----
 
-test("I5 two devices that met the channels in a different order show the same channel in each slot", async () => {
+test("I5 slots are first-seen: two devices of the same bot show the same channel in each slot", async () => {
   // Ids above 2^32 (as newer channels have): the engine keeps such object keys in insertion order, not sorted.
   const HI = 5000000001n, LO = 4300000000n;
   world.addChannel({ id: HI, accessHash: 22n, title: "Viajes" });
@@ -222,18 +223,23 @@ test("I5 two devices that met the channels in a different order show the same ch
   const sa = await pa.settingsStatus(), sb = await pb.settingsStatus();
   assert.equal(sa.ch1_name, sb.ch1_name);
   assert.equal(sa.ch2_name, sb.ch2_name);
-  assert.equal(sa.ch1_name, "Pelis", "the lowest channel id is slot 1");
+  assert.equal(sa.ch1_name, "Viajes", "the first channel the bot met is slot 1, whatever the ids");
+  assert.match(sa.ch2_name, /^Pelis/, "a later channel is appended");
 });
 
-test("I5 a channel the bot lost frees its slot for the next one", async () => {
+test("I5 a channel the bot lost keeps its slot (marked), so its switched-on slot is never handed to a newcomer", async () => {
   world.addChannel({ id: CH1, accessHash: 11n, title: "Pelis" });
   world.addChannel({ id: CH2, accessHash: 22n, title: "Viajes" });
   const d = newDevice();
   const p = await d.runtime(SETTINGS);
   await p.home();
   world.forbid(CH1);
+  world.addChannel({ id: 2100000000n, accessHash: 33n, title: "Nuevo" });
   await p.action("refresh");
-  assert.match((await p.settingsStatus()).ch1_name, /^Viajes/);
+  const st = await p.settingsStatus();
+  assert.match(st.ch1_name, /^Pelis \(el bot ya no tiene acceso\)/);
+  assert.match(st.ch2_name, /^Viajes/);
+  assert.match(st.ch3_name, /^Nuevo \(desactivado\)/, "the newcomer is appended, switched off");
 });
 
 // ---- minors ----

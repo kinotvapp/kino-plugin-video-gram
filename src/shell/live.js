@@ -93,13 +93,67 @@ function newClient(c) {
   });
 }
 
-/** Writes the client's state when it changed (a new DC key, a dropped one, a new salt, the login). */
+// ---- the stored session, encrypted ----
+//
+// tg.session holds this device's auth keys (one per DC) and the bot login: whoever reads them can act as the bot. Kino
+// keeps kino.storage as plain JSON and offers a plugin no keystore of its own (sealed secrets are the author's, fixed in
+// the manifest; password settings are what the person types), so the plugin encrypts the DC states itself: AES-256-GCM
+// under a key derived (HMAC-SHA256) from the bot token and the api_hash, with a random per-install salt kept beside it.
+// The fingerprint and the device mark stay readable (they hold no secret). A changed token or api_hash cannot open the
+// old blob: that is no session (a new one, one login inside the budget). Nothing of it is ever logged.
+const sessionKey = (c, salt) => kino.crypto.hmac("sha256", c.apiHash + "\n" + c.botToken, "tg.session\n" + salt, { keyEncoding: "utf8", inputEncoding: "utf8", outputEncoding: "hex" });
+
+function sealState(key, salt, state) {
+  const iv = kino.crypto.randomBytes(12);
+  const ct = kino.crypto.encrypt("aes-256-gcm", { key, keyEncoding: "hex", iv, ivEncoding: "hex", data: JSON.stringify(state), inputEncoding: "utf8", outputEncoding: "base64" });
+  return { salt, iv, ct };
+}
+
+/** The DC states of a stored session, or null when there are none or they cannot be opened (another token, tampering). */
+function openState(stored, c) {
+  if (!stored || typeof stored !== "object") return null;
+  if (stored.v === 1) return stored.state && stored.state.dcs ? stored.state : null; // 0.2.2 and older: plaintext, read once
+  if (stored.v !== 2 || typeof stored.salt !== "string" || typeof stored.iv !== "string" || typeof stored.ct !== "string") return null;
+  try {
+    const text = kino.crypto.decrypt("aes-256-gcm", { key: sessionKey(c, stored.salt), keyEncoding: "hex", iv: stored.iv, ivEncoding: "hex", data: stored.ct, inputEncoding: "base64", outputEncoding: "utf8" });
+    const state = JSON.parse(text);
+    return state && state.dcs ? state : null;
+  } catch {
+    kino.log("stored session cannot be opened (other settings or damaged): a new one");
+    return null;
+  }
+}
+
+/** Writes the client's state, encrypted, when it changed (a new DC key, a dropped one, a new salt, the login). */
 export function saveSession() {
   if (!live) return;
   const state = live.client.exportState();
   const text = JSON.stringify(state);
   if (text === live.saved) return;
-  if (writeJson(KEYS.session, { v: 1, fp: live.fp, device: live.device, state })) live.saved = text;
+  if (writeJson(KEYS.session, { v: 2, fp: live.fp, device: live.device, ...sealState(live.key, live.salt, state) })) live.saved = text;
+}
+
+// ---- logins that must wait ----
+//
+// A login Telegram refused (token, api_id) or asked to delay (FLOOD_WAIT, or the device's own budget) is recorded in
+// tg.login for these exact settings, by whoever met it (Home, a read, a picture), and checked before every login: so
+// the player's retries of read() never send another importBotAuthorization while the wait runs.
+function loginBlocked(c) {
+  const rec = readJson(KEYS.login);
+  if (!rec || rec.fp !== loginFp(c)) return null;
+  if (rec.kind === "token" || rec.kind === "api_id") return shellError(rec.kind, "login refused before");
+  if ((rec.kind === "flood" || rec.kind === "budget") && Number(rec.until) > Date.now()) {
+    return shellError(rec.kind, "login must wait", { seconds: Math.max(1, Math.ceil((Number(rec.until) - Date.now()) / 1000)) });
+  }
+  return null;
+}
+function recordLoginFailure(c, e) {
+  const code = e && e.code;
+  const kind = code === "token_invalid" ? "token" : code === "api_id_invalid" ? "api_id" : code === "flood_wait" ? "flood" : code === "login_budget" ? "budget" : null;
+  if (!kind) return;
+  const rec = { fp: loginFp(c), kind };
+  if (kind === "flood" || kind === "budget") rec.until = Date.now() + Math.max(1, Number(e.seconds) || 60) * 1000;
+  writeJson(KEYS.login, rec);
 }
 
 /**
@@ -107,15 +161,17 @@ export function saveSession() {
  * flight (cleared when it fails), so concurrent calls never build two clients or spend two logins. `shell.refused`
  * marks a login Telegram refused with these exact settings: it is not tried again.
  */
-export function connect(c, shell, { deadline } = {}) {
+export function connect(c, shell, { deadline, noLogin = false } = {}) {
   const fp = sessionFp(c);
   if (live && live.fp === fp && live.ready) return Promise.resolve(live);
-  if (!connecting) connecting = open(c, shell, deadline).finally(() => { connecting = null; });
+  // A picture never logs in: it opens on its own (Kino runs a plugin's calls one at a time) and gives up before a login.
+  if (noLogin) return open(c, shell, deadline, true);
+  if (!connecting) connecting = open(c, shell, deadline, false).finally(() => { connecting = null; });
   return connecting;
 }
 
 /** Connect and login, each request inside `deadline` (the first caller's: whoever joins waits on the same one). */
-async function open(c, shell, deadline) {
+async function open(c, shell, deadline, noLogin) {
   const fp = sessionFp(c);
   if (live && live.fp !== fp) await close();
   if (shell.refused && shell.refused.fp === loginFp(c)) throw shellError(shell.refused.kind, "login refused before");
@@ -125,7 +181,11 @@ async function open(c, shell, deadline) {
     const stored = readJson(KEYS.session);
     let client = newClient(c);
     let saved = null;
-    const state = stored && stored.v === 1 && stored.fp === fp && stored.device === device && stored.state && stored.state.dcs ? stored.state : null;
+    const mine = stored && stored.fp === fp && stored.device === device ? stored : null;
+    const state = mine ? openState(mine, c) : null;
+    if (noLogin && !state) throw shellError("unavailable", "no session on this device");
+    // The key that seals this device's session: the stored salt (or a new one), and the settings in use.
+    const salt = mine && mine.v === 2 && typeof mine.salt === "string" ? mine.salt : kino.crypto.randomBytes(16);
     try {
       await client.connect(state && state.homeDc ? state.homeDc : FIRST_DC, state || undefined, { deadline });
       saved = state ? JSON.stringify(state) : null;
@@ -135,12 +195,22 @@ async function open(c, shell, deadline) {
       client = newClient(c);
       await client.connect(FIRST_DC, undefined, { deadline });
     }
-    live = { fp, device, client, saved, ready: false, discovery: createDiscovery({ client, store: kinoStore, persistEntries: false, log: (m) => kino.log("discovery: " + m) }) };
+    live = { fp, device, client, saved: mine && mine.v === 2 ? saved : null, key: sessionKey(c, salt), salt, ready: false, discovery: createDiscovery({ client, store: kinoStore, persistEntries: false, log: (m) => kino.log("discovery: " + m) }) };
+    if (mine && mine.v === 1) saveSession(); // the old plaintext session is rewritten encrypted at once
   }
   const t1 = Date.now();
   let who = null;
+  if (live.client.needsLogin()) {
+    if (noLogin) throw shellError("unavailable", "no login on this device");
+    const blocked = loginBlocked(c);
+    if (blocked) throw blocked;
+  }
   try {
     who = await live.client.botLogin({ apiHash: c.apiHash, botToken: c.botToken, deadline });
+    if (who && !who.reused) remove(KEYS.login);
+  } catch (e) {
+    recordLoginFailure(c, e);
+    throw e;
   } finally {
     lastOpen = { connect: t1 - t0, loginms: Date.now() - t1, login: who && who.reused ? "reused" : who ? "new" : "-" };
     saveSession();
@@ -186,7 +256,9 @@ export async function forgetSession() {
 
 export const hasStoredLogin = (c) => {
   const s = readJson(KEYS.session);
-  if (!s || s.fp !== sessionFp(c) || !s.state || !s.state.dcs) return false;
-  const home = s.state.dcs[String(s.state.homeDc)];
+  if (!s || s.fp !== sessionFp(c)) return false;
+  const state = openState(s, c);
+  if (!state) return false;
+  const home = state.dcs[String(state.homeDc)];
   return !!(home && home.loggedIn);
 };

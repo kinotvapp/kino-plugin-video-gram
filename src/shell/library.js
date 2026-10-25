@@ -16,7 +16,8 @@ import { shellError, kindOf } from "./errors.js";
 import { t, minutes, videoCount } from "./text.js";
 import { logRefresh } from "./timing.js";
 import { lastOpenTiming } from "./live.js";
-import { nameOf, carry, displayTitle, posterOf, backdropOf, enrichStep } from "./enrich.js";
+import { nameOf, carry, displayTitle, posterOf, backdropOf, enrichStep, tmdbOn, viewOf } from "./enrich.js";
+import { clip, cleanText } from "./clean.js";
 
 export const SLOTS = 8;
 export const REFRESH_MS = 5 * 60 * 1000;
@@ -31,7 +32,7 @@ const HLS = /mpegurl/i;
 
 // ---- shell state (tg.shell) ----
 
-const freshShell = (fp) => ({ v: 1, fp, slots: [], titles: {}, applied: [], top: {}, purge: [], indexedAt: 0, incomplete: false, count: 0, unslotted: 0, error: null, refused: null, channelErrors: 0, en: { off: 0, at: 0, done: false } });
+const freshShell = (fp) => ({ v: 1, fp, slots: [], missing: [], titles: {}, applied: [], top: {}, purge: [], indexedAt: 0, incomplete: false, count: 0, unslotted: 0, error: null, refused: null, channelErrors: 0, en: { off: 0, at: 0, done: false } });
 
 export function loadShell(c) {
   const s = readJson(KEYS.shell);
@@ -44,11 +45,11 @@ const saveShell = (s) => writeJson(KEYS.shell, s);
 /** The chats (Bot API ids, "-100...") whose toggle is on. */
 export function activeChats(shell) {
   const on = new Set();
-  shell.slots.forEach((chatId, i) => { if (chatId && kino.config.get("ch" + (i + 1)) === true) on.add(chatId); });
+  const missing = new Set(shell.missing || []);
+  shell.slots.forEach((chatId, i) => { if (chatId && !missing.has(chatId) && kino.config.get("ch" + (i + 1)) === true) on.add(chatId); });
   return on;
 }
 
-const clip = (s, n) => { let x = String(s || "").replace(/\s+/g, " ").trim().slice(0, n); if (/[\uD800-\uDBFF]$/.test(x)) x = x.slice(0, -1); return x; };
 const chatOfId = (id) => String(id).slice(0, String(id).lastIndexOf(":"));
 const msgOfId = (id) => Number(String(id).slice(String(id).lastIndexOf(":") + 1));
 const channelChatId = (rawId) => String(-(1000000000000n + BigInt(rawId)));
@@ -61,7 +62,8 @@ const channelChatId = (rawId) => String(-(1000000000000n + BigInt(rawId)));
  * its bytes); TMDB's answer (`tm`) is added by the enrichment pass.
  */
 export function rowOf(e) {
-  const named = nameOf(e.fileName, e.text || e.caption, e.title);
+  // The sender's text, without control or direction characters, before anything is derived from it.
+  const named = nameOf(cleanText(e.fileName || ""), cleanText(e.text || e.caption || ""), cleanText(e.title || ""));
   const data = {
     chatId: e.chatId,
     msgId: e.msgId,
@@ -130,6 +132,7 @@ function sizeText(bytes) {
 
 /** The card's picture: TMDB's poster (a plain URL) when the row has one, else Telegram's thumbnail through `image`. */
 export function posterFor(row) {
+  row = viewOf(row);
   const p = posterOf(row);
   if (p) return p;
   return row.data && row.data.th ? { source: "plugin", handle: "t:" + row.id } : null;
@@ -137,6 +140,7 @@ export function posterFor(row) {
 
 /** A catalog row as a Kino item: id from the row id (only Item id characters), ref = the row id. */
 export function itemOf(row) {
+  row = viewOf(row); // without TMDB's answer when the person turned TMDB off
   const d = row.data || {};
   const item = { id: ("v" + row.id.replace(":", "_")).slice(0, 128), ref: row.id, title: clip(displayTitle(d, row.title), 200) || "Video", kind: "movie" };
   const poster = posterFor(row);
@@ -183,7 +187,7 @@ function noticeFor(problem, now = Date.now()) {
 /** Starts over for another bot: the index and the discovery state go (this device keeps its mark). */
 async function resetIndex(shell) {
   remove(KEYS.discovery);
-  shell.slots = []; shell.titles = {}; shell.applied = []; shell.top = {}; shell.purge = [];
+  shell.slots = []; shell.missing = []; shell.titles = {}; shell.applied = []; shell.top = {}; shell.purge = [];
   shell.indexedAt = 0; shell.incomplete = false; shell.count = 0; shell.unslotted = 0; shell.channelErrors = 0;
   const mark = await deviceMark();
   try { await kino.catalog.clear(); } catch (e) { kino.log("catalog clear failed: " + (e && e.code)); }
@@ -196,15 +200,26 @@ export async function countVideos() {
   return Math.max(0, n - ((await kino.catalog.get([DEVICE_ROW])).length));
 }
 
-/** The slots: the first SLOTS channels the discovery knows, by ascending channel id; the titles of all of them. */
+/**
+ * The slots, STABLE and first-seen: a slot keeps its channel for good; a channel the bot meets for the first time is
+ * appended to the first free slot (in the order the bot met them, `seen`), and its toggle starts off (only slot 1's
+ * toggle starts on, and slot 1 is the first channel the bot ever met). Why: anyone who learns the bot's username can
+ * make it an administrator of their own channel. With stable slots such a channel lands in a later slot, switched off,
+ * and can never take the owner's slot or push it out (a 9th channel just gets no slot). A channel the bot lost keeps
+ * its slot, marked missing, so that slot is never handed to a newcomer whose videos would then show switched on.
+ */
 function assignSlots(shell, channels) {
-  const ids = Object.keys(channels || {}).sort((a, b) => { const x = BigInt(a), y = BigInt(b); return x < y ? -1 : x > y ? 1 : 0; });
+  const order = (id) => (Number.isInteger(channels[id].seen) ? channels[id].seen : Number.MAX_SAFE_INTEGER);
+  const ids = Object.keys(channels || {}).sort((a, b) => order(a) - order(b) || (BigInt(a) < BigInt(b) ? -1 : BigInt(a) > BigInt(b) ? 1 : 0));
+  const known = new Set();
   for (const rawId of ids) {
     const chatId = channelChatId(rawId);
+    known.add(chatId);
     shell.titles[chatId] = clip(channels[rawId].title, 100);
+    if (!shell.slots.includes(chatId) && shell.slots.length < SLOTS) shell.slots.push(chatId);
   }
-  shell.slots = ids.slice(0, SLOTS).map(channelChatId);
-  shell.unslotted = Math.max(0, ids.length - SLOTS);
+  shell.missing = shell.slots.filter((chatId) => !known.has(chatId));
+  shell.unslotted = [...known].filter((chatId) => !shell.slots.includes(chatId)).length;
 }
 
 /** Applies one refresh's changes to the catalog: only videos of active channels, never an HLS playlist. */
@@ -365,6 +380,7 @@ async function runRefresh({ force = false } = {}) {
 
 /** The TMDB pass of a refresh (bounded, never throws): only rows of active channels, never the device mark. */
 async function enrich(shell, started) {
+  if (!tmdbOn()) return; // the person turned TMDB off: no kino.meta call, nothing of the videos leaves for TMDB
   const active = activeChats(shell);
   const t0 = Date.now();
   const asked = await enrichStep(shell, started, { skip: (row) => row.id === DEVICE_ROW || !active.has(chatOfId(row.id)) });
@@ -400,7 +416,11 @@ async function recent(active, offset, want) {
 }
 
 /** The Home rows: a notice when something is wrong, "Recientes", then one row per active channel. */
-export async function homeRows({ shell, problem }) {
+/** Time as the shell sees it (a test may give kino a clock; production kino has none). */
+export const nowMs = () => (typeof kino.now === "function" ? kino.now() : Date.now());
+const HOME_BUDGET_MS = 17000; // Kino gives home() 20 s: the rows stop being built here, whatever the refresh took
+
+export async function homeRows({ shell, problem }, started = nowMs()) {
   const c = credentials();
   if (!c.complete) return [noticeFor({ kind: "config" })];
   const active = activeChats(shell);
@@ -411,6 +431,8 @@ export async function homeRows({ shell, problem }) {
     rows.push({ id: "recent", title: t("row.recent"), ref: "recent", items: top.items.map(itemOf) });
     for (const chatId of shell.slots) {
       if (!active.has(chatId)) continue;
+      // A channel's own row is optional: past the budget Home answers with what it has (never a timeout).
+      if (nowMs() - started > HOME_BUDGET_MS) { kino.log("home: channel rows skipped, out of time"); break; }
       const r = await scanChat(chatId, shell.top[chatId] || 0, ROW_ITEMS);
       if (r.items.length) rows.push({ id: "c" + chatId, title: clip(shell.titles[chatId] || chatId, 200), ref: "chan:" + chatId, items: r.items.map(itemOf) });
     }
@@ -458,7 +480,7 @@ export async function rowFor(ref) {
   const shell = loadShell(credentials());
   const [row] = typeof ref === "string" && ref.length <= 128 ? await kino.catalog.get([ref]) : [];
   if (!row || !activeChats(shell).has(chatOfId(row.id))) throw shellError("not_found", "no such video");
-  return row;
+  return viewOf(row);
 }
 
 export const channelTabs = (shell) => shell.slots.filter((x) => activeChats(shell).has(x)).map((chatId) => ({ chatId, title: shell.titles[chatId] || chatId }));
@@ -479,7 +501,7 @@ export function statusLines() {
     const key = "ch" + (i + 1) + "_name";
     if (!chatId) { out[key] = t("slot.free"); continue; }
     const title = shell.titles[chatId] || chatId;
-    out[key] = kino.config.get("ch" + (i + 1)) === true ? title : t("slot.off", { title });
+    out[key] = (shell.missing || []).includes(chatId) ? t("slot.gone", { title }) : kino.config.get("ch" + (i + 1)) === true ? title : t("slot.off", { title });
   }
   const parts = [shell.count > 0 ? videoCount(shell.count) : t("index.none")];
   if (shell.indexedAt) {

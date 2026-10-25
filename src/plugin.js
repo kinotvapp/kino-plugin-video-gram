@@ -6,7 +6,7 @@
 // scripts/build.mjs (`npm run build`): the published plugin.js.
 import { guard, shellError } from "./shell/errors.js";
 import { credentials } from "./shell/live.js";
-import { refresh, forget, homeRows, browsePage, searchPage, rowFor, loadShell, channelTabs, statusLines, posterFor } from "./shell/library.js";
+import { refresh, forget, homeRows, browsePage, searchPage, rowFor, loadShell, channelTabs, statusLines, posterFor, nowMs } from "./shell/library.js";
 import { read as readBytes } from "./shell/read.js";
 import { image as imageBytes } from "./shell/image.js";
 import { displayTitle, backdropOf } from "./shell/enrich.js";
@@ -22,8 +22,9 @@ const CONTAINER = { "video/mp4": "mp4", "video/x-matroska": "matroska", "video/w
 
 export async function home() {
   await null;
+  const started = nowMs();
   try {
-    return await homeRows(await refresh());
+    return await homeRows(await refresh(), started);
   } catch (e) {
     kino.log("home failed: " + (e && e.code ? e.code : "error"));
     return [{ id: "notice", title: t("row.notice"), items: [{ id: "setup-unavailable", ref: "setup:unavailable", title: t("setup.unavailable"), kind: "movie" }] }];

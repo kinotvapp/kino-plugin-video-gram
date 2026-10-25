@@ -145,10 +145,15 @@ test("5 a read that needs a refetch while a refresh pass holds the line still su
   await refreshing;
 });
 
-test("6 the README says plainly that a slot shift moves the on/off toggles to other channels (es and en)", () => {
+test("6 the README says slots never move, new channels arrive off, and strangers can add the bot (es and en); round 9", () => {
   const text = readFileSync(join(root, "README.md"), "utf8");
-  assert.match(text, /un canal que tenías activo puede quedar desactivado/);
-  assert.match(text, /a channel you had on can turn off/);
+  assert.match(text, /no se mueven: un canal nuevo ocupa el siguiente lugar\s+libre y llega \*\*desactivado\*\*/);
+  assert.match(text, /never move: a new channel takes the next free place and\s+arrives \*\*off\*\*/);
+  assert.match(text, /Cualquiera que conozca el nombre de tu bot puede agregarlo/);
+  assert.match(text, /Anyone who knows your bot's name can add it/);
+  assert.match(text, /va a TMDB a través de Kino/);
+  assert.match(text, /goes to TMDB through Kino/);
+  assert.doesNotMatch(text, /ordenados por su número de canal|ordered by their Telegram channel number/);
 });
 
 test("2 checkDevice called twice at once (a refresh and a read's connect) writes one mark and answers it to both", async () => {
