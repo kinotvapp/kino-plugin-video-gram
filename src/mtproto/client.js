@@ -305,6 +305,12 @@ export class TelegramClient {
    * { reused: true, userId }. Follows USER_MIGRATE_n (the home DC changes only when the login there succeeds) and
    * retries once after a closed socket. Every attempt sent, migrations and retries included, spends a budget slot.
    */
+  /** Whether the home DC still needs a bot login (no key there yet, or a key not logged in). */
+  needsLogin() {
+    const home = this.homeDc ? this.dcs.get(this.homeDc) : null;
+    return !(home && home.loggedIn);
+  }
+
   botLogin({ apiId, apiHash, botToken, deadline }) {
     return this.serial(async () => {
       if (apiId !== undefined) this.apiId = Number(apiId);

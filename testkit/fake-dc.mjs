@@ -290,6 +290,12 @@ class DcConnection {
       if (reply && reply.hugeLength) { this.transport.sendLengthOnly(reply.hugeLength); return; }
       if (reply && reply.transportError) { this.transport.sendError(reply.transportError); return; }
       if (reply && reply.tamper) out.tamper = reply.tamper;
+      // Fault injection: the server starts a new session whose first_msg_id is after this request, and loses it.
+      if (reply && reply.sessionReset) {
+        out.pending.push(new Writer().int(CTOR.newSessionCreated).long(msgId + 4n).long(BigInt(randomBytes(8).readBigInt64LE(0))).raw(this.dc.salt).done());
+        if (out.isFile) this.fileInFlight = Math.max(0, this.fileInFlight - 1);
+        return this.flush(out);
+      }
       if (reply && reply.error) { out.pending.push(rpcResult(msgId, rpcError(...reply.error))); return this.flush(out); }
     }
     let result;
@@ -337,13 +343,20 @@ class DcConnection {
   /** `tamper`: "byte" flips one encrypted byte (msg_key no longer matches), "session" answers under another session id. */
   sendEncrypted(authKey, sessionIdHex, body, tamper) {
     const sid = tamper === "session" ? randomBytes(8) : Buffer.from(sessionIdHex, "hex");
-    const head = Buffer.from(new Writer().raw(this.dc.salt).raw(sid).long(this.serverMsgId()).int(this.nextSeq(sessionIdHex)).int(body.length).raw(body).done());
+    // tamper "padding": the length field claims 16 bytes more than the body, so the padding left is under 12 bytes.
+    const lenField = tamper === "padding" ? body.length + 16 : body.length;
+    // tamper "evenId": a server msg_id that is even (servers' are odd); "dupId": the previous message's id again.
+    const msgId = tamper === "dupId" && this.lastSentId ? this.lastSentId : tamper === "evenId" ? this.serverMsgId() - 1n : this.serverMsgId();
+    this.lastSentId = msgId;
+    const head = Buffer.from(new Writer().raw(this.dc.salt).raw(sid).long(msgId).int(this.nextSeq(sessionIdHex)).int(lenField).raw(body).done());
     const plain = Buffer.concat([head, randomBytes(12 + ((16 - ((head.length + 12) % 16)) % 16))]);
     const msgKey = sha256(authKey.subarray(96, 128), plain).subarray(8, 24);
     const { key, iv } = kdf(authKey, msgKey, 8);
     const enc = ige(plain, key, iv, true);
     if (tamper === "byte") enc[enc.length - 20] ^= 0x40;
-    const packet = Buffer.concat([sha1(authKey).subarray(12, 20), msgKey, enc]);
+    // tamper "keyId": the packet names another auth key.
+    const keyId = tamper === "keyId" ? randomBytes(8) : sha1(authKey).subarray(12, 20);
+    const packet = Buffer.concat([keyId, msgKey, enc]);
     // dc.coalesce: the packets of one tick go out together, several in one WebSocket frame; dc.splitFrames: each packet
     // is cut over that many frames.
     if (this.dc.coalesce) {

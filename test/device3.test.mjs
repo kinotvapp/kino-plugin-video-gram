@@ -24,7 +24,8 @@ beforeEach(() => {
 });
 afterEach(() => tg.restore());
 async function client(log = () => {}) {
-  const c = new TelegramClient({ apiId: CREDS.apiId, publicKeys: fakeRsa().publicKeys, timeoutMs: 4000, store: memoryStore(), log });
+  // A generous per-call timeout: these tests are about ordering, never about how fast a loaded machine is.
+  const c = new TelegramClient({ apiId: CREDS.apiId, publicKeys: fakeRsa().publicKeys, timeoutMs: 15000, store: memoryStore(), log });
   await c.connect(2);
   await c.botLogin(CREDS);
   return c;

@@ -19,7 +19,10 @@ const gcd = (a, b) => { while (b) [a, b] = [b, a % b]; return a; };
 
 /** Brent's variant of Pollard's rho with batched gcds: pq < 2^64 factors in a few thousand BigInt steps. */
 export function factorPq(pq) {
+  // Telegram's pq is a product of two primes below 2^32 (so below 2^64): anything else is not a server of ours.
+  if (typeof pq !== "bigint" || pq < 4n || pq >= 1n << 64n) throw protocol("pq out of range");
   if (pq % 2n === 0n) return [2n, pq / 2n];
+  let steps = 0;
   for (let c = 1n; c < 64n; c++) {
     const f = (v) => (v * v + c) % pq;
     let y = 2n, x = 2n, ys = 2n, q = 1n, g = 1n, r = 1;
@@ -32,8 +35,11 @@ export function factorPq(pq) {
         const lim = Math.min(m, r - k);
         for (let i = 0; i < lim; i++) { y = f(y); q = (q * (x > y ? x - y : y - x)) % pq; }
         g = gcd(q, pq);
+        steps += lim;
       }
       r *= 2;
+      // A semiprime below 2^64 falls in well under 2^20 steps; past it the input is not one (bounded CPU either way).
+      if (steps > 1 << 22) throw protocol("could not factor pq");
     }
     if (g === pq) {
       do { ys = f(ys); g = gcd(x > ys ? x - ys : ys - x, pq); } while (g === 1n);
@@ -87,10 +93,13 @@ export function checkDhPrime(p, g) {
 }
 
 /** One unencrypted request (auth_key_id = 0) and its answer, as a Reader on the answer's body. */
-export async function plainCall(t, body, { msgIds, timeoutMs }) {
+export async function plainCall(t, body, { msgIds, timeoutMs, deadline, now = () => Date.now() }) {
   const w = new Writer().long(0n).long(msgIds.next()).int(body.length).raw(body).done();
   await t.sendHex(toHex(w));
-  const raw = fromHex(await t.recvHex(timeoutMs));
+  // With a deadline (the whole key exchange's), each answer waits only for what is left of it.
+  const wait = deadline === undefined ? timeoutMs : deadline - now();
+  if (wait < 1) throw mtError("timeout", "the key exchange ran out of time", { deadline: true });
+  const raw = fromHex(await t.recvHex(wait));
   if (raw.length === 4) throw fromTransportError(new Reader(raw).int32());
   const r = new Reader(raw);
   if (r.long() !== 0n) throw protocol("expected an unencrypted answer");
@@ -109,7 +118,8 @@ const inRange = (v, p) => v > 1n && v < p - 1n && v > LIMIT && v < p - LIMIT;
  */
 export async function createAuthKey(t, { dc, publicKeys, now = () => Date.now(), timeoutMs = 20000, rand = random }) {
   const msgIds = new MsgIds(now);
-  const opts = { msgIds, timeoutMs };
+  // One deadline for the whole exchange (three round trips), not timeoutMs for each.
+  const opts = { msgIds, timeoutMs, deadline: now() + timeoutMs, now };
   const nonce = rand(16);
   let r = await plainCall(t, reqPqMulti(nonce), opts);
   if (r.int() !== CTOR.resPQ) throw protocol("expected resPQ");

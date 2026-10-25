@@ -274,7 +274,11 @@ export function createDiscovery({ client, store, budgetBytes = DEFAULT_BUDGET_BY
         titles.set(channelChatId(id), title);
         if (c.min || c.access_hash === undefined) { if (known) known.title = title; continue; } // a min hash is not usable
         if (known) { known.accessHash = String(c.access_hash); known.title = title; }
-        else st.channels[id] = { accessHash: String(c.access_hash), title, pts: 1 };
+        else {
+          // `seen`: the order in which the bot met its channels (1, 2, ...), for the shell's stable channel slots.
+          const seen = Object.values(st.channels).reduce((m, x) => Math.max(m, Number.isInteger(x.seen) ? x.seen : 0), 0) + 1;
+          st.channels[id] = { accessHash: String(c.access_hash), title, pts: 1, seen };
+        }
       } else if (c._ === "channelForbidden") {
         dropChannel(st, index, String(c.id));
       } else if (c._ === "chat" || c._ === "chatForbidden") {
@@ -421,11 +425,11 @@ export function createDiscovery({ client, store, budgetBytes = DEFAULT_BUDGET_BY
               await scanChannel(st, index, titles, id, spend, deadline);
             } catch (e) {
               if (e.code === "channel_invalid") {
-                log("channel " + id + " dropped: " + e.message);
+                log("a channel was dropped: " + (e && e.code));
                 dropChannel(st, index, id);
               } else if (ISOLATED.has(e.code)) {
                 // The failed page was not applied, so the channel's pts is still the last one fully read.
-                log("channel " + id + " skipped: " + e.message);
+                log("a channel was skipped: " + (e && e.code));
                 errors.push({ scope: "channel", channelId: id, ...errorOf(e) });
               } else {
                 throw e;

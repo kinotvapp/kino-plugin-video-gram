@@ -41,6 +41,7 @@ export class Session {
     this.pendingAcks = [];
     this.waiting = new Map();   // msg_id -> the request waiting for its answer
     this.abandoned = new Map(); // msg_id -> when it was given up: still on the wire, its answer is dropped unkept
+    this.seenIds = new Set();   // the last server msg_ids seen (duplicates are dropped)
     this.oldSessions = new Set();
     this.newSession();
   }
@@ -112,6 +113,11 @@ export class Session {
     }
     const h = new Reader(fromHex(plainHex.slice(32, 64)));
     const id = h.long(), seqno = h.int(), len = h.int();
+    // A server message id is odd, and each is seen once: a duplicate (a replay) is dropped.
+    if ((id & 1n) !== 1n) { big.release(plainHex.length); throw protocol("server msg_id is not odd"); }
+    if (this.seenIds.has(id)) { big.release(plainHex.length); this.log("duplicate server message dropped"); return []; }
+    this.seenIds.add(id);
+    if (this.seenIds.size > 512) this.seenIds.delete(this.seenIds.values().next().value);
     const total = plainHex.length / 2;
     const padding = total - 32 - len;
     if (len % 4 !== 0 || padding < 12 || padding > 1024) { big.release(plainHex.length); throw protocol("bad message length"); }
@@ -139,7 +145,8 @@ export class Session {
         });
       } catch (e) {
         big.release(encHex.length);
-        if (e && e.message === "the mac doesn't match") throw protocol("msg_key mismatch");
+        // The op's own words, or (should they change) any crypto_error of it: an answer that cannot be opened.
+        if (e && (e.message === "the mac doesn't match" || e.code === "crypto_error")) throw protocol("msg_key mismatch");
         throw e;
       }
       big.hold(plainHex.length);
@@ -333,10 +340,13 @@ export class Session {
       const r = new Reader(mBody);
       r.int();
       switch (ctor) {
-        case CTOR.newSessionCreated:
-          r.long(); r.long();
+        case CTOR.newSessionCreated: {
+          const firstMsgId = r.long(); r.long();
           this.state.serverSalt = r.raw(8).slice();
+          // Requests sent before the server's new session began may never be answered: send those again.
+          for (const w of [...this.waiting.values()]) if (w.id < firstMsgId) await this.resend(w, 0);
           break;
+        }
         case CTOR.badServerSalt: {
           const bad = r.long(); r.int(); r.int();
           this.state.serverSalt = r.raw(8).slice();

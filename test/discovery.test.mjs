@@ -114,7 +114,7 @@ test("first refresh: getDifference(pts=1, date=1, qts=-1), every channel from pt
   const st = saved();
   assert.equal(st.version, 1);
   assert.equal(st.pts, world.pts);
-  assert.deepEqual(st.channels[String(CH)], { accessHash: String(CH_HASH), title: "Películas", pts: world.channels.get(String(CH)).pts });
+  assert.deepEqual(st.channels[String(CH)], { accessHash: String(CH_HASH), title: "Películas", pts: world.channels.get(String(CH)).pts, seen: 1 });
   assert.equal(st.entries.length, 5);
   assert.deepEqual(res.state, { version: 1, pts: st.pts, qts: st.qts, date: st.date, seq: st.seq, channels: st.channels });
   assert.doesNotThrow(() => JSON.stringify(res));

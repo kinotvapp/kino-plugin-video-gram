@@ -204,10 +204,12 @@ test("a socket drop mid-session reconnects with the stored key, without a key ex
 });
 
 test("a request the server never answers times out with a typed error; the client recovers on the next call", async () => {
-  const c = await newClient({ timeoutMs: 200 }).connect(2);
+  // Connect and log in with the normal timeout (a loaded machine must not fail the key exchange); only the request
+  // that is never answered gets a short deadline of its own.
+  const c = await newClient().connect(2);
   await c.botLogin(CREDS);
   tg.dc(2).once("getFile", () => ({ silent: true }));
-  await assert.rejects(c.getFile({ ...DOC, dcId: 2 }, 0, 4096), (e) => e.code === "timeout");
+  await assert.rejects(c.getFile({ ...DOC, dcId: 2 }, 0, 4096, { deadline: Date.now() + 2500 }), (e) => e.code === "timeout");
   assert.equal((await c.getFile({ ...DOC, dcId: 2 }, 0, 4096)).length, 4096);
   await c.close();
 });
