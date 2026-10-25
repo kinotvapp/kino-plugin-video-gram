@@ -497,6 +497,22 @@ const isServerAnswer = (e) => !!(e && typeof e === "object" && ["flood_wait", "f
 return { CODES, mtError, fromRpcError, fromTransportError, describeError, isServerAnswer };
 })();
 
+// ---- src/mtproto/big.js ----
+const __mod_src_mtproto_big = (() => {
+// An explicit accounting of the big strings this library holds at once (hex of packets and chunks), so a test can
+// bound the peak under QuickJS's 64 MiB per-plugin cap. Counts characters of strings of at least BIG characters (hex:
+// 2 per byte). It is a model, kept in step by hand where the code takes and drops such strings; it never touches data.
+const BIG = 65536;
+const big = {
+  live: 0,
+  peak: 0,
+  hold(n) { if (n >= BIG) { this.live += n; if (this.live > this.peak) this.peak = this.live; } return n; },
+  release(n) { if (n >= BIG) this.live = Math.max(0, this.live - n); },
+  reset() { this.live = 0; this.peak = 0; },
+};
+return { big };
+})();
+
 // ---- src/mtproto/transport.js ----
 const __mod_src_mtproto_transport = (() => {
 // Obfuscated "intermediate" MTProto transport over kino.ws, as the spike's Transport (mtproto.mjs) did over Node's
@@ -513,12 +529,14 @@ const __mod_src_mtproto_transport = (() => {
 const { toHex, fromHex, readU32LE, writeU32LE, random, reversed } = __mod_src_mtproto_bytes;
 const { ctrHex } = __mod_src_mtproto_crypto;
 const { mtError } = __mod_src_mtproto_errors;
+const { big } = __mod_src_mtproto_big;
 
 const DC_HOSTS = Object.freeze({ 1: "pluto", 2: "venus", 3: "aurora", 4: "vesta", 5: "flora" });
 const MAX_SEND_BYTES = 786000; // kino.ws frame cap
-// A 1 MiB chunk is ~1 MiB + 100 bytes; with chunks read ahead, Telegram may pack the answers of up to three requests
-// into one container. Past 4 MiB + 64 KiB it is not an answer of ours.
-const MAX_PACKET_BYTES = (4 << 20) + 65536;
+// A 1 MiB chunk is ~1 MiB + 100 bytes; at most 3 chunk requests are in flight (client.js), so Telegram may pack at most
+// three answers into one container. Past 3 MiB + 64 KiB it is not an answer of ours (and its hex copies would not fit
+// QuickJS's 64 MiB cap).
+const MAX_PACKET_BYTES = 3 * (1 << 20) + 65536;
 const MASK128 = (1n << 128n) - 1n;
 const ZEROS = "00".repeat(16);
 
@@ -595,11 +613,12 @@ class Transport {
   /** Sends one packet; `payloadHex` is the MTProto message (unencrypted or encrypted) as hex. */
   async sendHex(payloadHex) {
     if (this.closed || !this.ws) throw mtError("closed", "transport closed");
+    // The size first: once CTR has run, the keystream has moved and a refused send would leave the stream out of step.
+    if (4 + payloadHex.length / 2 + (this.firstHex ? this.firstHex.length / 2 : 0) > MAX_SEND_BYTES) throw mtError("invalid_request", "packet too large for one frame");
     const len = new Uint8Array(4);
     writeU32LE(len, 0, payloadHex.length / 2);
     let wire = this.enc.processHex(toHex(len) + payloadHex);
     if (this.firstHex) { wire = this.firstHex + wire; this.firstHex = null; }
-    if (wire.length / 2 > MAX_SEND_BYTES) throw mtError("invalid_request", "packet too large for one frame");
     try {
       if (this.encoded) {
         try {
@@ -625,9 +644,15 @@ class Transport {
     const deadline = now() + timeoutMs;
     const join = () => {
       if (!this.pending.length) return;
-      this.bufHex += this.pending.length === 1 ? this.pending[0] : this.pending.join("");
+      // One copy of the frames joined; the frames go right after (they are the only other copy).
+      const joined = this.pending.length === 1 ? this.pending[0] : this.pending.join("");
+      if (this.pending.length > 1) { big.hold(joined.length); for (const p of this.pending) big.release(p.length); } // one frame: the same string
       this.pending = [];
       this.pendingChars = 0;
+      if (this.bufHex === "") { this.bufHex = joined; return; } // the usual case: no second concatenated copy
+      big.hold(this.bufHex.length + joined.length);
+      big.release(this.bufHex.length); big.release(joined.length);
+      this.bufHex += joined;
     };
     for (;;) {
       if (this.bufHex.length < 8) join();
@@ -640,8 +665,11 @@ class Transport {
         if (this.bufHex.length + this.pendingChars >= 8 + n * 2) {
           join();
           const payload = this.bufHex.slice(8, 8 + n * 2);
-          this.bufHex = this.bufHex.slice(8 + n * 2);
-          return payload;
+          big.hold(payload.length);
+          const rest = this.bufHex.length > 8 + n * 2 ? this.bufHex.slice(8 + n * 2) : "";
+          big.release(this.bufHex.length); big.hold(rest.length);
+          this.bufHex = rest;
+          return payload; // the caller owns it (and releases it)
         }
       }
       if (this.closed || !this.ws) throw mtError("closed", "transport closed");
@@ -662,11 +690,13 @@ class Transport {
       else { this.encoded = false; fh = toHex(frame); } // an app that ignored the encoding: the old JS pass
       const t2 = trace ? Date.now() : 0;
       const plain = this.dec.processHex(fh);
+      fh = null; frame = null; // the encrypted frame dies here: only its plaintext is kept
+      big.hold(plain.length);
       this.pending.push(plain);
       this.pendingChars += plain.length;
       if (trace) {
         // Timing (the shell's TIMING switch): numbers only, never the data.
-        trace.wsrecv += t1 - t0; trace.frames++; trace.frameBytes += fh.length / 2;
+        trace.wsrecv += t1 - t0; trace.frames++; trace.frameBytes += plain.length / 2;
         if (!trace.firstFrameAt) trace.firstFrameAt = t1;
         trace.tohex += t2 - t1; trace.ctr += Date.now() - t2;
       }
@@ -675,6 +705,11 @@ class Transport {
 
   async close() {
     this.closed = true;
+    big.release(this.bufHex.length);
+    for (const p of this.pending) big.release(p.length);
+    this.bufHex = "";
+    this.pending = [];
+    this.pendingChars = 0;
     const ws = this.ws;
     this.ws = null;
     if (ws) { try { await ws.close(); } catch { /* already closed */ } }
@@ -1336,9 +1371,11 @@ const { toHex, fromHex, random, readI32LE } = __mod_src_mtproto_bytes;
 const { sha256Hex, igeEncryptHex, igeDecryptHex, gunzipHex } = __mod_src_mtproto_crypto;
 const { Writer, Reader, CTOR, msgsAck, parseRpcError, hexU32, hexBytesAt } = __mod_src_mtproto_tl;
 const { MsgIds } = __mod_src_mtproto_msgid;
+const { big } = __mod_src_mtproto_big;
 const { mtError, fromRpcError, fromTransportError } = __mod_src_mtproto_errors;
 
 const MAX_RESENDS = 5;
+const ABANDONED_MS = 30000; // an abandoned request still unanswered after this long is taken as lost
 const protocol = (m) => mtError("protocol", m);
 
 class Session {
@@ -1359,7 +1396,8 @@ class Session {
     this.log = log;
     this.msgIds = new MsgIds(now);
     this.pendingAcks = [];
-    this.waiting = new Map(); // msg_id -> the request waiting for its answer
+    this.waiting = new Map();   // msg_id -> the request waiting for its answer
+    this.abandoned = new Map(); // msg_id -> when it was given up: still on the wire, its answer is dropped unkept
     this.oldSessions = new Set();
     this.newSession();
   }
@@ -1399,21 +1437,33 @@ class Session {
 
   /** One transport packet -> its message [{ id, seqno, hex }] (empty when it belongs to one of our older sessions). */
   async recvMessages(deadline, trace) {
-    const hex = await this.t.recvHex(Math.max(1, deadline - this.now()), this.now, trace);
-    if (hex.length === 8) throw fromTransportError(readI32LE(fromHex(hex), 0));
+    // Boxed so that no stack slot of ours keeps the packet alive once openPacket has let it go.
+    const box = { hex: await this.t.recvHex(Math.max(1, deadline - this.now()), this.now, trace) };
+    return this.openPacket(box, trace);
+  }
+
+  /**
+   * Decrypts one packet ({ hex }, taken out of the box) and answers its message. Memory: QuickJS frees a string the
+   * moment its last reference goes, so every big string here is dropped before the next one is made: the packet before
+   * the decryption runs (only its encrypted part is kept), the encrypted part right after, the plaintext once the
+   * message is sliced out. At most two copies of a packet are alive at once (big.js counts them).
+   */
+  openPacket(box, trace) {
+    let hex = box.hex;
+    box.hex = null;
+    if (hex.length === 8) { big.release(hex.length); throw fromTransportError(readI32LE(fromHex(hex), 0)); }
     if (hex.length < 48 + 64) throw protocol("short packet");
-    if (hex.slice(0, 16) !== this.akId) throw protocol("answer under another auth key");
+    if (hex.slice(0, 16) !== this.akId) { big.release(hex.length); throw protocol("answer under another auth key"); }
+    if (((hex.length - 48) / 2) % 16 !== 0) { big.release(hex.length); throw protocol("encrypted data not a multiple of 16"); }
     const msgKey = hex.slice(16, 48);
-    const encHex = hex.slice(48);
-    if ((encHex.length / 2) % 16 !== 0) throw protocol("encrypted data not a multiple of 16");
-    const { key, iv } = this.keyIv(msgKey, 8);
-    const t0 = trace ? Date.now() : 0;
-    const plainHex = igeDecryptHex(encHex, key, iv);
-    const t1 = trace ? Date.now() : 0;
-    if (sha256Hex(this.ak.slice(192, 256) + plainHex).slice(16, 48) !== msgKey) throw protocol("msg_key mismatch");
-    if (trace) { trace.ige += t1 - t0; trace.mac += Date.now() - t1; }
+    const enc = { hex: hex.slice(48) };
+    big.hold(enc.hex.length);
+    big.release(hex.length);
+    hex = null;
+    let plainHex = this.decrypt(enc, msgKey, trace);
     const sid = plainHex.slice(16, 32);
     if (sid !== this.sessionId) {
+      big.release(plainHex.length);
       if (this.oldSessions.has(sid)) { this.log("message for an older session ignored"); return []; }
       throw protocol("answer for another session");
     }
@@ -1421,8 +1471,31 @@ class Session {
     const id = h.long(), seqno = h.int(), len = h.int();
     const total = plainHex.length / 2;
     const padding = total - 32 - len;
-    if (len % 4 !== 0 || padding < 12 || padding > 1024) throw protocol("bad message length");
-    return [{ id, seqno, hex: plainHex.slice(64, 64 + len * 2) }];
+    if (len % 4 !== 0 || padding < 12 || padding > 1024) { big.release(plainHex.length); throw protocol("bad message length"); }
+    const body = plainHex.slice(64, 64 + len * 2);
+    big.hold(body.length);
+    big.release(plainHex.length);
+    plainHex = null;
+    return [{ id, seqno, hex: body }];
+  }
+
+  /** The plaintext (hex) of the encrypted part ({ hex }, taken out of the box), its msg_key checked. */
+  decrypt(enc, msgKey, trace) {
+    let encHex = enc.hex;
+    enc.hex = null;
+    const { key, iv } = this.keyIv(msgKey, 8);
+    const t0 = trace ? Date.now() : 0;
+    const plainHex = igeDecryptHex(encHex, key, iv);
+    big.hold(plainHex.length);
+    big.release(encHex.length);
+    encHex = null;
+    const t1 = trace ? Date.now() : 0;
+    // SHA-256 takes one string: the 32 key bytes and the plaintext are joined for the call only (one more copy, briefly).
+    big.hold(64 + plainHex.length); big.release(64 + plainHex.length);
+    const ok = sha256Hex(this.ak.slice(192, 256) + plainHex).slice(16, 48) === msgKey;
+    if (trace) { trace.ige += t1 - t0; trace.mac += Date.now() - t1; }
+    if (!ok) { big.release(plainHex.length); throw protocol("msg_key mismatch"); }
+    return plainHex;
   }
 
   /**
@@ -1450,9 +1523,18 @@ class Session {
     return entry;
   }
 
-  /** Stops waiting for `entry` (its answer, if it ever comes, is ignored). */
+  /** Stops waiting for `entry`: its answer, if it ever comes, is dropped without being kept (but counted in flight). */
   forget(entry) {
-    if (!entry.done) this.waiting.delete(entry.id);
+    if (entry.done) return;
+    this.waiting.delete(entry.id);
+    this.abandoned.set(entry.id, this.now());
+  }
+
+  /** Requests sent and not answered yet, those given up included (their answers are still on the way). */
+  inflight() {
+    const old = this.now() - ABANDONED_MS;
+    for (const [id, at] of this.abandoned) if (at < old) this.abandoned.delete(id); // lost for good
+    return this.waiting.size + this.abandoned.size;
   }
 
   finish(entry, result, error) {
@@ -1513,9 +1595,12 @@ class Session {
           const h = new Reader(fromHex(m.hex.slice(o * 2, (o + 16) * 2)));
           const id = h.long(), seqno = h.int(), len = h.int();
           if (o + 16 + len > size) throw protocol("container past its end");
-          queue.push({ id, seqno, hex: m.hex.slice((o + 16) * 2, (o + 16 + len) * 2) });
+          const inner = m.hex.slice((o + 16) * 2, (o + 16 + len) * 2);
+          big.hold(inner.length);
+          queue.push({ id, seqno, hex: inner });
           o += 16 + len;
         }
+        big.release(m.hex.length); // the container itself is not kept
         continue;
       }
       if (ctor === CTOR.gzipPacked) {
@@ -1527,15 +1612,23 @@ class Session {
       if (ctor === CTOR.rpcResult) {
         const to = new Reader(fromHex(m.hex.slice(8, 24))).long();
         const entry = this.waiting.get(to);
-        if (!entry) { this.log("answer for an unknown request dropped"); continue; } // late, duplicated or forgotten
+        if (!entry) {
+          // Given up (a seek, a timeout) or unknown (late, duplicated): dropped, its data never kept.
+          if (this.abandoned.delete(to)) this.log("answer for an abandoned request dropped");
+          else this.log("answer for an unknown request dropped");
+          big.release(m.hex.length);
+          continue;
+        }
         let result = m.hex.slice(24);
+        big.hold(result.length);
+        big.release(m.hex.length);
         if (result.length >= 8 && hexU32(result, 0) === CTOR.gzipPacked) {
           const tg = trace ? Date.now() : 0;
           result = gunzipHex(hexBytesAt(result, 4).hex);
           if (trace) trace.gunzip += Date.now() - tg;
         }
-        if (result.length >= 8 && hexU32(result, 0) === CTOR.rpcError) this.finish(entry, null, fromRpcError(parseRpcError(new Reader(fromHex(result)))));
-        else this.finish(entry, result, null);
+        if (result.length >= 8 && hexU32(result, 0) === CTOR.rpcError) { big.release(result.length); this.finish(entry, null, fromRpcError(parseRpcError(new Reader(fromHex(result))))); }
+        else this.finish(entry, result, null); // held by the entry until its caller takes it
         continue;
       }
       // Everything else is small: read it as bytes.
@@ -1661,6 +1754,7 @@ const { CTOR, LAYER, invokeWithLayer, initConnection, importBotAuthorization, ex
 const { mtError } = __mod_src_mtproto_errors;
 const { ALLOWED_CALLS } = __mod_src_mtproto_requests;
 const { describeError, isServerAnswer } = __mod_src_mtproto_errors;
+const { big } = __mod_src_mtproto_big;
 const { TELEGRAM_PUBLIC_KEYS } = __mod_src_mtproto_keys;
 
 const CHUNK = 1048576;
@@ -1671,6 +1765,7 @@ const MIN_LEFT_MS = 1500;   // a request never starts with less time than this b
 const MARGIN_MS = 500;      // what a request leaves its caller after its own wait
 const POLL_MS = 250;        // how often a call waiting for its turn checks its deadline
 const MAX_AHEAD = 4;        // file chunks requested ahead and kept (answered or still in flight), oldest dropped first
+const MAX_IN_FLIGHT = 3;    // chunk requests on one connection at once (the asked one included)
 const AHEAD_WAIT_MS = 8000; // the longest a read waits for a chunk requested ahead before asking for it again
 
 /**
@@ -1764,7 +1859,7 @@ class TelegramClient {
    */
   reset() {
     return this.serial(async () => {
-      for (const a of this.ahead.values()) a.session.forget(a.entry);
+      for (const a of this.ahead.values()) { if (a.entry.done && a.entry.result) big.release(a.entry.result.length); else a.session.forget(a.entry); }
       this.ahead.clear();
       for (const dc of [...this.conns.keys()]) await this.drop(dc);
     });
@@ -1883,7 +1978,7 @@ class TelegramClient {
       const started = this.now();
       const entry = await c.session.request(wrapped, { hex, trace });
       // `after` sends more requests right behind this one, on a connection already initialised: never a failure of its own.
-      if (after && c.inited) { try { await after(c); } catch (e) { this.log("request ahead not sent: " + (e && e.code)); } }
+      if (after && c.inited) { try { await after(c); } catch (e) { this.log("request ahead not sent (" + describeError(e) + ")"); } }
       const res = await c.session.settle(entry, started + wait.ms);
       c.inited = true;
       return res;
@@ -1983,7 +2078,7 @@ class TelegramClient {
    * Follows FILE_MIGRATE_n; FLOOD_WAIT_n, FILE_REFERENCE_EXPIRED... come back as typed errors. With `{ hex: true }`
    * the bytes come back as a hex string, sliced out of the decrypted answer with no JS pass over them.
    */
-  getFile(loc, offset, limit, { hex = false, deadline, trace, ahead = [] } = {}) {
+  getFile(loc, offset, limit, { hex = false, deadline, trace, ahead = [], abandon = false } = {}) {
     try {
       if (!loc || loc.id === undefined || loc.accessHash === undefined || !(loc.fileReference && typeof loc.fileReference.length === "number")) {
         throw mtError("invalid_request", "a location needs id, accessHash and fileReference");
@@ -1994,41 +2089,52 @@ class TelegramClient {
     }
     const location = inputDocumentFileLocation({ id: BigInt(loc.id), accessHash: BigInt(loc.accessHash), fileReference: loc.fileReference });
     const body = uploadGetFile(location, offset, limit);
-    const keyOf = (o, l) => String(loc.id) + ":" + o + ":" + l + ":" + toHex(loc.fileReference);
+    // Chunks read ahead are kept by offset: a read asking a shorter limit there (the file's last chunk) uses them too.
+    const doc = String(loc.id) + ":" + toHex(loc.fileReference) + ":";
+    const keyOf = (o) => doc + o;
+    const dropAhead = (k, a) => {
+      this.ahead.delete(k);
+      if (a.entry.done) { if (a.entry.result) big.release(a.entry.result.length); a.entry.result = null; }
+      else a.session.forget(a.entry);
+    };
     return this.serial(async () => {
       if (!this.homeDc) throw mtError("invalid_request", "connect first");
       let dc = Number(loc.dcId) || this.homeDc;
       if (trace) { trace.pipe = "miss"; trace.ahead = 0; }
-      // The chunks to request right behind this one (not already requested, never this one).
+      // The chunks to request right behind this one: not already requested, never this one, and never more than
+      // MAX_IN_FLIGHT chunk requests on the connection (abandoned ones still on the wire count): Telegram may pack all
+      // the answers in flight into one packet, and each MiB of it is 2 MiB of hex per copy under QuickJS's 64 MiB cap.
       const sendAhead = async (c) => {
         for (const a of ahead) {
-          const k = keyOf(a.offset, a.limit);
-          if (this.ahead.has(k) || (a.offset === offset && a.limit === limit)) continue;
+          const k = keyOf(a.offset);
+          if (this.ahead.has(k) || a.offset === offset) continue;
+          if (c.session.inflight() >= MAX_IN_FLIGHT) break;
           try { checkRange(a.offset, a.limit); } catch { continue; }
           const entry = await c.session.request(uploadGetFile(location, a.offset, a.limit), { hex: true });
-          this.ahead.set(k, { dc, session: c.session, entry });
+          this.ahead.set(k, { dc, session: c.session, entry, limit: a.limit });
           if (trace) trace.ahead++;
           while (this.ahead.size > MAX_AHEAD) {
             const [oldKey, old] = this.ahead.entries().next().value;
-            this.ahead.delete(oldKey);
-            old.session.forget(old.entry);
+            dropAhead(oldKey, old);
           }
         }
       };
       // A chunk requested ahead by an earlier read: its answer may already be here (or on its way).
-      const pre = this.ahead.get(keyOf(offset, limit));
-      if (pre) {
-        this.ahead.delete(keyOf(offset, limit));
+      const pre = this.ahead.get(keyOf(offset));
+      if (pre && pre.limit >= limit) {
+        this.ahead.delete(keyOf(offset));
         const c = this.conns.get(pre.dc);
         if (c && c.session === pre.session && !c.transport.closed) {
           try {
             const until = Math.min(this.now() + AHEAD_WAIT_MS, deadline === undefined ? Infinity : deadline - MIN_LEFT_MS);
             const answer = await c.session.settle(pre.entry, until);
             const file = hex ? parseUploadFileHex(answer) : parseUploadFile(answer);
+            big.release(answer.length);
             if (file.ctor === CTOR.uploadFile) {
               if (trace) trace.pipe = "hit";
-              if (ahead.length) { try { await sendAhead(c); } catch (e) { this.log("request ahead not sent: " + (e && e.code)); } } // keep the pipe full
-              return hex ? file.bytesHex : file.bytes;
+              if (ahead.length) { try { await sendAhead(c); } catch (e) { this.log("request ahead not sent (" + describeError(e) + ")"); } } // keep the pipe full
+              if (hex) return file.bytesHex.length > limit * 2 ? file.bytesHex.slice(0, limit * 2) : file.bytesHex;
+              return file.bytes.length > limit ? file.bytes.subarray(0, limit) : file.bytes;
             }
           } catch (e) {
             this.log("chunk read ahead not usable (" + describeError(e) + "): asking again");
@@ -2038,12 +2144,19 @@ class TelegramClient {
           pre.session.forget(pre.entry);
         }
       }
+      // A seek: the chunks read ahead for this file that this read no longer wants are given up (their answers, when
+      // they come, are dropped without being kept).
+      if (abandon) {
+        const wanted = new Set(ahead.map((a) => keyOf(a.offset)));
+        for (const [k, a] of [...this.ahead]) if (k.startsWith(doc) && !wanted.has(k)) dropAhead(k, a);
+      }
       for (let attempt = 0; attempt < 4; attempt++) {
         try {
           await this.authorize(dc, deadline);
           const answer = await this.invoke(dc, body, { hex, deadline, trace, after: attempt === 0 && ahead.length ? sendAhead : undefined });
           const tp = trace ? Date.now() : 0;
           const file = hex ? parseUploadFileHex(answer) : parseUploadFile(answer);
+          if (hex) big.release(answer.length);
           if (trace) trace.parse += Date.now() - tp;
           if (file.ctor === CTOR.uploadFileCdnRedirect) throw mtError("protocol", "CDN redirects are not supported");
           if (file.ctor !== CTOR.uploadFile) throw mtError("protocol", "unexpected answer to upload.getFile");
@@ -3733,6 +3846,9 @@ async function readTimed(arg, started) {
   let hex = "";
   try {
     const list = pieces(offset, want);
+    // The file's last chunk: Kino reads it early (after the first, for the index of an mp4 at its end), out of order;
+    // it must not give up the chunks read ahead after the first one. Any other read gives up those it no longer wants.
+    const tail = offset + CHUNK >= size;
     // Kino reads a file 1 MiB at a time, in order (after the first chunk and the last one): the next chunks are asked
     // together with this one, so their answers are already on the way when Kino asks for them.
     const ahead = list.length === 1 && offset % CHUNK === 0
@@ -3745,7 +3861,7 @@ async function readTimed(arg, started) {
           try {
             const tg = trace ? Date.now() : 0;
             if (trace) trace.tries++;
-            hex += await live.client.getFile(locOf(row.data), piece.offset, piece.limit, { hex: true, deadline, trace, ahead: refetched ? [] : ahead });
+            hex += await live.client.getFile(locOf(row.data), piece.offset, piece.limit, { hex: true, deadline, trace, ahead: refetched ? [] : ahead, abandon: !tail });
             if (trace) trace.getfile += Date.now() - tg;
             break;
           } catch (e) {
@@ -3778,7 +3894,9 @@ async function readTimed(arg, started) {
     try {
       await attempt();
     } catch (e) {
-      const recoverable = !(e && e.shell) && !isServerAnswer(e) && !(e && e.code === "timeout" && e.deadline === true);
+      // A dead key (auth_key_unregistered, a transport -404 included) is withSession's: one budgeted login, never a
+      // second one here.
+      const recoverable = !(e && e.shell) && !isServerAnswer(e) && !(e && e.code === "timeout" && e.deadline === true) && !(e && e.code === "auth_key_unregistered");
       if (!recoverable || deadline - Date.now() < 3 * MIN_LEFT_MS) throw e;
       logRecovery(e, { offset, length, started });
       if (trace) trace.recov++;

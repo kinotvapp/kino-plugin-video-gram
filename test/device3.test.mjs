@@ -77,7 +77,9 @@ test("(c) a read-ahead that fails with an rpc error or a dropped socket never fa
   assert.equal(await c.getFile({ ...DOC, dcId: 2 }, MiB, MiB, { hex: true }), hexOf(1));
   tg.dc(2).once("getFile", () => ({}));
   tg.dc(2).once("getFile", () => ({ close: true }));
-  await c.getFile({ ...DOC, dcId: 2 }, 2 * MiB, MiB, { hex: true, ahead: ahead(3) }).catch(() => null);
+  // The socket closes when the read-ahead of chunk 3 arrives: chunk 2's own read is answered (or asked again once on a
+  // new connection) all the same.
+  assert.equal(await c.getFile({ ...DOC, dcId: 2 }, 2 * MiB, MiB, { hex: true, ahead: ahead(3) }), hexOf(2));
   assert.equal(await c.getFile({ ...DOC, dcId: 2 }, 3 * MiB, MiB, { hex: true }), hexOf(3));
   await c.close();
 });
@@ -87,7 +89,8 @@ test("(d) garbage in the middle of the pipeline breaks the session: it is never 
   const kx = tg.dc(2).stats.keyExchanges, logins = tg.dc(2).stats.botLogins;
   tg.dc(2).once("getFile", () => ({}));
   tg.dc(2).once("getFile", () => ({ garbage: true }));
-  await c.getFile({ ...DOC, dcId: 2 }, 0, MiB, { hex: true, ahead: ahead(1, 2) }).catch(() => null);
+  // The garbage answers the read-ahead of chunk 1, after chunk 0's own answer: chunk 0's read is right.
+  assert.equal(await c.getFile({ ...DOC, dcId: 2 }, 0, MiB, { hex: true, ahead: ahead(1, 2) }), hexOf(0));
   for (const k of [1, 2, 3]) assert.equal(await c.getFile({ ...DOC, dcId: 2 }, k * MiB, MiB, { hex: true }), hexOf(k), "chunk " + k);
   assert.deepEqual([tg.dc(2).stats.keyExchanges, tg.dc(2).stats.botLogins], [kx, logins], "same key, no login");
   await c.close();
@@ -145,7 +148,7 @@ test("(d) plugin: the socket closes mid-pipeline (a read ahead in flight): the n
   try {
     tg.dc(2).once("getFile", () => ({}));
     tg.dc(2).once("getFile", () => ({ close: true }));
-    assert.ok((await read(0)).equals(data.subarray(0, MiB)) || true);
+    assert.ok((await read(0)).equals(data.subarray(0, MiB)), "chunk 0 itself is right");
     for (const k of [1, 2, 5]) assert.ok((await read(k)).equals(data.subarray(k * MiB, Math.min((k + 1) * MiB, SIZE))), "chunk " + k);
   } finally { dev.close(); }
 });

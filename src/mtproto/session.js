@@ -12,9 +12,11 @@ import { toHex, fromHex, random, readI32LE } from "./bytes.js";
 import { sha256Hex, igeEncryptHex, igeDecryptHex, gunzipHex } from "./crypto.js";
 import { Writer, Reader, CTOR, msgsAck, parseRpcError, hexU32, hexBytesAt } from "./tl.js";
 import { MsgIds } from "./msgid.js";
+import { big } from "./big.js";
 import { mtError, fromRpcError, fromTransportError } from "./errors.js";
 
 const MAX_RESENDS = 5;
+const ABANDONED_MS = 30000; // an abandoned request still unanswered after this long is taken as lost
 const protocol = (m) => mtError("protocol", m);
 
 export class Session {
@@ -35,7 +37,8 @@ export class Session {
     this.log = log;
     this.msgIds = new MsgIds(now);
     this.pendingAcks = [];
-    this.waiting = new Map(); // msg_id -> the request waiting for its answer
+    this.waiting = new Map();   // msg_id -> the request waiting for its answer
+    this.abandoned = new Map(); // msg_id -> when it was given up: still on the wire, its answer is dropped unkept
     this.oldSessions = new Set();
     this.newSession();
   }
@@ -75,21 +78,33 @@ export class Session {
 
   /** One transport packet -> its message [{ id, seqno, hex }] (empty when it belongs to one of our older sessions). */
   async recvMessages(deadline, trace) {
-    const hex = await this.t.recvHex(Math.max(1, deadline - this.now()), this.now, trace);
-    if (hex.length === 8) throw fromTransportError(readI32LE(fromHex(hex), 0));
+    // Boxed so that no stack slot of ours keeps the packet alive once openPacket has let it go.
+    const box = { hex: await this.t.recvHex(Math.max(1, deadline - this.now()), this.now, trace) };
+    return this.openPacket(box, trace);
+  }
+
+  /**
+   * Decrypts one packet ({ hex }, taken out of the box) and answers its message. Memory: QuickJS frees a string the
+   * moment its last reference goes, so every big string here is dropped before the next one is made: the packet before
+   * the decryption runs (only its encrypted part is kept), the encrypted part right after, the plaintext once the
+   * message is sliced out. At most two copies of a packet are alive at once (big.js counts them).
+   */
+  openPacket(box, trace) {
+    let hex = box.hex;
+    box.hex = null;
+    if (hex.length === 8) { big.release(hex.length); throw fromTransportError(readI32LE(fromHex(hex), 0)); }
     if (hex.length < 48 + 64) throw protocol("short packet");
-    if (hex.slice(0, 16) !== this.akId) throw protocol("answer under another auth key");
+    if (hex.slice(0, 16) !== this.akId) { big.release(hex.length); throw protocol("answer under another auth key"); }
+    if (((hex.length - 48) / 2) % 16 !== 0) { big.release(hex.length); throw protocol("encrypted data not a multiple of 16"); }
     const msgKey = hex.slice(16, 48);
-    const encHex = hex.slice(48);
-    if ((encHex.length / 2) % 16 !== 0) throw protocol("encrypted data not a multiple of 16");
-    const { key, iv } = this.keyIv(msgKey, 8);
-    const t0 = trace ? Date.now() : 0;
-    const plainHex = igeDecryptHex(encHex, key, iv);
-    const t1 = trace ? Date.now() : 0;
-    if (sha256Hex(this.ak.slice(192, 256) + plainHex).slice(16, 48) !== msgKey) throw protocol("msg_key mismatch");
-    if (trace) { trace.ige += t1 - t0; trace.mac += Date.now() - t1; }
+    const enc = { hex: hex.slice(48) };
+    big.hold(enc.hex.length);
+    big.release(hex.length);
+    hex = null;
+    let plainHex = this.decrypt(enc, msgKey, trace);
     const sid = plainHex.slice(16, 32);
     if (sid !== this.sessionId) {
+      big.release(plainHex.length);
       if (this.oldSessions.has(sid)) { this.log("message for an older session ignored"); return []; }
       throw protocol("answer for another session");
     }
@@ -97,8 +112,31 @@ export class Session {
     const id = h.long(), seqno = h.int(), len = h.int();
     const total = plainHex.length / 2;
     const padding = total - 32 - len;
-    if (len % 4 !== 0 || padding < 12 || padding > 1024) throw protocol("bad message length");
-    return [{ id, seqno, hex: plainHex.slice(64, 64 + len * 2) }];
+    if (len % 4 !== 0 || padding < 12 || padding > 1024) { big.release(plainHex.length); throw protocol("bad message length"); }
+    const body = plainHex.slice(64, 64 + len * 2);
+    big.hold(body.length);
+    big.release(plainHex.length);
+    plainHex = null;
+    return [{ id, seqno, hex: body }];
+  }
+
+  /** The plaintext (hex) of the encrypted part ({ hex }, taken out of the box), its msg_key checked. */
+  decrypt(enc, msgKey, trace) {
+    let encHex = enc.hex;
+    enc.hex = null;
+    const { key, iv } = this.keyIv(msgKey, 8);
+    const t0 = trace ? Date.now() : 0;
+    const plainHex = igeDecryptHex(encHex, key, iv);
+    big.hold(plainHex.length);
+    big.release(encHex.length);
+    encHex = null;
+    const t1 = trace ? Date.now() : 0;
+    // SHA-256 takes one string: the 32 key bytes and the plaintext are joined for the call only (one more copy, briefly).
+    big.hold(64 + plainHex.length); big.release(64 + plainHex.length);
+    const ok = sha256Hex(this.ak.slice(192, 256) + plainHex).slice(16, 48) === msgKey;
+    if (trace) { trace.ige += t1 - t0; trace.mac += Date.now() - t1; }
+    if (!ok) { big.release(plainHex.length); throw protocol("msg_key mismatch"); }
+    return plainHex;
   }
 
   /**
@@ -126,9 +164,18 @@ export class Session {
     return entry;
   }
 
-  /** Stops waiting for `entry` (its answer, if it ever comes, is ignored). */
+  /** Stops waiting for `entry`: its answer, if it ever comes, is dropped without being kept (but counted in flight). */
   forget(entry) {
-    if (!entry.done) this.waiting.delete(entry.id);
+    if (entry.done) return;
+    this.waiting.delete(entry.id);
+    this.abandoned.set(entry.id, this.now());
+  }
+
+  /** Requests sent and not answered yet, those given up included (their answers are still on the way). */
+  inflight() {
+    const old = this.now() - ABANDONED_MS;
+    for (const [id, at] of this.abandoned) if (at < old) this.abandoned.delete(id); // lost for good
+    return this.waiting.size + this.abandoned.size;
   }
 
   finish(entry, result, error) {
@@ -189,9 +236,12 @@ export class Session {
           const h = new Reader(fromHex(m.hex.slice(o * 2, (o + 16) * 2)));
           const id = h.long(), seqno = h.int(), len = h.int();
           if (o + 16 + len > size) throw protocol("container past its end");
-          queue.push({ id, seqno, hex: m.hex.slice((o + 16) * 2, (o + 16 + len) * 2) });
+          const inner = m.hex.slice((o + 16) * 2, (o + 16 + len) * 2);
+          big.hold(inner.length);
+          queue.push({ id, seqno, hex: inner });
           o += 16 + len;
         }
+        big.release(m.hex.length); // the container itself is not kept
         continue;
       }
       if (ctor === CTOR.gzipPacked) {
@@ -203,15 +253,23 @@ export class Session {
       if (ctor === CTOR.rpcResult) {
         const to = new Reader(fromHex(m.hex.slice(8, 24))).long();
         const entry = this.waiting.get(to);
-        if (!entry) { this.log("answer for an unknown request dropped"); continue; } // late, duplicated or forgotten
+        if (!entry) {
+          // Given up (a seek, a timeout) or unknown (late, duplicated): dropped, its data never kept.
+          if (this.abandoned.delete(to)) this.log("answer for an abandoned request dropped");
+          else this.log("answer for an unknown request dropped");
+          big.release(m.hex.length);
+          continue;
+        }
         let result = m.hex.slice(24);
+        big.hold(result.length);
+        big.release(m.hex.length);
         if (result.length >= 8 && hexU32(result, 0) === CTOR.gzipPacked) {
           const tg = trace ? Date.now() : 0;
           result = gunzipHex(hexBytesAt(result, 4).hex);
           if (trace) trace.gunzip += Date.now() - tg;
         }
-        if (result.length >= 8 && hexU32(result, 0) === CTOR.rpcError) this.finish(entry, null, fromRpcError(parseRpcError(new Reader(fromHex(result)))));
-        else this.finish(entry, result, null);
+        if (result.length >= 8 && hexU32(result, 0) === CTOR.rpcError) { big.release(result.length); this.finish(entry, null, fromRpcError(parseRpcError(new Reader(fromHex(result))))); }
+        else this.finish(entry, result, null); // held by the entry until its caller takes it
         continue;
       }
       // Everything else is small: read it as bytes.

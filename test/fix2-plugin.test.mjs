@@ -76,7 +76,9 @@ test("2 a restore with a refresh and three reads at once: one device mark is wri
   for (const k of b.base.storage.keys()) b.base.storage.remove(k);
   for (const k of a.base.storage.keys()) b.base.storage.set(k, a.base.storage.get(k));
   const p = await b.runtime(SETTINGS);
-  await Promise.all([...[0, 1, 2].map(() => p.read({ handle: ref, offset: 0, length: MiB }).catch(() => null)), p.home()]);
+  // The restore drops b's index: a read that comes before Home rebuilt it finds no video (not_found); one after reads it.
+  const outcomes = await Promise.all([...[0, 1, 2].map(() => p.read({ handle: ref, offset: 0, length: MiB }).then((r) => Buffer.from(r.bytes, "base64").length, (e) => e.code)), p.home()]);
+  for (const o of outcomes.slice(0, 3)) assert.ok(o === 5000 || o === "not_found", "read outcome " + o);
   const mark = (await b.base.catalog.get(["~device"]))[0].data.device;
   assert.equal(JSON.parse(b.base.storage.get("tg.session")).device, mark, "the session carries the one mark");
   const kx = tg.dc(2).stats.keyExchanges, logins = tg.dc(2).stats.botLogins;

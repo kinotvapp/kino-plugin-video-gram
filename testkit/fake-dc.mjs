@@ -276,6 +276,7 @@ class DcConnection {
       if (reply && reply.garbage) { this.transport.send(randomBytes(reply.garbage === true ? 96 : reply.garbage)); return; }
       if (reply && reply.close) { this.socket.serverClose(); return; }
       if (reply && reply.hugeLength) { this.transport.sendLengthOnly(reply.hugeLength); return; }
+      if (reply && reply.transportError) { this.transport.sendError(reply.transportError); return; }
       if (reply && reply.tamper) out.tamper = reply.tamper;
       if (reply && reply.error) { out.pending.push(rpcResult(msgId, rpcError(...reply.error))); return this.flush(out); }
     }
@@ -283,6 +284,23 @@ class DcConnection {
     try { result = this.rpc(new Reader(new Uint8Array(body)), entry); } catch (e) { if (e.rpc) result = rpcError(...e.rpc); else throw e; }
     const head = Buffer.from(result).readUInt32LE(0);
     const gzip = head === CTOR.rpcError ? false : head === CTOR.uploadFile ? this.dc.gzipFiles : this.dc.gzipResults;
+    // dc.bundleFiles = { count, pad?, once? }: upload.file answers wait until `count` of them are ready and go out in ONE
+    // container packet (plus, with `pad`, a filler message of that many bytes), the way Telegram may pack the answers of
+    // several requests in flight.
+    if (this.dc.bundleFiles && head === CTOR.uploadFile) {
+      const b = this.dc.bundleFiles;
+      this.bundle = this.bundle || { msgs: [], files: 0 };
+      this.bundle.msgs.push(...out.pending, rpcResult(msgId, result, gzip));
+      this.bundle.files++;
+      if (this.bundle.files >= b.count) {
+        const msgs = this.bundle.msgs;
+        this.bundle = null;
+        if (b.pad) msgs.push(new Writer().int(0x1badf00d).raw(Buffer.alloc(b.pad)).done());
+        if (b.once) this.dc.bundleFiles = null;
+        this.flush({ ...out, pending: msgs });
+      }
+      return;
+    }
     out.pending.push(rpcResult(msgId, result, gzip));
     this.flush(out);
     // Fault injection: the same answer once more (a duplicate for a request already answered).

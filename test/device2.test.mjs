@@ -135,8 +135,6 @@ test("plugin: chunk 0 reads 2 ahead, the app's tail read sends none past the end
     assert.match(lines[1], / pipe=miss ahead=0 recov=0$/, "nothing read ahead past the end");
     assert.match(lines[2], / pipe=hit ahead=1 recov=0$/, "chunk 2 was already on its way: only chunk 3 is new");
     assert.match(lines[3], / pipe=hit ahead=\d recov=0$/);
-    const pastEnd = tg.requests.length; // (getFile requests are counted by the DC; none may ask past the file)
-    assert.ok(pastEnd >= 0);
     assert.ok(tg.dc(2).stats.getFileOffsets.every((o) => o < SIZE), "never past the end: " + tg.dc(2).stats.getFileOffsets);
   } finally {
     dev.close();

@@ -12,12 +12,14 @@
 import { toHex, fromHex, readU32LE, writeU32LE, random, reversed } from "./bytes.js";
 import { ctrHex } from "./crypto.js";
 import { mtError } from "./errors.js";
+import { big } from "./big.js";
 
 export const DC_HOSTS = Object.freeze({ 1: "pluto", 2: "venus", 3: "aurora", 4: "vesta", 5: "flora" });
 export const MAX_SEND_BYTES = 786000; // kino.ws frame cap
-// A 1 MiB chunk is ~1 MiB + 100 bytes; with chunks read ahead, Telegram may pack the answers of up to three requests
-// into one container. Past 4 MiB + 64 KiB it is not an answer of ours.
-export const MAX_PACKET_BYTES = (4 << 20) + 65536;
+// A 1 MiB chunk is ~1 MiB + 100 bytes; at most 3 chunk requests are in flight (client.js), so Telegram may pack at most
+// three answers into one container. Past 3 MiB + 64 KiB it is not an answer of ours (and its hex copies would not fit
+// QuickJS's 64 MiB cap).
+export const MAX_PACKET_BYTES = 3 * (1 << 20) + 65536;
 const MASK128 = (1n << 128n) - 1n;
 const ZEROS = "00".repeat(16);
 
@@ -94,11 +96,12 @@ export class Transport {
   /** Sends one packet; `payloadHex` is the MTProto message (unencrypted or encrypted) as hex. */
   async sendHex(payloadHex) {
     if (this.closed || !this.ws) throw mtError("closed", "transport closed");
+    // The size first: once CTR has run, the keystream has moved and a refused send would leave the stream out of step.
+    if (4 + payloadHex.length / 2 + (this.firstHex ? this.firstHex.length / 2 : 0) > MAX_SEND_BYTES) throw mtError("invalid_request", "packet too large for one frame");
     const len = new Uint8Array(4);
     writeU32LE(len, 0, payloadHex.length / 2);
     let wire = this.enc.processHex(toHex(len) + payloadHex);
     if (this.firstHex) { wire = this.firstHex + wire; this.firstHex = null; }
-    if (wire.length / 2 > MAX_SEND_BYTES) throw mtError("invalid_request", "packet too large for one frame");
     try {
       if (this.encoded) {
         try {
@@ -124,9 +127,15 @@ export class Transport {
     const deadline = now() + timeoutMs;
     const join = () => {
       if (!this.pending.length) return;
-      this.bufHex += this.pending.length === 1 ? this.pending[0] : this.pending.join("");
+      // One copy of the frames joined; the frames go right after (they are the only other copy).
+      const joined = this.pending.length === 1 ? this.pending[0] : this.pending.join("");
+      if (this.pending.length > 1) { big.hold(joined.length); for (const p of this.pending) big.release(p.length); } // one frame: the same string
       this.pending = [];
       this.pendingChars = 0;
+      if (this.bufHex === "") { this.bufHex = joined; return; } // the usual case: no second concatenated copy
+      big.hold(this.bufHex.length + joined.length);
+      big.release(this.bufHex.length); big.release(joined.length);
+      this.bufHex += joined;
     };
     for (;;) {
       if (this.bufHex.length < 8) join();
@@ -139,8 +148,11 @@ export class Transport {
         if (this.bufHex.length + this.pendingChars >= 8 + n * 2) {
           join();
           const payload = this.bufHex.slice(8, 8 + n * 2);
-          this.bufHex = this.bufHex.slice(8 + n * 2);
-          return payload;
+          big.hold(payload.length);
+          const rest = this.bufHex.length > 8 + n * 2 ? this.bufHex.slice(8 + n * 2) : "";
+          big.release(this.bufHex.length); big.hold(rest.length);
+          this.bufHex = rest;
+          return payload; // the caller owns it (and releases it)
         }
       }
       if (this.closed || !this.ws) throw mtError("closed", "transport closed");
@@ -161,11 +173,13 @@ export class Transport {
       else { this.encoded = false; fh = toHex(frame); } // an app that ignored the encoding: the old JS pass
       const t2 = trace ? Date.now() : 0;
       const plain = this.dec.processHex(fh);
+      fh = null; frame = null; // the encrypted frame dies here: only its plaintext is kept
+      big.hold(plain.length);
       this.pending.push(plain);
       this.pendingChars += plain.length;
       if (trace) {
         // Timing (the shell's TIMING switch): numbers only, never the data.
-        trace.wsrecv += t1 - t0; trace.frames++; trace.frameBytes += fh.length / 2;
+        trace.wsrecv += t1 - t0; trace.frames++; trace.frameBytes += plain.length / 2;
         if (!trace.firstFrameAt) trace.firstFrameAt = t1;
         trace.tohex += t2 - t1; trace.ctr += Date.now() - t2;
       }
@@ -174,6 +188,11 @@ export class Transport {
 
   async close() {
     this.closed = true;
+    big.release(this.bufHex.length);
+    for (const p of this.pending) big.release(p.length);
+    this.bufHex = "";
+    this.pending = [];
+    this.pendingChars = 0;
     const ws = this.ws;
     this.ws = null;
     if (ws) { try { await ws.close(); } catch { /* already closed */ } }

@@ -76,6 +76,9 @@ async function readTimed(arg, started) {
   let hex = "";
   try {
     const list = pieces(offset, want);
+    // The file's last chunk: Kino reads it early (after the first, for the index of an mp4 at its end), out of order;
+    // it must not give up the chunks read ahead after the first one. Any other read gives up those it no longer wants.
+    const tail = offset + CHUNK >= size;
     // Kino reads a file 1 MiB at a time, in order (after the first chunk and the last one): the next chunks are asked
     // together with this one, so their answers are already on the way when Kino asks for them.
     const ahead = list.length === 1 && offset % CHUNK === 0
@@ -88,7 +91,7 @@ async function readTimed(arg, started) {
           try {
             const tg = trace ? Date.now() : 0;
             if (trace) trace.tries++;
-            hex += await live.client.getFile(locOf(row.data), piece.offset, piece.limit, { hex: true, deadline, trace, ahead: refetched ? [] : ahead });
+            hex += await live.client.getFile(locOf(row.data), piece.offset, piece.limit, { hex: true, deadline, trace, ahead: refetched ? [] : ahead, abandon: !tail });
             if (trace) trace.getfile += Date.now() - tg;
             break;
           } catch (e) {
@@ -121,7 +124,9 @@ async function readTimed(arg, started) {
     try {
       await attempt();
     } catch (e) {
-      const recoverable = !(e && e.shell) && !isServerAnswer(e) && !(e && e.code === "timeout" && e.deadline === true);
+      // A dead key (auth_key_unregistered, a transport -404 included) is withSession's: one budgeted login, never a
+      // second one here.
+      const recoverable = !(e && e.shell) && !isServerAnswer(e) && !(e && e.code === "timeout" && e.deadline === true) && !(e && e.code === "auth_key_unregistered");
       if (!recoverable || deadline - Date.now() < 3 * MIN_LEFT_MS) throw e;
       logRecovery(e, { offset, length, started });
       if (trace) trace.recov++;

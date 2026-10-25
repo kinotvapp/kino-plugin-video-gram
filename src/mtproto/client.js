@@ -12,6 +12,7 @@ import {
 import { mtError } from "./errors.js";
 import { ALLOWED_CALLS } from "./requests.js";
 import { describeError, isServerAnswer } from "./errors.js";
+import { big } from "./big.js";
 import { TELEGRAM_PUBLIC_KEYS } from "./keys.js";
 
 export const CHUNK = 1048576;
@@ -22,6 +23,7 @@ const MIN_LEFT_MS = 1500;   // a request never starts with less time than this b
 const MARGIN_MS = 500;      // what a request leaves its caller after its own wait
 const POLL_MS = 250;        // how often a call waiting for its turn checks its deadline
 const MAX_AHEAD = 4;        // file chunks requested ahead and kept (answered or still in flight), oldest dropped first
+const MAX_IN_FLIGHT = 3;    // chunk requests on one connection at once (the asked one included)
 const AHEAD_WAIT_MS = 8000; // the longest a read waits for a chunk requested ahead before asking for it again
 
 /**
@@ -115,7 +117,7 @@ export class TelegramClient {
    */
   reset() {
     return this.serial(async () => {
-      for (const a of this.ahead.values()) a.session.forget(a.entry);
+      for (const a of this.ahead.values()) { if (a.entry.done && a.entry.result) big.release(a.entry.result.length); else a.session.forget(a.entry); }
       this.ahead.clear();
       for (const dc of [...this.conns.keys()]) await this.drop(dc);
     });
@@ -234,7 +236,7 @@ export class TelegramClient {
       const started = this.now();
       const entry = await c.session.request(wrapped, { hex, trace });
       // `after` sends more requests right behind this one, on a connection already initialised: never a failure of its own.
-      if (after && c.inited) { try { await after(c); } catch (e) { this.log("request ahead not sent: " + (e && e.code)); } }
+      if (after && c.inited) { try { await after(c); } catch (e) { this.log("request ahead not sent (" + describeError(e) + ")"); } }
       const res = await c.session.settle(entry, started + wait.ms);
       c.inited = true;
       return res;
@@ -334,7 +336,7 @@ export class TelegramClient {
    * Follows FILE_MIGRATE_n; FLOOD_WAIT_n, FILE_REFERENCE_EXPIRED... come back as typed errors. With `{ hex: true }`
    * the bytes come back as a hex string, sliced out of the decrypted answer with no JS pass over them.
    */
-  getFile(loc, offset, limit, { hex = false, deadline, trace, ahead = [] } = {}) {
+  getFile(loc, offset, limit, { hex = false, deadline, trace, ahead = [], abandon = false } = {}) {
     try {
       if (!loc || loc.id === undefined || loc.accessHash === undefined || !(loc.fileReference && typeof loc.fileReference.length === "number")) {
         throw mtError("invalid_request", "a location needs id, accessHash and fileReference");
@@ -345,41 +347,52 @@ export class TelegramClient {
     }
     const location = inputDocumentFileLocation({ id: BigInt(loc.id), accessHash: BigInt(loc.accessHash), fileReference: loc.fileReference });
     const body = uploadGetFile(location, offset, limit);
-    const keyOf = (o, l) => String(loc.id) + ":" + o + ":" + l + ":" + toHex(loc.fileReference);
+    // Chunks read ahead are kept by offset: a read asking a shorter limit there (the file's last chunk) uses them too.
+    const doc = String(loc.id) + ":" + toHex(loc.fileReference) + ":";
+    const keyOf = (o) => doc + o;
+    const dropAhead = (k, a) => {
+      this.ahead.delete(k);
+      if (a.entry.done) { if (a.entry.result) big.release(a.entry.result.length); a.entry.result = null; }
+      else a.session.forget(a.entry);
+    };
     return this.serial(async () => {
       if (!this.homeDc) throw mtError("invalid_request", "connect first");
       let dc = Number(loc.dcId) || this.homeDc;
       if (trace) { trace.pipe = "miss"; trace.ahead = 0; }
-      // The chunks to request right behind this one (not already requested, never this one).
+      // The chunks to request right behind this one: not already requested, never this one, and never more than
+      // MAX_IN_FLIGHT chunk requests on the connection (abandoned ones still on the wire count): Telegram may pack all
+      // the answers in flight into one packet, and each MiB of it is 2 MiB of hex per copy under QuickJS's 64 MiB cap.
       const sendAhead = async (c) => {
         for (const a of ahead) {
-          const k = keyOf(a.offset, a.limit);
-          if (this.ahead.has(k) || (a.offset === offset && a.limit === limit)) continue;
+          const k = keyOf(a.offset);
+          if (this.ahead.has(k) || a.offset === offset) continue;
+          if (c.session.inflight() >= MAX_IN_FLIGHT) break;
           try { checkRange(a.offset, a.limit); } catch { continue; }
           const entry = await c.session.request(uploadGetFile(location, a.offset, a.limit), { hex: true });
-          this.ahead.set(k, { dc, session: c.session, entry });
+          this.ahead.set(k, { dc, session: c.session, entry, limit: a.limit });
           if (trace) trace.ahead++;
           while (this.ahead.size > MAX_AHEAD) {
             const [oldKey, old] = this.ahead.entries().next().value;
-            this.ahead.delete(oldKey);
-            old.session.forget(old.entry);
+            dropAhead(oldKey, old);
           }
         }
       };
       // A chunk requested ahead by an earlier read: its answer may already be here (or on its way).
-      const pre = this.ahead.get(keyOf(offset, limit));
-      if (pre) {
-        this.ahead.delete(keyOf(offset, limit));
+      const pre = this.ahead.get(keyOf(offset));
+      if (pre && pre.limit >= limit) {
+        this.ahead.delete(keyOf(offset));
         const c = this.conns.get(pre.dc);
         if (c && c.session === pre.session && !c.transport.closed) {
           try {
             const until = Math.min(this.now() + AHEAD_WAIT_MS, deadline === undefined ? Infinity : deadline - MIN_LEFT_MS);
             const answer = await c.session.settle(pre.entry, until);
             const file = hex ? parseUploadFileHex(answer) : parseUploadFile(answer);
+            big.release(answer.length);
             if (file.ctor === CTOR.uploadFile) {
               if (trace) trace.pipe = "hit";
-              if (ahead.length) { try { await sendAhead(c); } catch (e) { this.log("request ahead not sent: " + (e && e.code)); } } // keep the pipe full
-              return hex ? file.bytesHex : file.bytes;
+              if (ahead.length) { try { await sendAhead(c); } catch (e) { this.log("request ahead not sent (" + describeError(e) + ")"); } } // keep the pipe full
+              if (hex) return file.bytesHex.length > limit * 2 ? file.bytesHex.slice(0, limit * 2) : file.bytesHex;
+              return file.bytes.length > limit ? file.bytes.subarray(0, limit) : file.bytes;
             }
           } catch (e) {
             this.log("chunk read ahead not usable (" + describeError(e) + "): asking again");
@@ -389,12 +402,19 @@ export class TelegramClient {
           pre.session.forget(pre.entry);
         }
       }
+      // A seek: the chunks read ahead for this file that this read no longer wants are given up (their answers, when
+      // they come, are dropped without being kept).
+      if (abandon) {
+        const wanted = new Set(ahead.map((a) => keyOf(a.offset)));
+        for (const [k, a] of [...this.ahead]) if (k.startsWith(doc) && !wanted.has(k)) dropAhead(k, a);
+      }
       for (let attempt = 0; attempt < 4; attempt++) {
         try {
           await this.authorize(dc, deadline);
           const answer = await this.invoke(dc, body, { hex, deadline, trace, after: attempt === 0 && ahead.length ? sendAhead : undefined });
           const tp = trace ? Date.now() : 0;
           const file = hex ? parseUploadFileHex(answer) : parseUploadFile(answer);
+          if (hex) big.release(answer.length);
           if (trace) trace.parse += Date.now() - tp;
           if (file.ctor === CTOR.uploadFileCdnRedirect) throw mtError("protocol", "CDN redirects are not supported");
           if (file.ctor !== CTOR.uploadFile) throw mtError("protocol", "unexpected answer to upload.getFile");
