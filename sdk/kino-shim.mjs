@@ -13,12 +13,13 @@
 // from `.kino-secrets.json` next to the manifest (`{ "<name>": "<value>" }`, written by hand during
 // development; `seal.mjs` only ever produces the sealed string that goes in the manifest) and
 // simulates the app's marker, substitution, declared-host-and-https and redaction rules on top of that.
+import { kitCall } from "./kit-call.mjs";
 import { gunzipSync } from "node:zlib";
 import { createCipheriv, createDecipheriv, createHash, createHmac, createPublicKey, diffieHellman, generateKeyPairSync, pbkdf2Sync, randomBytes, randomUUID, sign as nodeSign, verify as nodeVerify } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { anyFetchRefusal, anyHostBudget, contract, fetchAnyHost, hostMatches, isUserServer, kb, schemeAllowed } from "./contract.mjs";
+import { anyFetchRefusal, anyHostBudget, contract, fetchAnyHost, hostMatches, isUserServer, kb, schemeAllowed, syncCallCap } from "./contract.mjs";
 import { decodeCipherKey } from "./seal.mjs";
 import { filterRelevant, shortQuery, sortBySimilarity } from "./kino-rank.mjs";
 
@@ -155,6 +156,8 @@ export function errorReport(err, pluginName = "Plugin") {
 }
 
 export { hostMatches as hostAllowed };
+// Which export the kit is running (kit-call.mjs): a test wraps a direct kino.qr.scan in kitCall.run("action", …).
+export { kitCall };
 
 // --- kino.crypto key pairs (apiVersion 6), with Node's crypto: the same answers, formats and errors
 // as the app's PluginKeys / PluginKeyRing. A private key is a KeyObject kept in this kino's own Map;
@@ -766,6 +769,11 @@ function deviceFor(device, env) {
  * exchanges, so a test can run offline and give the same answers every time. [fetchImpl]: the
  * network itself (tests point it at a local server).
  *
+ * kino.nuvio (Kino 0.9.71, apiVersion 11): [nuvioFixture] (an object, or a file path; default env KINO_NUVIO_FIXTURE) stands in for the
+ * Nuvio repositories the manifest names: `{ "owner/repo": { available: [{ id, name, description?, types?, languages?, compatible? }],
+ * streams: { "<scraper id>": { "movie:603": { url, mime?, headers?, label?, subtitles?, alternatives? }, "series:1399:1:1": {...},
+ * "series:1399": {...}, "movie:1": { error: { code, message } }, "movie:2": { url, delayMs: 90000 } } } } }`. Without it, kino.nuvio throws
+ * `unavailable`: the kit has no scrapers of its own.
  * kino.meta / kino.tmdb (Kino 0.9.53): [metaFixture] (an object, or a file path; default env KINO_META_FIXTURE) answers
  * kino.meta offline -- keys `"<type>:<idKey>:<value>"` or `"<idKey>:<value>"` (`"movie:imdb:tt0133093"`, `"tmdb:603"`), and
  * for a lookup by title (Kino 0.9.55) `"<type>:title:<normalised title>:<year>"` or without the year (`"movie:title:the matrix:1999"`) --
@@ -777,11 +785,16 @@ function deviceFor(device, env) {
  * kino.device (Kino 0.9.55, contract.kinoDevice): [device] ("phone" or "tv", run.mjs --device), else env KINO_DEVICE,
  * else "phone". Anything else throws: a typo must not silently test the other UI.
  */
-export function createKino(manifest, { appVersion = "sdk", lang = "es-CO", device = undefined, storageFile = null, cookiesFile = null, secretsFile = null, config = {}, record = null, replay = null, fetchImpl = globalThis.fetch, metaFixture = undefined, tmdbKey = undefined, tmdbFixture = undefined, env = process.env, now = Date.now } = {}) {
+export function createKino(manifest, { appVersion = "sdk", lang = "es-CO", device = undefined, storageFile = null, cookiesFile = null, secretsFile = null, config = {}, record = null, replay = null, fetchImpl = globalThis.fetch, metaFixture = undefined, tmdbKey = undefined, tmdbFixture = undefined, nuvioFixture = undefined, env = process.env, now = Date.now, syncCall = false, qrScan = undefined } = {}) {
   const f = contract.fetch;
+  // [syncCall]: this kino runs a syncProvider's syncPull/syncPush (contract.fetch.syncCall): its requests and responses may
+  // carry the declared blob, ceil(sync.maxBlobBytes * 4/3) + envelopeChars, like the app; every other call keeps the defaults.
+  const syncCap = syncCall ? syncCallCap(manifest) : null;
+  const maxRequestChars = syncCap ?? f.maxRequestChars;
+  const maxBodyBytes = syncCap ?? f.maxBodyBytes;
   const kinoDevice = deviceFor(device, env);
   const storage = loadJson(storageFile, {});
-  // apiVersion 12, capability "storageLarge": contract.storage.largeMaxTotalBytes / largeMaxValueBytes / largeMaxKeys / largeMaxKeyChars instead of maxTotalBytes.
+  // apiVersion 13, capability "storageLarge": contract.storage.largeMaxTotalBytes / largeMaxValueBytes / largeMaxKeys / largeMaxKeyChars instead of maxTotalBytes.
   const storageLarge = () => Array.isArray(manifest?.capabilities) && manifest.capabilities.includes("storageLarge");
   // An entry is a bare string (permanent, the format before ttlMs existed) or { v, e } (expires at
   // epoch ms `e`). Dropped lazily, on the next read or write that touches this instance -- never a
@@ -816,6 +829,16 @@ export function createKino(manifest, { appVersion = "sdk", lang = "es-CO", devic
   // kino.seed(session) (Kino 0.9.55, contract.kinoSeed): the kit sends nothing anywhere. It applies the app's own filter and says
   // which keys Kino would keep (never the values: they are tokens), and, like kino.log.report, that the app sends only with
   // "telemetry" on. Synchronous, answers nothing, never throws into the plugin.
+  // kino.sync.remoteChanged() (Kino 0.9.74, contract.additiveFromApp["kino.sync.remoteChanged"]): a realtime syncProvider tells Kino its
+  // remote changed. The kit has no app to tell: it checks the manifest the way Kino does and logs.
+  let remoteChangedLogged = false;
+  const kinoSync = Object.freeze({
+    remoteChanged: Object.freeze(function remoteChanged() {
+      const ok = manifest && Array.isArray(manifest.capabilities) && manifest.capabilities.includes("syncProvider") && manifest.sync && manifest.sync.mode === "realtime";
+      if (!ok) throw Object.assign(new Error('kino.sync.remoteChanged() needs the "syncProvider" capability with "sync": { "mode": "realtime" }'), { code: "not_allowed" });
+      if (!remoteChangedLogged) { remoteChangedLogged = true; logLine("[kino.sync.remoteChanged]", ["Kino would pull now (it accepts one signal every 30 s; this line is logged once)"]); }
+    }),
+  });
   const kinoSeed = Object.freeze(function seed(session) {
     try {
       const S = contract.kinoSeed;
@@ -1007,8 +1030,10 @@ export function createKino(manifest, { appVersion = "sdk", lang = "es-CO", devic
     // app, where the prelude computes it on the marker-laden request before it ever crosses to the
     // Kotlin side that substitutes.
     let body = requestBody(o.body, headers);
-    const size = String(url).length + JSON.stringify(headers).length + (body ? (typeof body === "string" ? body.length : body.length * 2) : 0);
-    if (size > f.maxRequestChars) throw kinoError("too_large", `request too large (over ${kb(f.maxRequestChars)})`);
+    // Counted as the app does: the request crosses as JSON text, so a { base64 } body counts its base64 characters.
+    const bodyChars = body ? (typeof body === "string" ? body.length : o.body && typeof o.body === "object" && "base64" in o.body ? String(o.body.base64).length : body.length * 2) : 0;
+    const size = String(url).length + JSON.stringify(headers).length + bodyChars;
+    if (size > maxRequestChars) throw kinoError("too_large", `request too large (over ${kb(maxRequestChars)})`);
     let current;
     try { current = new URL(String(url)); } catch { throw kinoError("invalid_request", "invalid URL: " + String(url).slice(0, 200)); }
     if (pluginSecrets) {
@@ -1137,7 +1162,7 @@ export function createKino(manifest, { appVersion = "sdk", lang = "es-CO", devic
           tape.push({ key, status, headers: storedHeaders, body: storedBody });
         }
       }
-      if (bytes.length > f.maxBodyBytes) throw kinoError("too_large", `response too large (over ${kb(f.maxBodyBytes)})`);
+      if (bytes.length > maxBodyBytes) throw kinoError("too_large", `response too large (over ${kb(maxBodyBytes)})`);
       const location = headerList.find(([k]) => k === "location");
       if ([301, 302, 303, 307, 308].includes(status) && location && redirect === "follow") {
         if (status === 303 || ((status === 301 || status === 302) && method === "POST")) { method = "GET"; body = undefined; }
@@ -1223,7 +1248,7 @@ export function createKino(manifest, { appVersion = "sdk", lang = "es-CO", devic
       throw kinoError("crypto_error", decrypt ? "couldn't decrypt: wrong key or iv" : "invalid crypto operation");
     }
   }
-  // --- kino.crypto byte ops (apiVersion 12), as PluginCrypto.kt: AES-256-IGE, big-integer modPow over hex, gunzip. A sealed
+  // --- kino.crypto byte ops (apiVersion 13), as PluginCrypto.kt: AES-256-IGE, big-integer modPow over hex, gunzip. A sealed
   // value is refused in every field, whatever the op (an IGE call under a sealed key would be a decryption oracle). ---
   const BYTES = k.bytesOps;
   const INVALID_CRYPTO = "invalid crypto operation";
@@ -1316,6 +1341,99 @@ export function createKino(manifest, { appVersion = "sdk", lang = "es-CO", devic
     ...(contract.apiVersion >= KP.apiVersion ? keyPairApi({ pluginSecrets, buf }) : {}),
   });
 
+  // --- kino.nuvio (Kino 0.9.71, apiVersion 11, capability "nuvio"): the app installs and asks the scrapers of the Nuvio
+  // repositories the manifest names (nuvioRepos). The kit has no scrapers: it answers from a fixture (KINO_NUVIO_FIXTURE),
+  // with the app's checks, limits and codes, so the plugin's own logic -- which scrapers, in what order, how the copies
+  // merge -- runs offline. ---
+  const N = contract.kinoNuvio;
+  const nuvioBucket = tokenBucket(N.perMinute, 60_000, now);
+  const nuvioFixtureFile = nuvioFixture === undefined ? env.KINO_NUVIO_FIXTURE : nuvioFixture;
+  const nuvioRepoAnswers = typeof nuvioFixtureFile === "string" && nuvioFixtureFile ? readJsonFile(nuvioFixtureFile, "KINO_NUVIO_FIXTURE") : plainObject(nuvioFixtureFile) ? nuvioFixtureFile : null;
+  const nuvioInstalled = new Map(); // repository -> Map(scraper id -> { id, name }) in install order
+  const repoKey = (r) => String(r).trim().toLowerCase();
+  const nuvioScraperList = (q) => {
+    if (q.scrapers === undefined) return undefined;
+    if (!Array.isArray(q.scrapers) || q.scrapers.length > N.maxScraperFilter || !q.scrapers.every((s) => typeof s === "string" && s)) {
+      throw kinoError("invalid_request", `kino.nuvio: "scrapers" is a list of at most ${N.maxScraperFilter} scraper ids`);
+    }
+    return q.scrapers;
+  };
+  async function nuvioRepo(query) {
+    await null;
+    if (!plainObject(query) || typeof query.repo !== "string" || !query.repo.trim()) throw kinoError("invalid_request", 'kino.nuvio: the query needs a "repo" (owner/repo or the https address of a Nuvio manifest)');
+    if (JSON.stringify(query).length > N.maxRequestChars) throw kinoError("invalid_request", `kino.nuvio: the query is longer than ${N.maxRequestChars} characters`);
+    const declared = Array.isArray(manifest.nuvioRepos) ? manifest.nuvioRepos.map(repoKey) : [];
+    if (!manifest.capabilities.includes(N.capability) || !declared.includes(repoKey(query.repo))) {
+      throw kinoError("not_allowed", `kino.nuvio: this plugin does not declare the "${N.capability}" capability with "${query.repo.slice(0, 80)}" in "${N.manifestField}"`);
+    }
+    if (!nuvioBucket.take()) throw kinoError("rate_limited", `too many kino.nuvio calls in a minute (at most ${N.perMinute}); wait a moment`);
+    const key = Object.keys(nuvioRepoAnswers || {}).find((k) => repoKey(k) === repoKey(query.repo));
+    if (!key) throw kinoError("unavailable", `the Node kit has no Nuvio repository to read: give it a fixture with KINO_NUVIO_FIXTURE (a repository "${query.repo.slice(0, 80)}" with its scrapers and their answers); the real scrapers only run in the app`);
+    const repo = nuvioRepoAnswers[key];
+    const offered = (Array.isArray(repo.available) ? repo.available : []).filter((o) => plainObject(o) && typeof o.id === "string" && o.id).slice(0, N.maxOffered);
+    if (!nuvioInstalled.has(repoKey(query.repo))) nuvioInstalled.set(repoKey(query.repo), new Map());
+    return { repo, offered, installed: nuvioInstalled.get(repoKey(query.repo)) };
+  }
+  const nuvioApi = Object.freeze({
+    async available(query) {
+      const { offered, installed } = await nuvioRepo(query);
+      return offered.map((o) => ({
+        id: o.id, name: String(o.name || o.id), description: String(o.description || "").slice(0, 120),
+        types: Array.isArray(o.types) ? o.types.map(String) : [], languages: Array.isArray(o.languages) ? o.languages.map(String) : [],
+        compatible: o.compatible !== false, installed: installed.has(o.id),
+      }));
+    },
+    async use(query) {
+      const { offered, installed } = await nuvioRepo(query);
+      if (!Array.isArray(query.scrapers) || !query.scrapers.length || query.scrapers.length > N.maxUse || !query.scrapers.every((s) => typeof s === "string" && s)) {
+        throw kinoError("invalid_request", `kino.nuvio.use needs "scrapers": 1 to ${N.maxUse} scraper ids`);
+      }
+      const ready = [];
+      const failed = [];
+      for (const id of query.scrapers) {
+        const o = offered.find((x) => x.id === id);
+        if (!o) failed.push({ id, code: "not_found", message: "the repository offers no such scraper" });
+        else if (o.compatible === false) failed.push({ id, code: "refused", message: "Kino does not use this scraper (it needs torrents)" });
+        else { if (!installed.has(id)) installed.set(id, { id, name: String(o.name || id) }); ready.push(id); }
+      }
+      return { ready, failed };
+    },
+    async scrapers(query) {
+      const { installed } = await nuvioRepo(query);
+      const only = nuvioScraperList(query);
+      return [...installed.values()].filter((s) => !only || only.includes(s.id)).map((s) => ({ id: s.id, name: s.name }));
+    },
+    async streams(query) {
+      const { repo, installed } = await nuvioRepo(query);
+      const only = nuvioScraperList(query);
+      if (!["movie", "series", "tv"].includes(query.type)) throw kinoError("invalid_request", 'kino.nuvio.streams: "type" is "movie", "series" or "tv"');
+      if (!Number.isInteger(query.tmdbId) || query.tmdbId < 1) throw kinoError("invalid_request", 'kino.nuvio.streams: "tmdbId" is the title\'s TMDB id (a positive integer)');
+      const isSeries = query.type !== "movie";
+      if (isSeries && (!Number.isInteger(query.season) || query.season < 0 || !Number.isInteger(query.episode) || query.episode < 1)) {
+        throw kinoError("invalid_request", 'kino.nuvio.streams: a series needs "season" and "episode"');
+      }
+      const timeoutMs = query.timeoutMs === undefined ? N.scraperTimeoutMs : query.timeoutMs;
+      if (!Number.isInteger(timeoutMs) || timeoutMs < N.minScraperTimeoutMs || timeoutMs > N.scraperTimeoutMs) {
+        throw kinoError("invalid_request", `kino.nuvio.streams: "timeoutMs" is ${N.minScraperTimeoutMs} to ${N.scraperTimeoutMs}`);
+      }
+      const asked = [...installed.values()].filter((s) => !only || only.includes(s.id));
+      const keys = isSeries ? [`series:${query.tmdbId}:${query.season}:${query.episode}`, `series:${query.tmdbId}`] : [`movie:${query.tmdbId}`];
+      const results = asked.slice(0, N.maxScrapers).map((s) => {
+        const scraper = { id: s.id, name: s.name };
+        const answers = plainObject(repo.streams) && plainObject(repo.streams[s.id]) ? repo.streams[s.id] : {};
+        const hitKey = keys.find((k) => Object.prototype.hasOwnProperty.call(answers, k));
+        const hit = hitKey === undefined ? undefined : answers[hitKey];
+        if (!plainObject(hit)) return { scraper, ok: false, code: "not_found", message: "this scraper has no stream for the title" };
+        if (hit.delayMs > timeoutMs) return { scraper, ok: false, code: "timeout", message: `this scraper took longer than ${timeoutMs} ms` };
+        if (plainObject(hit.error)) return { scraper, ok: false, code: String(hit.error.code || "failed"), message: String(hit.error.message || "the scraper failed") };
+        if (typeof hit.url !== "string" || !hit.url) return { scraper, ok: false, code: "failed", message: "the scraper answered no address" };
+        const { delayMs, error, ...stream } = hit;
+        return { scraper, ok: true, stream };
+      });
+      return { results, truncated: asked.length > N.maxScrapers };
+    },
+  });
+
   // --- kino.meta (Kino 0.9.53): the app asks TMDB, AniList and the person's other meta plugins; the kit answers from a
   // fixture, else null. Same checks, same rate limit, same codes. ---
   const M = contract.kinoMeta;
@@ -1403,13 +1521,41 @@ export function createKino(manifest, { appVersion = "sdk", lang = "es-CO", devic
     return body;
   }
 
-  // --- kino.ws (apiVersion 12, capability "socket"): the app's PluginWebSocket over Node's global WebSocket. wss:// only,
+  // --- kino.ws (apiVersion 13, capability "socket"): the app's PluginWebSocket over Node's global WebSocket. wss:// only,
   // a host the manifest declares (never an IP literal or a local name, which cannot be declared), at most
   // contract.socket.maxSockets open, at most contract.socket.maxQueuedBytes queued unread (then `limit`). ---
   const wsApi = (() => {
     if (!(manifest.capabilities || []).includes("socket") || typeof WebSocket !== "function") return null;
     const C = contract.socket;
     let live = 0;
+    // Frames as strings (contract.socket.encodings), as the app's prelude.js and WsFrames: an object with `encoding`
+    // "hex" or "base64" is the only option; the cap is on the decoded size; decoding is strict (canonical form only).
+    const wsEncoding = (opts) => {
+      if (opts === null || typeof opts !== "object") return null;
+      const e = opts.encoding;
+      if (e === undefined || e === null) return null;
+      if (!C.encodings.includes(e)) throw kinoError("invalid_request", 'encoding must be "hex" or "base64"');
+      return e;
+    };
+    const wsEncodedBytes = (s, encoding) => {
+      const n = s.length;
+      if (encoding === "hex") return (n + 1) >> 1;
+      const pad = n > 0 && s.charCodeAt(n - 1) === 61 ? (n > 1 && s.charCodeAt(n - 2) === 61 ? 2 : 1) : 0;
+      return (n >> 2) * 3 + (n % 4 === 0 ? 0 : (n % 4) - 1) - pad;
+    };
+    const B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    const wsDecode = (s, encoding) => {
+      if (encoding === "hex") {
+        if (s.length % 2 !== 0 || !/^[0-9a-fA-F]*$/.test(s)) throw kinoError("invalid_request", "the frame is not valid hex");
+        return new Uint8Array(Buffer.from(s, "hex"));
+      }
+      const bad = () => kinoError("invalid_request", "the frame is not valid base64");
+      if (s.length % 4 !== 0) throw bad();
+      const pad = s.endsWith("==") ? 2 : s.endsWith("=") ? 1 : 0;
+      if (!/^[A-Za-z0-9+/]*$/.test(s.slice(0, s.length - pad))) throw bad();
+      if (pad > 0 && (B64.indexOf(s[s.length - pad - 1]) & (pad === 2 ? 15 : 3)) !== 0) throw bad();
+      return new Uint8Array(Buffer.from(s, "base64"));
+    };
     const open = (url, options) => new Promise((resolve, reject) => {
       let u;
       try { u = new URL(String(url)); } catch { reject(kinoError("invalid_request", "invalid URL")); return; }
@@ -1437,18 +1583,31 @@ export function createKino(manifest, { appVersion = "sdk", lang = "es-CO", devic
       sock.addEventListener("open", () => {
         settled = true;
         resolve(Object.freeze({
-          send: async (data) => {
-            if (!isUint8Array(data)) throw kinoError("invalid_request", "send() takes a Uint8Array");
+          send: async (data, options) => {
+            const encoding = wsEncoding(options);
+            if (typeof data === "string" && encoding !== null) {
+              if (wsEncodedBytes(data, encoding) > C.maxSendBytes) throw kinoError("too_large", "frame too large");
+              const frame = wsDecode(data, encoding);
+              if (reason !== null || sock.readyState !== 1) throw kinoError("closed", "the socket is closed");
+              sock.send(frame);
+              return;
+            }
+            if (!isUint8Array(data)) throw kinoError("invalid_request", encoding === null ? "send() takes a Uint8Array" : "send() takes a Uint8Array or an encoded string");
             if (data.length > C.maxSendBytes) throw kinoError("too_large", "frame too large");
             if (reason !== null || sock.readyState !== 1) throw kinoError("closed", "the socket is closed");
             sock.send(data);
           },
-          recv: async (timeoutMs) => {
+          recv: async (timeoutMs, options) => {
+            const encoding = wsEncoding(options);
             const ms = Math.min(timeoutMs === undefined ? 30000 : Number.isInteger(timeoutMs) && timeoutMs >= 0 ? timeoutMs : 0, C.maxRecvMs);
             if (queue.length === 0 && reason === null) {
               await new Promise((r) => { const t = setTimeout(() => { waiter = null; r(); }, ms); waiter = () => { clearTimeout(t); r(); }; });
             }
-            if (queue.length > 0) { const f = queue.shift(); queued -= f.length; return f; }
+            if (queue.length > 0) {
+              const f = queue.shift();
+              queued -= f.length;
+              return encoding === null ? f : Buffer.from(f.buffer, f.byteOffset, f.length).toString(encoding === "hex" ? "hex" : "base64");
+            }
             if (reason !== null) throw kinoError(reason, "the socket is closed");
             return null;
           },
@@ -1459,9 +1618,62 @@ export function createKino(manifest, { appVersion = "sdk", lang = "es-CO", devic
     return Object.freeze({ open });
   })();
 
-  // --- kino.catalog (apiVersion 12, capability "catalog"): the app's PluginCatalogDb mirrored in memory (catalogAnswer
+  // --- kino.catalog (apiVersion 13, capability "catalog"): the app's PluginCatalogDb mirrored in memory (catalogAnswer
   // below), behind the same wrapper the app's prelude.js puts in front of it. Undefined without the capability. ---
   const catalogApi = (manifest.capabilities || []).includes("catalog") ? catalogKino(newCatalogState()) : null;
+
+  // --- kino.qr (apiVersion 13, capability "qrScan"): the app's PluginQrScanner behind its prelude wrapper. Node has no
+  // camera: the `qrScan` option of createKino is the person, `async ({ title, titleEn }) =>` the scanned text or null (a
+  // cancel); it may throw a kinoError (permission_denied, ...). Without it, and on a TV (device "tv"), the scan is
+  // unavailable, as on a device without a camera. A text the app would not accept (empty, over contract.qr.maxScanChars)
+  // is not taken: the app's scanner would keep looking until its timeout, so the kit answers timeout at once. ---
+  // PluginQrScanner.QR_FUNCTIONS and FORMAT_RANGES (prelude.js has the same list): where a scan may start, and the
+  // characters a title may not hold (every ISO control, every Unicode format character, the line and paragraph separators).
+  const QR_FUNCTIONS = [contract.settings.ui.exports.action, contract.manifest.panel.exports.action];
+  const QR_REFUSED = [[0x00AD, 0x00AD], [0x0600, 0x0605], [0x061C, 0x061C], [0x06DD, 0x06DD], [0x070F, 0x070F], [0x0890, 0x0891], [0x08E2, 0x08E2],
+    [0x180E, 0x180E], [0x200B, 0x200F], [0x2028, 0x202E], [0x2060, 0x2064], [0x2066, 0x206F], [0xFEFF, 0xFEFF], [0xFFF9, 0xFFFB],
+    [0x110BD, 0x110BD], [0x110CD, 0x110CD], [0x13430, 0x1343F], [0x1BCA0, 0x1BCA3], [0x1D173, 0x1D17A], [0xE0001, 0xE0001], [0xE0020, 0xE007F]];
+  const qrRefusedChar = (v) => [...v].some((ch) => { const cp = ch.codePointAt(0); return cp <= 0x1f || (cp >= 0x7f && cp <= 0x9f) || QR_REFUSED.some(([a, b]) => cp >= a && cp <= b); });
+  const QR_KIT_MAX_IGNORED = 10;
+  const qrApi = (() => {
+    if (!(manifest.capabilities || []).includes(contract.qr.capability)) return null;
+    const Q = contract.qr;
+    let open = false;
+    const scan = async (options) => {
+      await null;
+      const o = options === undefined || options === null ? {} : options;
+      if (typeof o !== "object") throw kinoError("invalid_request", "kino.qr.scan takes { title, titleEn }");
+      const ask = {};
+      for (const k of ["title", "titleEn"]) {
+        const v = o[k];
+        if (v === undefined || v === null) continue;
+        if (typeof v !== "string") throw kinoError("invalid_request", `kino.qr.scan: ${k} must be a string`);
+        if (v.length > Q.maxTitleChars) throw kinoError("invalid_request", `kino.qr.scan: ${k} is over ${Q.maxTitleChars} characters`);
+        if (qrRefusedChar(v)) throw kinoError("invalid_request", `kino.qr.scan: ${k} holds a control or formatting character`);
+        ask[k] = v.trim();
+      }
+      // The app's order: the request, the device, where the call comes from, the open scan.
+      if (kinoDevice === "tv" || typeof qrScan !== "function") throw kinoError("unavailable", "kino.qr.scan: this device can't scan a QR code (a TV, or a device without a camera)");
+      if (!QR_FUNCTIONS.includes(kitCall.getStore())) throw kinoError("not_allowed", "kino.qr.scan only runs from a settings action or panelAction");
+      if (open) throw kinoError("busy", "kino.qr.scan: a scan is already open");
+      open = true;
+      try {
+        // A code the app would not take (empty, or over maxScanChars) is ignored there and the scanner keeps looking: the
+        // fake is asked again with invalid: true, and after QR_KIT_MAX_IGNORED of them the kit answers the app's timeout.
+        let invalid = false;
+        for (let i = 0; i <= QR_KIT_MAX_IGNORED; i++) {
+          const text = await qrScan({ title: ask.title || "", titleEn: ask.titleEn || "", ...(invalid ? { invalid: true } : {}) });
+          if (text === null || text === undefined) return null;
+          if (typeof text === "string" && text.length > 0 && text.length <= Q.maxScanChars) return text;
+          invalid = true;
+        }
+        throw kinoError("timeout", `kino.qr.scan: nothing was scanned in ${Q.timeoutMs / 1000} s`);
+      } finally {
+        open = false;
+      }
+    };
+    return Object.freeze({ scan });
+  })();
 
   const kino = Object.freeze({
     apiVersion: contract.apiVersion,
@@ -1473,6 +1685,8 @@ export function createKino(manifest, { appVersion = "sdk", lang = "es-CO", devic
     device: kinoDevice,
     // Kino 0.9.55 (contract.additiveFromApp["kino.seed"]): share one anonymous guest session; the kit only reports what Kino would keep.
     seed: kinoSeed,
+    // Kino 0.9.74 (contract.additiveFromApp["kino.sync.remoteChanged"]): a realtime syncProvider signals its remote changed.
+    sync: kinoSync,
     fetch: fetchGated,
     html: Object.freeze({
       select() {
@@ -1496,7 +1710,7 @@ export function createKino(manifest, { appVersion = "sdk", lang = "es-CO", devic
           expiresAt = Date.now() + ttlMs;
         }
         purgeExpiredStorage();
-        // apiVersion 12, capability "storageLarge": the app's larger quota (PluginStorage, one file per value there), else
+        // apiVersion 13, capability "storageLarge": the app's larger quota (PluginStorage, one file per value there), else
         // the 256 KB one. The large total counts every key and value in UTF-8, as the app's index does.
         if (storageLarge()) {
           const st = contract.storage;
@@ -1524,10 +1738,12 @@ export function createKino(manifest, { appVersion = "sdk", lang = "es-CO", devic
       get: (key) => values[String(key)],
       all: () => ({ ...values }),
     }),
-    // apiVersion 12, capability "socket": undefined without it, like the app.
+    // apiVersion 13, capability "socket": undefined without it, like the app.
     ...(wsApi ? { ws: wsApi } : {}),
-    // apiVersion 12, capability "catalog": undefined without it, like the app.
+    // apiVersion 13, capability "catalog": undefined without it, like the app.
     ...(catalogApi ? { catalog: catalogApi } : {}),
+    // apiVersion 13, capability "qrScan": undefined without it, like the app.
+    ...(qrApi ? { qr: qrApi } : {}),
     cookies: Object.freeze({
       get(url, name) {
         let u;
@@ -1559,6 +1775,9 @@ export function createKino(manifest, { appVersion = "sdk", lang = "es-CO", devic
     // byTitle: true is Kino 0.9.55's feature flag (contract.additiveFromApp["kino.meta.byTitle"]).
     meta: manifest.apiVersion >= contract.kinoMeta.byTitle.apiVersion ? Object.assign(meta, { byTitle: true }) : meta,
     tmdb,
+    // Kino 0.9.71 (apiVersion 11, capability "nuvio"): the scrapers of the Nuvio repositories the manifest names. Feature-detect
+    // it: typeof kino.nuvio === "object".
+    nuvio: nuvioApi,
     // apiVersion 6: the app opens a hidden WebView; Node has none, so the kit answers as a device without one would.
     // A plugin's resolve should already fall back (another server, a plain kino.fetch path) on this code.
     // kino.browser.page ("browser": "pages", apiVersion 6) answers the same: a plugin keeps a plain kino.fetch path for it too.
@@ -1610,15 +1829,15 @@ export function createKino(manifest, { appVersion = "sdk", lang = "es-CO", devic
 
 /**
  * The app's signing lane (SigningLaneHost + prelude.js): sign() gets kino.crypto, kino.secret,
- * kino.config, kino.html and kino.log, never the network, storage, cookies, sleep, kino.meta or kino.tmdb. The refusals
+ * kino.config, kino.html and kino.log, never the network, storage, cookies, sleep, kino.meta, kino.tmdb or kino.nuvio. The refusals
  * are the app's: fetch rejects with host_not_allowed, the rest with not_allowed.
  */
 export function signingLane(kino) {
   const why = (api) => kinoError("not_allowed", `sign() can't use ${api}: whatever you need must come in signContext`);
   const refused = (api) => () => { throw why(api); };
   const methods = (names, api) => Object.freeze(Object.fromEntries(names.map((n) => [n, refused(api)])));
-  // The app's lane host is no catalog host: sign() has no kino.catalog at all.
-  const { catalog: _noCatalog, ...laneKino } = kino;
+  // The app's lane host is no catalog or QR host: sign() has no kino.catalog and no kino.qr at all.
+  const { catalog: _noCatalog, qr: _noQr, ...laneKino } = kino;
   return Object.freeze({
     ...laneKino,
     fetch: async () => { throw kinoError("host_not_allowed", "sign can't use the network"); },
@@ -1628,6 +1847,7 @@ export function signingLane(kino) {
     sleep: async () => { throw why("kino.sleep"); },
     meta: async () => { throw why("kino.meta"); },
     tmdb: async () => { throw why("kino.tmdb"); },
+    nuvio: Object.freeze({ available: async () => { throw why("kino.nuvio"); }, use: async () => { throw why("kino.nuvio"); }, scrapers: async () => { throw why("kino.nuvio"); }, streams: async () => { throw why("kino.nuvio"); } }),
     ...(kino.browser ? { browser: Object.freeze({ captureAll: true, capture: async () => { throw why("kino.browser"); }, ...(kino.browser.page ? { page: async () => { throw why("kino.browser"); } } : {}) }) } : {}),
   });
 }
@@ -1675,7 +1895,7 @@ export function browserCaptureOptions(opts) {
   if (captureAll && match === null && cookie !== null) throw kinoError("invalid_request", "captureAll needs match when waitForCookie is used");
 }
 
-// --- kino.catalog (apiVersion 12): the app's PluginCatalogDb, in memory --------------------------------------------------
+// --- kino.catalog (apiVersion 13): the app's PluginCatalogDb, in memory --------------------------------------------------
 // Same validation order, messages, normalisation, matching and ordering as the app (pinned by the shared vectors in
 // docs/plugins/catalog-vectors.json, which the app's PluginCatalogTest runs too). Two differences, both documented: the
 // catalog lives in memory for one createKino (the app keeps a SQLite file), and maxDbBytes is checked against an estimate

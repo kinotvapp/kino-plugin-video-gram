@@ -62,11 +62,11 @@ export function schemeAllowed(u, manifest) {
   return (manifest.insecureHosts || []).includes(h);
 }
 
-/** What the entry must export: the capabilities' functions, settingsStatus/action for a status/action setting, and `section` for a declared section (apiVersion 6). */
+/** What the entry must export: the capabilities' functions, settingsStatus/action for a status (or qr, apiVersion 13)/action setting, and `section` for a declared section (apiVersion 6). */
 export function requiredExports(caps, settings = [], manifest = {}) {
   const ui = contract.settings.ui.exports;
   const fromSettings = [
-    ...(settings.some((s) => s && s.type === "status") ? [ui.status] : []),
+    ...(settings.some((s) => s && (s.type === "status" || s.type === "qr")) ? [ui.status] : []),
     ...(settings.some((s) => s && s.type === "action") ? [ui.action] : []),
   ];
   return [...new Set([...caps.flatMap((c) => contract.capabilities.exports[c] || (contract.capabilities.declarative.includes(c) ? [] : [c])), ...fromSettings, ...(manifest.section ? [contract.manifest.section.export] : []), ...(manifest.panel ? [contract.manifest.panel.exports.panel] : [])])];
@@ -74,21 +74,33 @@ export function requiredExports(caps, settings = [], manifest = {}) {
 
 /** Same checks, same order, same English messages as the app's own manifest validation. Returns { ok, field?, message?, manifest? }. */
 const EXTERNAL_RESOLVER_BAD =
-  'The "externalResolver" field must be an object with a "package" (an Android package name) and, optionally, an "apk" with a GitHub release "url" (https://github.com/<owner>/<repo>/releases/download/<tag>/<file>) and a 64-character hex "sha256"; "fdroid" may only be true and "downloader" an object with a "code" of 3 to 10 digits';
+  'The "externalResolver" field must be an object with a "package" (an Android package name) and, optionally, an "apk" with a GitHub release or archive.org "url" (https://github.com/<owner>/<repo>/releases/download/<tag>/<file> or https://archive.org/download/<item>/<file>) and a 64-character hex "sha256"; "fdroid" may only be true and "downloader" an object with a "code" of 3 to 10 digits; "desktop" may only have "windows", "linux" and "macos", each an object with the same kind of "url" and "sha256"';
+const DESKTOP_SYSTEMS = ["windows", "linux", "macos"];
 const RESOLVER_APK_PATH = /^\/[A-Za-z0-9-]{1,39}\/[A-Za-z0-9._-]{1,100}\/releases\/(?:download\/[A-Za-z0-9._+-]{1,100}|latest\/download)\/[A-Za-z0-9._+-]{1,200}$/;
+const RESOLVER_ARCHIVE_PATH = /^\/download\/[A-Za-z0-9._-]{1,100}\/[A-Za-z0-9._+-]{1,200}$/;
 
-/** Whether `externalResolver` is well formed, as the app reads it: `{ package, apk?: { url, sha256, label? }, fdroid?: true, downloader?: { code } }`. */
+/** A `{ url, sha256 }` download: only a GitHub release asset or an archive.org file (that is where Kino fetches a recommended resolver from, nowhere else) and the sha256 its bytes must have. */
+function resolverDownloadOk(a) {
+  if (a === null || typeof a !== "object" || Array.isArray(a) || typeof a.url !== "string" || a.url.length > 2048 || /[\u0000-\u001f\u007f]/.test(a.url)) return false;
+  let u;
+  try { u = new URL(a.url); } catch { return false; }
+  if (u.protocol !== "https:" || u.port !== "" || u.username || u.password || u.search) return false;
+  if (!(u.hostname === "github.com" ? RESOLVER_APK_PATH : u.hostname === "archive.org" ? RESOLVER_ARCHIVE_PATH : /(?!)/).test(u.pathname)) return false;
+  return typeof a.sha256 === "string" && /^[0-9a-fA-F]{64}$/.test(a.sha256);
+}
+
+/** Whether `externalResolver` is well formed, as the app reads it: `{ package, apk?: { url, sha256, label? }, fdroid?: true, downloader?: { code }, desktop?: { windows|linux|macos: { url, sha256 } } }`. */
 export function externalResolverOk(r) {
   if (r === null || typeof r !== "object" || Array.isArray(r)) return false;
   if (typeof r.package !== "string" || r.package.length > 255 || !ANDROID_PACKAGE.test(r.package)) return false;
+  if (r.desktop !== undefined) {
+    const d = r.desktop;
+    if (d === null || typeof d !== "object" || Array.isArray(d)) return false;
+    for (const [os, p] of Object.entries(d)) if (!DESKTOP_SYSTEMS.includes(os) || !resolverDownloadOk(p)) return false;
+  }
   if (r.apk !== undefined) {
     const a = r.apk;
-    if (a === null || typeof a !== "object" || Array.isArray(a) || typeof a.url !== "string" || a.url.length > 2048 || /[\u0000-\u001f\u007f]/.test(a.url)) return false;
-    let u;
-    try { u = new URL(a.url); } catch { return false; }
-    // Only a GitHub release asset: that is where Kino downloads a recommended resolver from, nowhere else.
-    if (u.protocol !== "https:" || u.hostname !== "github.com" || u.port !== "" || u.username || u.password || u.search || !RESOLVER_APK_PATH.test(u.pathname)) return false;
-    if (typeof a.sha256 !== "string" || !/^[0-9a-fA-F]{64}$/.test(a.sha256)) return false;
+    if (!resolverDownloadOk(a)) return false;
     if (a.label !== undefined && (typeof a.label !== "string" || a.label.trim().length > 40 || /[\u0000-\u001f\u007f]/.test(a.label.trim()))) return false;
   }
   if (r.fdroid !== undefined && r.fdroid !== true) return false;
@@ -327,6 +339,19 @@ export function validateManifest(text, { knownPermissions = contract.permissions
     if (!caps.includes("externalResolve")) return bad("externalResolver", 'The "externalResolver" field needs the "externalResolve" capability');
     if (!externalResolverOk(o.externalResolver)) return bad("externalResolver", EXTERNAL_RESOLVER_BAD);
   }
+  // apiVersion 11, `nuvioRepos`: the Nuvio repositories a `nuvio` plugin uses (ManifestParser: 1 to 4, each a GitHub owner/repo or an https address).
+  if (o.apiVersion >= 11 && (caps.includes("nuvio") || o.nuvioRepos !== undefined)) {
+    const repos = o.nuvioRepos;
+    const one = (r) => typeof r === "string" && (/^[A-Za-z0-9][A-Za-z0-9-]{0,38}\/[A-Za-z0-9._-]{1,100}(@[A-Za-z0-9._\/-]+)?$/.test(r.trim()) || /^https:\/\/[^\s/]+\/\S*$/i.test(r.trim()) || /^https:\/\/github\.com\/[^\s/]+\/[^\s/]+/i.test(r.trim()));
+    if (!caps.includes("nuvio") || !Array.isArray(repos) || repos.length < 1 || repos.length > 4 || !repos.every(one)) {
+      return bad("nuvioRepos", 'The "nuvioRepos" field must list 1 to 4 GitHub repositories (owner/repo) or https addresses of a Nuvio manifest, and goes with the "nuvio" capability, which needs it');
+    }
+  }
+  // apiVersion 12, `sync` (ManifestParser.parseSync): only with syncProvider, which requires it; the numbers, keySecret and provision rules.
+  if (o.apiVersion >= m.sync.apiVersion) {
+    const syncError = syncFieldError(o, caps, o.settings || []);
+    if (syncError) return bad("sync", syncError);
+  }
   // Judged on what the app honours: below its apiVersion a field is ignored, so it forbids nothing there.
   if (catalogOnly) {
     const playback = { streamHosts: streamHostsAny, browser: browser && !browserPages };
@@ -353,6 +378,36 @@ function isWellFormedSeal(seal, maxValueBytes, prefix) {
   const raw = Buffer.from(body, "base64url");
   const overhead = 60;
   return raw.length >= overhead + 1 && raw.length <= overhead + maxValueBytes;
+}
+
+/**
+ * What the app's ManifestParser refuses in the `sync` field (apiVersion 12), as its message, or null when it is fine (or
+ * absent without the syncProvider capability). [settings] are the manifest's own, already validated.
+ */
+function syncFieldError(o, caps, settings) {
+  const s = contract.manifest.sync;
+  if (!caps.includes(s.requires)) return o.sync !== undefined ? s.needsCapabilityMessage : null;
+  // Every provider derives its key from one of its own settings: a key one device made up could never reach another.
+  if (o.sync === undefined) return s.keySecret.missingMessage;
+  const v = o.sync;
+  if (v === null || typeof v !== "object" || Array.isArray(v)) return s.badMessage;
+  if (v.mode !== undefined && !s.modes.includes(v.mode)) return s.badMessage;
+  const whole = (k) => v[k] === undefined || (Number.isInteger(v[k]) && v[k] > 0);
+  if (!whole("pullEveryMs") || !whole("pushDebounceMs") || !whole("maxBlobBytes")) return s.badMessage;
+  if (v.maxBlobBytes !== undefined && v.maxBlobBytes > s.maxBlobBytes) return s.badMessage;
+  if (v.keySecret === undefined) return s.keySecret.missingMessage;
+  const named = typeof v.keySecret === "string" && v.keySecret ? settings.find((x) => x.key === v.keySecret && x.type === s.keySecret.settingType) : null;
+  if (!named) return s.keySecret.badMessage;
+  if (named.default !== undefined && named.default !== null) return s.keySecret.noDefaultMessage;
+  let provision = [];
+  if (v.provision !== undefined) {
+    if (!Array.isArray(v.provision) || v.provision.length > s.provision.maxNames || !v.provision.every((n) => typeof n === "string")) return s.provision.badMessage;
+    const valued = (n) => settings.some((x) => x.key === n && contract.settings.types[x.type]?.hasValue !== false);
+    if (new Set(v.provision).size !== v.provision.length || !v.provision.every(valued)) return s.provision.badMessage;
+    provision = v.provision;
+  }
+  if (!provision.includes(v.keySecret)) return s.provision.needsKeySecretMessage;
+  return null;
 }
 
 /**
@@ -445,10 +500,32 @@ function validateSettings(list, apiVersion = contract.maxApiVersion) {
     if (!re(s.keyPattern).test(key)) return `Setting #${i + 1} has an invalid key`;
     if (keys.has(key)) return `The setting "${key}" is repeated`;
     keys.add(key);
-    const label = typeof o.label === "string" ? o.label.trim() : "";
-    if (!label || label.length > s.labelMaxChars) return `The setting "${key}" needs a label of 1 to ${s.labelMaxChars} characters`;
     const type = s.types[o.type];
     if (!type || typeof o.type !== "string") return `The setting "${key}" has an unknown type`;
+    const aids = s.configAids;
+    const aid = o.type === "link" || o.type === "help";
+    if (aid && apiVersion < aids.apiVersion) return `The setting "${key}" is of type ${o.type}: it needs apiVersion ${aids.apiVersion}`;
+    const label = typeof o.label === "string" ? o.label.trim() : "";
+    // A help's label is optional: without one Kino's own "Ayuda" / "Help" names the button.
+    const labelOptional = o.type === "help" && !label && (o.label === undefined || typeof o.label === "string");
+    if (!labelOptional && (!label || label.length > s.labelMaxChars)) return `The setting "${key}" needs a label of 1 to ${s.labelMaxChars} characters`;
+    if (o.type !== "link" && o.url !== undefined) return `Only a setting of type link has "url" ("${key}")`;
+    if (o.type !== "help" && ["title", "titleEn", "body", "bodyEn"].some((k) => o[k] !== undefined)) return `Only a setting of type help has "title" and "body" ("${key}")`;
+    if (o.type === "link" && !isLinkUrl(o.url)) return `The setting "${key}" of type link needs a "url": an https address without user info, at most ${aids.linkUrlMaxChars} characters`;
+    if (o.type === "help") {
+      const t = (k, max) => o[k] === undefined || o[k] === null ? "" : typeof o[k] === "string" && o[k].trim().length <= max ? o[k].trim() : null;
+      for (const [k, max] of [["title", aids.helpTitleMaxChars], ["titleEn", aids.helpTitleMaxChars], ["body", aids.helpBodyMaxChars], ["bodyEn", aids.helpBodyMaxChars]]) {
+        if (t(k, max) === null) return `"${k}" of the setting "${key}" must be a string of up to ${max} characters`;
+      }
+      if (!t("body", aids.helpBodyMaxChars) && !t("bodyEn", aids.helpBodyMaxChars)) return `The setting "${key}" of type help needs a "body" (or "bodyEn")`;
+    }
+    if (aid) {
+      // As PluginSettings.unsafeAidText: no control character (a body keeps \n; \r\n counts as one), invisible formatting
+      // (Cf: zero-width, direction overrides) or line/paragraph separator in the aid's texts.
+      const unsafe = (v, newlines) => typeof v === "string" && /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(newlines ? v.replace(/\r\n?/g, "\n").replace(/\n/g, "") : v.trim());
+      for (const k of ["label", "labelEn", "title", "titleEn"]) if (unsafe(o[k], false)) return `"${k}" of the setting "${key}" has a control, invisible or direction character`;
+      for (const k of ["body", "bodyEn"]) if (unsafe(o[k], true)) return `"${k}" of the setting "${key}" has a control, invisible or direction character`;
+    }
     if (type.hasValue === false && apiVersion < type.apiVersion) return `The setting "${key}" is of type ${o.type}: it needs apiVersion ${type.apiVersion}`;
     // A section's explanation may be longer than a field's hint (PluginSettings.MAX_SECTION_HINT_CHARS, Kino 0.9.51).
     const hintMax = o.type === "section" && s.sectionHintMaxChars ? s.sectionHintMaxChars : s.hintMaxChars;
@@ -471,6 +548,12 @@ function validateSettings(list, apiVersion = contract.maxApiVersion) {
       const c = englishVariant(o, "confirm", 1, ui.confirmMaxChars);
       if (c === null) return `"confirmEn" of the setting "${key}" must be a string of 1 to ${ui.confirmMaxChars} characters`;
       if (o.confirm === undefined || o.confirm === null) return `"confirmEn" of the setting "${key}" also needs "confirm"`;
+    }
+    // apiVersion 13: only a qr setting has "refreshMs" (contract.qr.settingsQr), 2000 to 60000 ms; below 13 an unknown key, ignored.
+    if (o.refreshMs !== undefined && o.refreshMs !== null && apiVersion >= s.types.qr.apiVersion) {
+      const Q = contract.qr.settingsQr;
+      if (o.type !== "qr") return `Only a setting of type qr has "refreshMs" ("${key}")`;
+      if (!(Number.isInteger(o.refreshMs) && o.refreshMs >= Q.minRefreshMs && o.refreshMs <= Q.maxRefreshMs)) return `"refreshMs" of the setting "${key}" goes from ${Q.minRefreshMs} to ${Q.maxRefreshMs}`;
     }
     if (o.fields !== undefined && o.type !== "list") return `Only a setting of type list has "fields" ("${key}")`;
     if (o.type === "list") {
@@ -514,11 +597,35 @@ function validateSettings(list, apiVersion = contract.maxApiVersion) {
           : typeof o.default === "string" && o.default.length <= type.maxChars;
       if (!fits) return `The default value of the setting "${key}" doesn't fit its type`;
     }
+    // apiVersion 12 `devices` (PluginSettings.devicesOf): a non-empty list of different known devices; ignored below it.
+    if (apiVersion >= s.devices.apiVersion && o.devices !== undefined) {
+      const d = o.devices;
+      if (!Array.isArray(d) || d.length === 0 || new Set(d).size !== d.length || !d.every((x) => s.devices.values.includes(x))) return s.devices.badMessage.replace("{key}", key);
+    }
+    // apiVersion 12 `linkOnly` (PluginSettings): only on an action, only a boolean; ignored below it.
+    if (apiVersion >= s.linkOnly.apiVersion && o.linkOnly !== undefined) {
+      if (o.type !== "action") return s.linkOnly.onlyActionMessage.replace("{key}", key);
+      if (typeof o.linkOnly !== "boolean") return s.linkOnly.notBooleanMessage.replace("{key}", key);
+    }
   }
+  if (list.filter((o) => o.type === "link").length > s.configAids.maxLinks) return `The plugin has more than ${s.configAids.maxLinks} settings of type link`;
+  if (list.filter((o) => o.type === "help").length > s.configAids.maxHelps) return `The plugin has more than ${s.configAids.maxHelps} settings of type help`;
   const valued = list.filter((o) => s.types[o.type].hasValue !== false).length;
   if (valued > s.max) return `The plugin asks for more than ${s.max} settings`;
   if (list.length - valued > ui.maxItems) return `The plugin has more than ${ui.maxItems} sections, statuses or actions`;
   return null;
+}
+
+/** A `link` setting's address as PluginSettings.linkUrlOf: https with a host, no user info (not even an empty one), at most linkUrlMaxChars. */
+export function isLinkUrl(raw) {
+  if (typeof raw !== "string") return false;
+  const t = raw.trim();
+  if (!t || t.length > contract.settings.configAids.linkUrlMaxChars || !/^https:\/\//i.test(t) || t.includes("\\")) return false;
+  const authority = t.slice("https://".length).split(/[/?#]/)[0];
+  if (authority.includes("@")) return false;
+  let u;
+  try { u = new URL(t); } catch { return false; }
+  return u.protocol === "https:" && !!u.hostname && !u.username && !u.password;
 }
 
 /** A server a person may type (spec §1.4): http(s), not loopback, link-local, unspecified or localhost. */
@@ -531,6 +638,34 @@ export function isUserServer(value) {
   if (/^127\./.test(h) || /^169\.254\./.test(h) || h === "0.0.0.0" || h === "::1" || h === "::" || /^fe[89ab][0-9a-f]:/i.test(h)) return false;
   if (/^::ffff:(127\.|169\.254\.|0\.0\.0\.0)/i.test(h) || /^::ffff:7f/i.test(h)) return false;
   return true;
+}
+
+/**
+ * The app's PluginPanelOutput.qrUrl (the player panel's qr, and a web address in a settings `qr`): https only, at most maxQrUrlChars, on a public host with a dot or a public IPv4 address (never the device or the home
+ * network: a single-label name such as `router` or `nas` is a home network's).
+ */
+export function qrUrl(raw) {
+  const v = typeof raw === "string" ? raw.trim() : null;
+  if (v === null || v.length > contract.output.panel.maxQrUrlChars || !v.startsWith("https://")) return null;
+  // OkHttp keeps the host as written ("010.1.1.1" or "0x7f.1" are names to it, not IPv4 like WHATWG's URL reads them).
+  let parsed;
+  try { parsed = new URL(v); } catch { return null; }
+  if (!parsed.hostname) return null;
+  const written = /^https:\/\/(?:[^@/?#]*@)?(\[[^\]]*\]|[^:/?#]*)/.exec(v);
+  // OkHttp percent-decodes the host ("127.0.0.%31", "%6cocalhost"): judge what it would connect to; a bad escape is no URL.
+  let host;
+  try { host = decodeURIComponent(written ? written[1] : parsed.hostname).toLowerCase(); } catch { return null; }
+  if (!host) return null;
+  if (isPublicIpv4Literal(host)) return v;
+  return host.replace(/\.+$/, "").includes(".") && !hostRulesLocal(host) ? v : null;
+}
+
+/** HostRules.isLocalAddress. */
+function hostRulesLocal(host) {
+  const h = host.toLowerCase().replace(/\.+$/, "");
+  if (h === "" || h.includes(":") || h.includes("[")) return true;
+  if (h === "localhost" || contract.hostRules.privateSuffixes.some((s) => h.endsWith(s))) return true;
+  return /^\d+$/.test(h.split(".").pop());
 }
 
 // ---------- output: what the app keeps and drops ----------
@@ -1804,12 +1939,75 @@ function clearSettingsOf(raw, settings, max, drop) {
 
 /**
  * What the app keeps of a settings-form export's answer (apiVersion 6), as PluginSettingsUi reads it:
- * `settingsStatus` -> { [statusKey]: text }, `action` -> { message, refresh, clearSettings }, `validateSettings` ->
+ * `settingsStatus` -> { [statusKey]: text }, `action` -> { message, refresh, clearSettings, link?, setSettings? }, `validateSettings` ->
  * { accepted: true } or { accepted: false, fieldErrors, general }. Garbage is dropped, never thrown,
  * except where the app refuses to save (validateSettings answering something that is not null, a text
  * or an object). `scrub` (the app's secret scrubbing) runs on each kept text before it is clipped.
  */
-export function checkSettingsOutput(fn, value, manifest, scrub = (t) => t, drop = () => {}) {
+/**
+ * The app's PluginSettingsUi.qrText: a settings `qr`'s text (apiVersion 13), or null. A string of 1 to
+ * contract.qr.settingsQr.maxChars characters once trimmed, no control character; an http(s) address only by the panel
+ * qr's rule (qrUrl); a text the secret scrub would change is dropped whole.
+ */
+export function settingsQrText(raw, scrub = (t) => t) {
+  if (typeof raw !== "string") return null;
+  const v = raw.trim();
+  // Kotlin's Char.isISOControl: U+0000..U+001F and U+007F..U+009F.
+  if (!v || v.length > contract.qr.settingsQr.maxChars || /[\u0000-\u001f\u007f-\u009f]/.test(v)) return null;
+  const lower = v.toLowerCase();
+  if ((lower.startsWith("http:") || lower.startsWith("https:")) && qrUrl(v) === null) return null;
+  return scrub(v) === v ? v : null;
+}
+
+/**
+ * An action answer's `link` (additive action.link), as PluginSettingsUi.linkOf: null when Kino cannot use it, with one drop
+ * line. Only ANOTHER declared action than `actionKey` (the one that answered) may confirm it; the candidate is never clipped.
+ */
+function linkOf(raw, settings, actionKey, scrub, drop) {
+  const isObj = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+  if (!isObj(raw)) { drop("action answered a link that is not an object; it was ignored"); return null; }
+  // Never the action that answered, and never one with its own confirm question (a destructive action passed off as "Is this you?").
+  const targets = new Set(settings.filter((s) => s.type === "action" && s.key !== actionKey && !s.confirm && !s.confirmEn).map((s) => s.key));
+  if (typeof raw.confirm !== "string" || !targets.has(raw.confirm)) { drop("action answered a link whose confirm is not another declared action; it was ignored"); return null; }
+  const max = contract.settings.ui.link.candidateMaxChars;
+  // As the app refuses them: control characters, invisible formatting (bidi overrides, zero-width), line/paragraph separators,
+  // any space but the ASCII one, and the fillers that draw nothing (Hangul U+115F, U+1160, U+3164, U+FFA0; blank Braille U+2800).
+  const unsafe = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\u115F\u1160\u3164\uFFA0\u2800]|(?! )\p{Zs}/u;
+  const collapse = (t) => t.replace(/ {2,}/g, " ");
+  const c = typeof raw.candidate === "string" ? collapse(raw.candidate.trim()) : "";
+  const shown = c && c.length <= max && !unsafe.test(c) ? collapse(scrub(c).trim()) : "";
+  if (!shown || shown.length > max || unsafe.test(shown)) { drop("action answered a link with an unusable candidate; it was ignored"); return null; }
+  return { candidate: shown, confirm: raw.confirm };
+}
+
+/**
+ * An action answer's `setSettings` (additive action.setSettings), as PluginSettingsUi.setValues: the kept values, or null when
+ * Kino refuses the whole field (one drop line). Only the plugin's own text/select settings (never a url); a value the scrub would change
+ * holds a secret and is refused.
+ */
+function setSettingsOf(raw, settings, cleared, scrub, drop) {
+  const isObj = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+  const rule = contract.settings.ui.setSettings;
+  if (!isObj(raw)) { drop("action answered setSettings that is not an object; nothing was set"); return null; }
+  const keys = Object.keys(raw);
+  if (keys.length > rule.maxEntries) { drop(`action answered more than ${rule.maxEntries} setSettings; nothing was set`); return null; }
+  const out = {};
+  for (const k of keys) {
+    // rule.types is text and select: never a url (its value would become a server the plugin may reach).
+    const s = settings.find((x) => x.key === k && rule.types.includes(x.type) && x.type !== "url");
+    const v = typeof raw[k] === "string" ? raw[k].trim() : null;
+    const type = s && contract.settings.types[s.type];
+    const fits = s && v !== null && !cleared.includes(k) && !(s.required === true && !v) &&
+      (s.type === "select" ? (s.options || []).some((o) => o.value === v)
+        : v.length <= type.maxChars && (s.type !== "url" || !v || isUserServer(v))) &&
+      scrub(v) === v;
+    if (!fits) { drop("action answered setSettings Kino cannot apply; nothing was set"); return null; }
+    out[k] = v;
+  }
+  return out;
+}
+
+export function checkSettingsOutput(fn, value, manifest, scrub = (t) => t, drop = () => {}, actionKey = null) {
   const ui = contract.settings.ui;
   const clip = (t, max) => (t.length <= max ? t : t.slice(0, max - 1) + "…");
   const text = (v, max) => {
@@ -1825,14 +2023,25 @@ export function checkSettingsOutput(fn, value, manifest, scrub = (t) => t, drop 
       const t = isObj(value) ? text(value[s.key], ui.statusMaxChars) : null;
       if (t) out[s.key] = t;
     }
+    // apiVersion 13: a qr setting's text, kept whole or not at all (PluginSettingsUi.qrText).
+    for (const s of settings.filter((x) => x.type === "qr")) {
+      const raw = isObj(value) ? value[s.key] : undefined;
+      const t = settingsQrText(raw, scrub);
+      if (t !== null) out[s.key] = t;
+      else if (raw !== undefined && raw !== null) drop(`settingsStatus answered a qr text Kino does not draw ("${s.key}")`);
+    }
     return out;
   }
   if (fn === "action") {
-    return {
+    const out = {
       message: isObj(value) ? text(value.message, ui.messageMaxChars) : null,
       refresh: isObj(value) && value.refresh === true,
       clearSettings: isObj(value) ? clearSettingsOf(value.clearSettings, settings, ui.clearSettings.maxEntries, drop) : [],
     };
+    // Only when the answer carried one, so an answer without it keeps its shape: null means Kino refuses it (generic error).
+    if (isObj(value) && value.link !== undefined && value.link !== null) out.link = linkOf(value.link, settings, actionKey, scrub, drop);
+    if (isObj(value) && value.setSettings !== undefined && value.setSettings !== null) out.setSettings = setSettingsOf(value.setSettings, settings, out.clearSettings, scrub, drop);
+    return out;
   }
   if (value === null || value === undefined) return { accepted: true };
   if (typeof value === "string") {
@@ -1858,6 +2067,44 @@ export function checkSettingsOutput(fn, value, manifest, scrub = (t) => t, drop 
  * `liveChannel`: the `resolve` answer is for a live channel's ref (the app knows; the kit is told),
  * so `liveStreamHosts: "any"` applies to its stream URL.
  */
+/**
+ * The caps of a syncProvider's syncPull/syncPush call (contract.fetch.syncCall): ceil(sync.maxBlobBytes * 4/3) +
+ * envelopeChars for each kino.fetch request and response body and for the call's answer. Null for any other plugin.
+ */
+export function syncCallCap(manifest) {
+  if (!manifest || !Array.isArray(manifest.capabilities) || !manifest.capabilities.includes("syncProvider")) return null;
+  const max = contract.manifest.sync.maxBlobBytes;
+  const declared = Number(manifest.sync?.maxBlobBytes ?? max);
+  return Math.ceil(Math.min(declared, max) * 4 / 3) + contract.fetch.syncCall.envelopeChars;
+}
+
+/**
+ * What Kino keeps of a sync export's answer: syncPull `{ blob, version }` or null, syncPush `{ version }`, syncStatus
+ * `{ ready, message? }`. The answer of syncPull/syncPush may reach [syncCallCap] characters as JSON; syncStatus keeps the
+ * usual 2,000,000. Throws what the app would refuse.
+ */
+export function checkSyncAnswer(fn, value, manifest) {
+  const json = JSON.stringify(value === undefined ? null : value);
+  const cap = contract.fetch.syncCall.functions.includes(fn) ? syncCallCap(manifest) ?? o().maxResultChars : o().maxResultChars;
+  if (json.length > cap) throw new Error(`plugin answer too large (over ${cap} characters)`);
+  const v = JSON.parse(json);
+  const blobOk = (b) => typeof b === "string" && /^[A-Za-z0-9+/]*={0,2}$/.test(b) && b.length % 4 === 0;
+  if (fn === "syncPull") {
+    if (v === null) return null;
+    if (!v || typeof v.version !== "string" || !v.version || !blobOk(v.blob)) throw new Error("syncPull must answer null or { blob: <base64>, version: <string> }");
+    const bytes = (v.blob.length / 4) * 3 - (v.blob.endsWith("==") ? 2 : v.blob.endsWith("=") ? 1 : 0);
+    const max = Math.min(Number(manifest.sync?.maxBlobBytes ?? contract.manifest.sync.maxBlobBytes), contract.manifest.sync.maxBlobBytes);
+    if (bytes > max) throw new Error(`pull blob is ${bytes} bytes, over the ${max} cap`);
+    return { blob: v.blob, version: v.version };
+  }
+  if (fn === "syncPush") {
+    if (!v || typeof v.version !== "string" || !v.version) throw new Error("syncPush must answer { version: <string> }");
+    return { version: v.version };
+  }
+  if (fn === "syncStatus") return { ready: !(v && v.ready === false), message: v && typeof v.message === "string" ? v.message : null };
+  throw new Error(`not a sync export: ${fn}`);
+}
+
 export function checkOutput(fn, value, manifest, servers = [], { liveChannel = false, migrateInput = null, segmentsQuery = null } = {}) {
   const drops = [];
   const drop = (m) => { drops.push(m); };

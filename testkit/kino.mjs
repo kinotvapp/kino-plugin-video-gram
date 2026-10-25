@@ -7,7 +7,7 @@ export const TEST_MANIFEST = Object.freeze({
   id: "telegram-library-test",
   name: "Telegram library (tests)",
   version: "0.0.0",
-  apiVersion: 12,
+  apiVersion: 13,
   entry: "plugin.js",
   hosts: ["*.web.telegram.org"],
   capabilities: ["home", "resolve", "socket", "byteSource"],

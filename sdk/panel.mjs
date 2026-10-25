@@ -3,7 +3,7 @@
 // PanelIconFile) and of the manifest's `settingsLayout`. Kino's own Kotlin is authoritative: every limit and every log
 // line below is the app's, so `· dropped: <reason>` here is the line the app logs. Nothing throws on a bad answer:
 // an invalid element is dropped with a reason, a panel that is not an object is null.
-import { contract, imageVerdict, isPublicIpv4Literal, javaDouble, skipOf } from "./contract.mjs";
+import { contract, imageVerdict, javaDouble, qrUrl, skipOf } from "./contract.mjs";
 import { resolvePalette } from "./palette.mjs";
 import { shownSentence } from "./kino-shim.mjs";
 
@@ -336,34 +336,6 @@ function optionsOf(arr, lang) {
     out.push({ value: o.value, label });
   }
   return out;
-}
-
-/**
- * https only, at most maxQrUrlChars, on a public host with a dot or a public IPv4 address (never the device or the home
- * network: a single-label name such as `router` or `nas` is a home network's).
- */
-function qrUrl(raw) {
-  const v = typeof raw === "string" ? raw.trim() : null;
-  if (v === null || v.length > PANEL.maxQrUrlChars || !v.startsWith("https://")) return null;
-  // OkHttp keeps the host as written ("010.1.1.1" or "0x7f.1" are names to it, not IPv4 like WHATWG's URL reads them).
-  let parsed;
-  try { parsed = new URL(v); } catch { return null; }
-  if (!parsed.hostname) return null;
-  const written = /^https:\/\/(?:[^@/?#]*@)?(\[[^\]]*\]|[^:/?#]*)/.exec(v);
-  // OkHttp percent-decodes the host ("127.0.0.%31", "%6cocalhost"): judge what it would connect to; a bad escape is no URL.
-  let host;
-  try { host = decodeURIComponent(written ? written[1] : parsed.hostname).toLowerCase(); } catch { return null; }
-  if (!host) return null;
-  if (isPublicIpv4Literal(host)) return v;
-  return host.replace(/\.+$/, "").includes(".") && !isLocalAddress(host) ? v : null;
-}
-
-/** HostRules.isLocalAddress. */
-function isLocalAddress(host) {
-  const h = host.toLowerCase().replace(/\.+$/, "");
-  if (h === "" || h.includes(":") || h.includes("[")) return true;
-  if (h === "localhost" || contract.hostRules.privateSuffixes.some((s) => h.endsWith(s))) return true;
-  return /^\d+$/.test(h.split(".").pop());
 }
 
 // ---------- the answer of panelAction / playerEvent (PluginPanelOutput.answer) ----------

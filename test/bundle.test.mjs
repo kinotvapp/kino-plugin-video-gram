@@ -49,7 +49,7 @@ test("inside the plugin sandbox: key exchange, bot login, state reuse and chunks
     const { plugin, sandboxed } = await loadPlugin(file, sandboxKino, { console: { log() {}, info() {}, warn() {}, error() {} } });
     assert.equal(sandboxed, true);
     const store = memoryStore();
-    const c = new plugin.TelegramClient({ apiId: 1, publicKeys: fakeRsa().publicKeys, timeoutMs: 5000, store });
+    const c = plugin.createClient({ apiId: 1, publicKeys: fakeRsa().publicKeys, timeoutMs: 5000, store });
     await c.connect(2);
     assert.equal((await c.botLogin({ apiHash: "h", botToken: "1:t" })).userId, 777001n);
     const chunk = await c.getFile({ ...doc, dcId: 2 }, 0, 1048576);
@@ -57,14 +57,14 @@ test("inside the plugin sandbox: key exchange, bot login, state reuse and chunks
     assert.equal(plugin.toBase64(chunk), data.subarray(0, 1048576).toString("base64"));
     const state = JSON.parse(JSON.stringify(c.exportState()));
     await c.close();
-    const c2 = new plugin.TelegramClient({ apiId: 1, publicKeys: fakeRsa().publicKeys, store });
+    const c2 = plugin.createClient({ apiId: 1, publicKeys: fakeRsa().publicKeys, store });
     await c2.connect(2, state);
     const tail = await c2.getFile({ ...doc, dcId: 2 }, 1048576, 1048576);
     assert.equal(Buffer.from(tail).toString("hex"), data.subarray(1048576).toString("hex"));
     assert.equal(tg.dc(2).stats.keyExchanges, 1);
     assert.equal(tg.dc(2).stats.botLogins, 1);
     assert.equal(JSON.parse(store.get("mtproto.botLogins")).length, 1, "the login spent one budget slot");
-    assert.throws(() => new plugin.TelegramClient({ apiId: 1 }), /store/);
+    assert.throws(() => plugin.createClient({ apiId: 1 }), /store/);
     await c2.close();
   } finally {
     tg.restore();
@@ -86,7 +86,7 @@ test("inside the plugin sandbox: the discovery finds the videos of a channel thr
     world.post(1987654321n, { doc: world.doc({ mime: "application/pdf", size: 10, fileName: "a.pdf" }) });
     const { plugin } = await loadPlugin(file, sandboxKino, { console: { log() {}, info() {}, warn() {}, error() {} } });
     const store = memoryStore();
-    const c = new plugin.TelegramClient({ apiId: 1, publicKeys: fakeRsa().publicKeys, timeoutMs: 5000, store });
+    const c = plugin.createClient({ apiId: 1, publicKeys: fakeRsa().publicKeys, timeoutMs: 5000, store });
     await c.connect(2);
     await c.botLogin({ apiHash: "h", botToken: "1:t" });
     const d = plugin.createDiscovery({ client: c, store });

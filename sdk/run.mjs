@@ -53,6 +53,10 @@
 //                                   token), under Kino's limit for its key; also "tmdbKey" in sdk/config.json. Without one:
 //                                   no_tmdb_key, as a Kino build without a key of its own and a person without one gets
 //   KINO_TMDB_FIXTURE=<file.json>   kino.tmdb answers offline from it ({ "/movie/603?language=es-MX": {...}, "/genre/movie/list": {...} })
+//   KINO_NUVIO_FIXTURE=<file.json>  kino.nuvio (Kino 0.9.71, apiVersion 11, capability "nuvio") answers from it: the Nuvio repositories the
+//                                   manifest names, each with the scrapers it offers and what each answers for a title
+//                                   ({ "owner/repo": { "available": [...], "streams": { "<scraper id>": { "movie:603": {...} } } } });
+//                                   without it kino.nuvio answers `unavailable`: the kit has no scrapers, only the app runs them
 //   (samples: docs/plugins/fixtures/kino-services/ in Kino's repository)
 // Options (before the plugin path):
 //   --config key=value     a setting's value (repeatable); also read from sdk/config.json
@@ -96,7 +100,7 @@ const USAGE = "usage: node sdk/run.mjs [--config k=v] [--record f | --replay f] 
   + "       node sdk/run.mjs [--config k=v] [--raw] <plugin folder> meta <ttID | tmdb:ID | kitsu:ID | mal:ID | anilist:ID | JSON> [movie|series] [more ids] [lang=xx] [id=<source id>]\n"
   + "       node sdk/run.mjs [--context '<json>'] <plugin folder> <panel <ref> [tab] | panelAction <ref> <key> <press|change|submit|tab|open> ['<value json>'] ['<values json>'] | playerEvent <ref> <type> ['<detail json>']>\n"
   + "       node sdk/run.mjs live playlist <url|file> [--epg <url|file>]\n"
-  + "       env: KINO_META_FIXTURE=<json> (kino.meta), KINO_TMDB_KEY=<your TMDB key> or KINO_TMDB_FIXTURE=<json> (kino.tmdb)";
+  + "       env: KINO_META_FIXTURE=<json> (kino.meta), KINO_TMDB_KEY=<your TMDB key> or KINO_TMDB_FIXTURE=<json> (kino.tmdb), KINO_NUVIO_FIXTURE=<json> (kino.nuvio)";
 const here = dirname(fileURLToPath(import.meta.url));
 
 const stderr = console.error.bind(console);
@@ -314,7 +318,7 @@ async function main() {
     saveTape();
     if (SETTINGS_FUNCTIONS.includes(fn) && !opts.raw) {
       // What the app keeps of the answer (status lines, the action's line, the save's verdict).
-      process.stdout.write(JSON.stringify(checkSettingsOutput(fn, out, manifest, undefined, (d) => stderr(`[dropped by Kino] ${d}`)), null, 2) + "\n");
+      process.stdout.write(JSON.stringify(checkSettingsOutput(fn, out, manifest, undefined, (d) => stderr(`[dropped by Kino] ${d}`), fn === "action" ? rest[0] : null), null, 2) + "\n");
       return 0;
     }
     // A scoped search's null: "I can't search inside this page", and Kino filters the page's titles itself.
