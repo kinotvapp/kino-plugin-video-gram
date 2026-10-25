@@ -25,7 +25,9 @@ export class Session {
    * offset in place, so whoever owns `state` can persist them. `onUpdate(body)` gets every message that is not an answer
    * to a call (updates and other constructors this layer does not know).
    */
-  constructor(transport, state, { now = () => Date.now(), timeoutMs = 20000, onUpdate = null, log = () => {} } = {}) {
+  constructor(transport, state, { now = () => Date.now(), timeoutMs = 20000, onUpdate = null, log = () => {}, abandonedMs = ABANDONED_MS } = {}) {
+    this.abandonedMs = abandonedMs;
+    this.maxInflight = 0;
     if (!state.authKey || state.authKey.length !== 256) throw mtError("invalid_request", "auth key must be 256 bytes");
     this.t = transport;
     this.state = state;
@@ -161,6 +163,7 @@ export class Session {
     entry.id = await this.send(body);
     if (trace && !trace.sentAt) trace.sentAt = Date.now();
     this.waiting.set(entry.id, entry);
+    this.maxInflight = Math.max(this.maxInflight, this.inflight());
     return entry;
   }
 
@@ -173,7 +176,7 @@ export class Session {
 
   /** Requests sent and not answered yet, those given up included (their answers are still on the way). */
   inflight() {
-    const old = this.now() - ABANDONED_MS;
+    const old = this.now() - this.abandonedMs;
     for (const [id, at] of this.abandoned) if (at < old) this.abandoned.delete(id); // lost for good
     return this.waiting.size + this.abandoned.size;
   }
@@ -217,7 +220,32 @@ export class Session {
       }
     }
     if (entry.error) throw entry.error;
-    return entry.hex ? entry.result : fromHex(entry.result);
+    // The result goes to the caller: the entry lets go of it. A hex result stays counted until the caller drops it.
+    const result = entry.result;
+    entry.result = null;
+    if (entry.hex) return result;
+    big.release(result.length);
+    return fromHex(result);
+  }
+
+  /**
+   * Makes room for one more request: pumps answers until fewer than `max` requests are in flight, until `until`.
+   * Answers false when the room did not come in time (requests that will not come back): the caller then drops this
+   * connection, which is the only way to take them off the wire.
+   */
+  async drainBelow(max, until) {
+    while (this.inflight() >= max) {
+      if (this.now() >= until) return false;
+      try {
+        await this.pumpOnce(until);
+      } catch (e) {
+        if (e && e.code === "timeout" && !this.broken) continue;
+        this.broken = true;
+        for (const w of [...this.waiting.values()]) this.finish(w, null, e);
+        throw e;
+      }
+    }
+    return true;
   }
 
   /** One transport packet: every message in it goes to the request it answers (or to onUpdate). */
@@ -246,7 +274,10 @@ export class Session {
       }
       if (ctor === CTOR.gzipPacked) {
         const tg = trace ? Date.now() : 0;
-        queue.unshift({ id: m.id, seqno: 0, hex: gunzipHex(hexBytesAt(m.hex, 4).hex) });
+        const unpacked = gunzipHex(hexBytesAt(m.hex, 4).hex);
+        big.hold(unpacked.length);
+        big.release(m.hex.length);
+        queue.unshift({ id: m.id, seqno: 0, hex: unpacked });
         if (trace) trace.gunzip += Date.now() - tg;
         continue;
       }
@@ -265,7 +296,10 @@ export class Session {
         big.release(m.hex.length);
         if (result.length >= 8 && hexU32(result, 0) === CTOR.gzipPacked) {
           const tg = trace ? Date.now() : 0;
+          const packed = result.length;
           result = gunzipHex(hexBytesAt(result, 4).hex);
+          big.hold(result.length);
+          big.release(packed);
           if (trace) trace.gunzip += Date.now() - tg;
         }
         if (result.length >= 8 && hexU32(result, 0) === CTOR.rpcError) { big.release(result.length); this.finish(entry, null, fromRpcError(parseRpcError(new Reader(fromHex(result))))); }
@@ -274,6 +308,7 @@ export class Session {
       }
       // Everything else is small: read it as bytes.
       const mBody = fromHex(m.hex);
+      big.release(m.hex.length);
       const r = new Reader(mBody);
       r.int();
       switch (ctor) {

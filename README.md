@@ -36,6 +36,7 @@ Qué esperar:
   sus videos salen del índice; al activarlo de nuevo, se vuelve a leer desde el principio.
 - **Videos nuevos: toca *Actualizar ahora*.** Es la forma segura de traer lo último que publicaste. Kino también
   revisa tus canales al abrir Inicio, como mucho cada 5 minutos, pero Kino guarda las filas de Inicio varias horas.
+- **Lectura anticipada.** Kino pide a Telegram los siguientes trozos del video mientras ves uno. Si el video guarda su índice al final y ese índice es grande (más de 1 MiB), o si saltas a otro punto, esa lectura anticipada se descarta y se vuelve a pedir lo que haga falta.
 - **Buscar** funciona sin internet, sobre el índice de este aparato, sin importar tildes ni mayúsculas.
 - **Límites.** Un bot solo ve lo que se publicó en canales donde es administrador. Telegram limita los inicios de
   sesión de un bot: Kino inicia sesión una sola vez por aparato y como mucho 3 veces por hora; si Telegram pide
@@ -68,6 +69,7 @@ What to expect:
   it on again reads it from the start.
 - **New videos: tap *Refresh now*.** It is the reliable way to bring in what you just posted. Kino also checks your
   channels when Home opens, at most every 5 minutes, but Kino keeps Home rows for hours.
+- **Read-ahead.** Kino asks Telegram for the next pieces of the video while you watch one. When the video keeps its index at the end and that index is big (over 1 MiB), or when you jump elsewhere, that read-ahead is dropped and asked again as needed.
 - **Search** works offline, over this device's index, ignoring accents and case.
 - **Limits.** A bot only sees what was posted in channels it administers. Telegram limits bot logins: Kino logs in once
   per device and at most 3 times an hour; when Telegram asks to wait, Kino tells you for how many minutes. HLS

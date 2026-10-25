@@ -1,6 +1,6 @@
 // The high-level client: one auth key per DC, a bot login once per home DC, DC migration, chunked file downloads and
 // a JSON-safe state the plugin shell stores encrypted. Calls run one at a time (Kino calls `read` one at a time too).
-import { toBase64, fromBase64, toHex } from "./bytes.js";
+import { toBase64, fromBase64, toHex, fromHex } from "./bytes.js";
 import { sha1 } from "./crypto.js";
 import { Transport } from "./transport.js";
 import { createAuthKey } from "./authkey.js";
@@ -23,7 +23,8 @@ const MIN_LEFT_MS = 1500;   // a request never starts with less time than this b
 const MARGIN_MS = 500;      // what a request leaves its caller after its own wait
 const POLL_MS = 250;        // how often a call waiting for its turn checks its deadline
 const MAX_AHEAD = 4;        // file chunks requested ahead and kept (answered or still in flight), oldest dropped first
-const MAX_IN_FLIGHT = 3;    // chunk requests on one connection at once (the asked one included)
+const MAX_IN_FLIGHT = 3;    // requests on one connection at once (the asked chunk included), on every path
+const ROOM_WAIT_MS = 2500;  // the longest a chunk request waits for room before taking the oldest in flight as lost
 const AHEAD_WAIT_MS = 8000; // the longest a read waits for a chunk requested ahead before asking for it again
 
 /**
@@ -85,7 +86,9 @@ export class TelegramClient {
    * burst of bot logins from earning a FLOOD_WAIT of almost an hour; only a test may pass `store: false` to go without.
    * `wsOpen`/`urlFor` are for tests and other transports.
    */
-  constructor({ apiId, publicKeys = TELEGRAM_PUBLIC_KEYS, device = {}, store, timeoutMs = 20000, now = () => Date.now(), log = () => {}, onUpdate = null, wsOpen, urlFor } = {}) {
+  constructor({ apiId, publicKeys = TELEGRAM_PUBLIC_KEYS, device = {}, store, timeoutMs = 20000, now = () => Date.now(), log = () => {}, onUpdate = null, wsOpen, urlFor, abandonedMs } = {}) {
+    this.abandonedMs = abandonedMs;
+    this.maxInflight = 0; // the most requests ever in flight on one connection at a send (tests)
     if (store === false) store = null;
     else if (!store || typeof store.get !== "function" || typeof store.set !== "function") {
       throw mtError("invalid_request", "TelegramClient needs `store` (kino.storage) for the bot login budget; only tests may pass store: false");
@@ -206,7 +209,7 @@ export class TelegramClient {
     }
     let session;
     try {
-      session = new Session(transport, st, { now: this.now, timeoutMs: this.timeoutMs, onUpdate: this.onUpdate, log: this.log });
+      session = new Session(transport, st, { now: this.now, timeoutMs: this.timeoutMs, onUpdate: this.onUpdate, log: this.log, ...(this.abandonedMs !== undefined ? { abandonedMs: this.abandonedMs } : {}) });
     } catch (e) {
       await transport.close();
       throw e;
@@ -228,13 +231,22 @@ export class TelegramClient {
    * A closed socket is retried once on a new connection unless `retry` is false (the bot login retries by itself, so
    * that every attempt spends the budget). `hex` answers the result as a hex string (Session.call).
    */
-  async invoke(dc, body, { retry = true, hex = false, deadline, trace, after } = {}) {
+  async invoke(dc, body, { retry = true, hex = false, deadline, trace, after, before } = {}) {
     const c = await this.conn(dc, deadline);
+    // `before` makes room on the connection first (a chunk request waits for fewer than 3 in flight). When the room does
+    // not come (requests that never answer), the connection goes: that takes them off the wire, and a new one (stored
+    // key, no key exchange, no login) starts with nothing in flight.
+    if (before && (await before(c)) === false) {
+      this.log("no room on the connection: reconnecting");
+      await this.drop(dc);
+      return this.invoke(dc, body, { retry, hex, deadline, trace, after });
+    }
     const wrapped = c.inited ? body : invokeWithLayer(LAYER, initConnection({ apiId: this.apiId, ...this.device }, body));
     const wait = this.budget(deadline);
     try {
       const started = this.now();
       const entry = await c.session.request(wrapped, { hex, trace });
+      this.maxInflight = Math.max(this.maxInflight, c.session.maxInflight);
       // `after` sends more requests right behind this one, on a connection already initialised: never a failure of its own.
       if (after && c.inited) { try { await after(c); } catch (e) { this.log("request ahead not sent (" + describeError(e) + ")"); } }
       const res = await c.session.settle(entry, started + wait.ms);
@@ -245,7 +257,7 @@ export class TelegramClient {
       const e = thrown && typeof thrown === "object" ? thrown : { code: undefined, thrown };
       if (e.code === "closed" && retry) {
         await this.drop(dc);
-        return this.invoke(dc, body, { retry: false, hex, deadline, trace });
+        return this.invoke(dc, body, { retry: false, hex, deadline, trace, before });
       }
       // A connection in an unknown state is never used again: the next call reconnects with the stored key.
       if (e.code === "timeout" || e.code === "closed" || e.code === "protocol" || !isServerAnswer(e) || c.session.broken) await this.drop(dc);
@@ -369,6 +381,7 @@ export class TelegramClient {
           if (c.session.inflight() >= MAX_IN_FLIGHT) break;
           try { checkRange(a.offset, a.limit); } catch { continue; }
           const entry = await c.session.request(uploadGetFile(location, a.offset, a.limit), { hex: true });
+          this.maxInflight = Math.max(this.maxInflight, c.session.maxInflight);
           this.ahead.set(k, { dc, session: c.session, entry, limit: a.limit });
           if (trace) trace.ahead++;
           while (this.ahead.size > MAX_AHEAD) {
@@ -377,6 +390,12 @@ export class TelegramClient {
           }
         }
       };
+      // A seek first: the chunks read ahead for this file that this read no longer wants are given up (their answers,
+      // when they come, are dropped without being kept); this read's own chunk, if read ahead, is kept.
+      if (abandon) {
+        const wanted = new Set([keyOf(offset), ...ahead.map((a) => keyOf(a.offset))]);
+        for (const [k, a] of [...this.ahead]) if (k.startsWith(doc) && !wanted.has(k)) dropAhead(k, a);
+      }
       // A chunk requested ahead by an earlier read: its answer may already be here (or on its way).
       const pre = this.ahead.get(keyOf(offset));
       if (pre && pre.limit >= limit) {
@@ -385,36 +404,34 @@ export class TelegramClient {
         if (c && c.session === pre.session && !c.transport.closed) {
           try {
             const until = Math.min(this.now() + AHEAD_WAIT_MS, deadline === undefined ? Infinity : deadline - MIN_LEFT_MS);
-            const answer = await c.session.settle(pre.entry, until);
-            const file = hex ? parseUploadFileHex(answer) : parseUploadFile(answer);
-            big.release(answer.length);
+            let answer = await c.session.settle(pre.entry, until); // read-aheads are always asked as hex
+            const file = parseUploadFileHex(answer);
+            big.release(answer.length); // its last use: what is returned below is a slice of it
+            answer = null;
             if (file.ctor === CTOR.uploadFile) {
               if (trace) trace.pipe = "hit";
               if (ahead.length) { try { await sendAhead(c); } catch (e) { this.log("request ahead not sent (" + describeError(e) + ")"); } } // keep the pipe full
-              if (hex) return file.bytesHex.length > limit * 2 ? file.bytesHex.slice(0, limit * 2) : file.bytesHex;
-              return file.bytes.length > limit ? file.bytes.subarray(0, limit) : file.bytes;
+              const chunk = file.bytesHex.length > limit * 2 ? file.bytesHex.slice(0, limit * 2) : file.bytesHex;
+              return hex ? chunk : fromHex(chunk);
             }
           } catch (e) {
             this.log("chunk read ahead not usable (" + describeError(e) + "): asking again");
             if (!isServerAnswer(e) || c.session.broken) await this.drop(pre.dc); // the stream is in an unknown state
           }
         } else {
-          pre.session.forget(pre.entry);
+          dropAhead(keyOf(offset), pre);
         }
       }
-      // A seek: the chunks read ahead for this file that this read no longer wants are given up (their answers, when
-      // they come, are dropped without being kept).
-      if (abandon) {
-        const wanted = new Set(ahead.map((a) => keyOf(a.offset)));
-        for (const [k, a] of [...this.ahead]) if (k.startsWith(doc) && !wanted.has(k)) dropAhead(k, a);
-      }
+      // The asked chunk goes out only with room on the wire (fewer than MAX_IN_FLIGHT in flight), never waiting long.
+      const makeRoom = (c) => c.session.drainBelow(MAX_IN_FLIGHT, Math.min(this.now() + ROOM_WAIT_MS, deadline === undefined ? Infinity : deadline - 3 * MIN_LEFT_MS));
       for (let attempt = 0; attempt < 4; attempt++) {
         try {
           await this.authorize(dc, deadline);
-          const answer = await this.invoke(dc, body, { hex, deadline, trace, after: attempt === 0 && ahead.length ? sendAhead : undefined });
+          let answer = await this.invoke(dc, body, { hex, deadline, trace, before: makeRoom, after: attempt === 0 && ahead.length ? sendAhead : undefined });
           const tp = trace ? Date.now() : 0;
           const file = hex ? parseUploadFileHex(answer) : parseUploadFile(answer);
-          if (hex) big.release(answer.length);
+          if (hex) big.release(answer.length); // its last use: the answer below is a slice of it
+          answer = null;
           if (trace) trace.parse += Date.now() - tp;
           if (file.ctor === CTOR.uploadFileCdnRedirect) throw mtError("protocol", "CDN redirects are not supported");
           if (file.ctor !== CTOR.uploadFile) throw mtError("protocol", "unexpected answer to upload.getFile");

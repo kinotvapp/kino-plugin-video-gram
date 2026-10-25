@@ -11,6 +11,7 @@ export class ServerTransport {
     this.plain = Buffer.alloc(0);
     this.dec = null;
     this.dcFromInit = null;
+    this.onClose = null; // set by the fake DC: the socket closed
   }
   onData(u8) {
     let data = Buffer.from(u8);

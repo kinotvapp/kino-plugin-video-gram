@@ -13,6 +13,7 @@ import { shellError } from "./errors.js";
 import { hexToBase64Native } from "./b64.js";
 import { newTrace, logRead, logReadFailure, logRecovery } from "./timing.js";
 import { isServerAnswer } from "../mtproto/errors.js";
+import { big } from "../mtproto/big.js";
 
 const AHEAD = 2;          // whole chunks requested right behind a read at a MiB offset (never past the end of the file)
 const SHORT_FLOOD_S = 5;     // a FLOOD_WAIT this short is waited out once inside the read (kino.sleep: 5 s at most)
@@ -85,13 +86,16 @@ async function readTimed(arg, started) {
       ? Array.from({ length: AHEAD }, (_, k) => offset + (k + 1) * CHUNK).filter((o) => o < size).map((o) => ({ offset: o, limit: CHUNK }))
       : [];
     const attempt = () => withSession(c, loadShell(c), async (live) => {
+      big.release(hex.length); // a second attempt starts over
       hex = "";
       for (const piece of list) {
         for (;;) {
           try {
             const tg = trace ? Date.now() : 0;
             if (trace) trace.tries++;
-            hex += await live.client.getFile(locOf(row.data), piece.offset, piece.limit, { hex: true, deadline, trace, ahead: refetched ? [] : ahead, abandon: !tail });
+            const got = await live.client.getFile(locOf(row.data), piece.offset, piece.limit, { hex: true, deadline, trace, ahead: refetched ? [] : ahead, abandon: !tail });
+            big.hold(got.length); // the read's own copy, until it is base64 (the client hands it over uncounted)
+            hex += got;
             if (trace) trace.getfile += Date.now() - tg;
             break;
           } catch (e) {
@@ -146,6 +150,9 @@ async function readTimed(arg, started) {
   if (hex.length < want * 2) throw shellError("unavailable", "short read: " + hex.length / 2 + " of " + want + " bytes");
   const tb = trace ? Date.now() : 0;
   const bytes = base64Of(hex.length === want * 2 ? hex : hex.slice(0, want * 2));
+  big.hold(bytes.length); big.release(bytes.length); // the answer, handed to Kino as the call returns
+  big.release(hex.length);
+  hex = "";
   if (trace) { trace.b64 = Date.now() - tb; logRead(trace, { offset, length, bytes: want }); }
   return { bytes };
 }

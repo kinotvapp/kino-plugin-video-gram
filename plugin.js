@@ -499,9 +499,12 @@ return { CODES, mtError, fromRpcError, fromTransportError, describeError, isServ
 
 // ---- src/mtproto/big.js ----
 const __mod_src_mtproto_big = (() => {
-// An explicit accounting of the big strings this library holds at once (hex of packets and chunks), so a test can
-// bound the peak under QuickJS's 64 MiB per-plugin cap. Counts characters of strings of at least BIG characters (hex:
-// 2 per byte). It is a model, kept in step by hand where the code takes and drops such strings; it never touches data.
+// A hand-kept MODEL of the big strings this library holds at once (hex of packets and chunks), so a test can bound the
+// peak under QuickJS's 64 MiB per-plugin cap. It is NOT the real QuickJS heap: it only knows what the code tells it
+// (hold when a big string is made or taken, release at its last use), so it catches a release missing in our code, or a
+// copy kept longer than planned, never a reference kept by mistake that nobody declared, and never the copies made
+// inside kino.crypto/kino.ws (the prelude's JSON, Kotlin). Strings handed to a caller (getFile's answer) are the
+// caller's: not counted here. Counts characters of strings of at least BIG characters (hex: 2 per byte).
 const BIG = 65536;
 const big = {
   live: 0,
@@ -1384,7 +1387,9 @@ class Session {
    * offset in place, so whoever owns `state` can persist them. `onUpdate(body)` gets every message that is not an answer
    * to a call (updates and other constructors this layer does not know).
    */
-  constructor(transport, state, { now = () => Date.now(), timeoutMs = 20000, onUpdate = null, log = () => {} } = {}) {
+  constructor(transport, state, { now = () => Date.now(), timeoutMs = 20000, onUpdate = null, log = () => {}, abandonedMs = ABANDONED_MS } = {}) {
+    this.abandonedMs = abandonedMs;
+    this.maxInflight = 0;
     if (!state.authKey || state.authKey.length !== 256) throw mtError("invalid_request", "auth key must be 256 bytes");
     this.t = transport;
     this.state = state;
@@ -1520,6 +1525,7 @@ class Session {
     entry.id = await this.send(body);
     if (trace && !trace.sentAt) trace.sentAt = Date.now();
     this.waiting.set(entry.id, entry);
+    this.maxInflight = Math.max(this.maxInflight, this.inflight());
     return entry;
   }
 
@@ -1532,7 +1538,7 @@ class Session {
 
   /** Requests sent and not answered yet, those given up included (their answers are still on the way). */
   inflight() {
-    const old = this.now() - ABANDONED_MS;
+    const old = this.now() - this.abandonedMs;
     for (const [id, at] of this.abandoned) if (at < old) this.abandoned.delete(id); // lost for good
     return this.waiting.size + this.abandoned.size;
   }
@@ -1576,7 +1582,32 @@ class Session {
       }
     }
     if (entry.error) throw entry.error;
-    return entry.hex ? entry.result : fromHex(entry.result);
+    // The result goes to the caller: the entry lets go of it. A hex result stays counted until the caller drops it.
+    const result = entry.result;
+    entry.result = null;
+    if (entry.hex) return result;
+    big.release(result.length);
+    return fromHex(result);
+  }
+
+  /**
+   * Makes room for one more request: pumps answers until fewer than `max` requests are in flight, until `until`.
+   * Answers false when the room did not come in time (requests that will not come back): the caller then drops this
+   * connection, which is the only way to take them off the wire.
+   */
+  async drainBelow(max, until) {
+    while (this.inflight() >= max) {
+      if (this.now() >= until) return false;
+      try {
+        await this.pumpOnce(until);
+      } catch (e) {
+        if (e && e.code === "timeout" && !this.broken) continue;
+        this.broken = true;
+        for (const w of [...this.waiting.values()]) this.finish(w, null, e);
+        throw e;
+      }
+    }
+    return true;
   }
 
   /** One transport packet: every message in it goes to the request it answers (or to onUpdate). */
@@ -1605,7 +1636,10 @@ class Session {
       }
       if (ctor === CTOR.gzipPacked) {
         const tg = trace ? Date.now() : 0;
-        queue.unshift({ id: m.id, seqno: 0, hex: gunzipHex(hexBytesAt(m.hex, 4).hex) });
+        const unpacked = gunzipHex(hexBytesAt(m.hex, 4).hex);
+        big.hold(unpacked.length);
+        big.release(m.hex.length);
+        queue.unshift({ id: m.id, seqno: 0, hex: unpacked });
         if (trace) trace.gunzip += Date.now() - tg;
         continue;
       }
@@ -1624,7 +1658,10 @@ class Session {
         big.release(m.hex.length);
         if (result.length >= 8 && hexU32(result, 0) === CTOR.gzipPacked) {
           const tg = trace ? Date.now() : 0;
+          const packed = result.length;
           result = gunzipHex(hexBytesAt(result, 4).hex);
+          big.hold(result.length);
+          big.release(packed);
           if (trace) trace.gunzip += Date.now() - tg;
         }
         if (result.length >= 8 && hexU32(result, 0) === CTOR.rpcError) { big.release(result.length); this.finish(entry, null, fromRpcError(parseRpcError(new Reader(fromHex(result))))); }
@@ -1633,6 +1670,7 @@ class Session {
       }
       // Everything else is small: read it as bytes.
       const mBody = fromHex(m.hex);
+      big.release(m.hex.length);
       const r = new Reader(mBody);
       r.int();
       switch (ctor) {
@@ -1745,7 +1783,7 @@ return { TELEGRAM_PUBLIC_KEYS };
 const __mod_src_mtproto_client = (() => {
 // The high-level client: one auth key per DC, a bot login once per home DC, DC migration, chunked file downloads and
 // a JSON-safe state the plugin shell stores encrypted. Calls run one at a time (Kino calls `read` one at a time too).
-const { toBase64, fromBase64, toHex } = __mod_src_mtproto_bytes;
+const { toBase64, fromBase64, toHex, fromHex } = __mod_src_mtproto_bytes;
 const { sha1 } = __mod_src_mtproto_crypto;
 const { Transport } = __mod_src_mtproto_transport;
 const { createAuthKey } = __mod_src_mtproto_authkey;
@@ -1765,7 +1803,8 @@ const MIN_LEFT_MS = 1500;   // a request never starts with less time than this b
 const MARGIN_MS = 500;      // what a request leaves its caller after its own wait
 const POLL_MS = 250;        // how often a call waiting for its turn checks its deadline
 const MAX_AHEAD = 4;        // file chunks requested ahead and kept (answered or still in flight), oldest dropped first
-const MAX_IN_FLIGHT = 3;    // chunk requests on one connection at once (the asked one included)
+const MAX_IN_FLIGHT = 3;    // requests on one connection at once (the asked chunk included), on every path
+const ROOM_WAIT_MS = 2500;  // the longest a chunk request waits for room before taking the oldest in flight as lost
 const AHEAD_WAIT_MS = 8000; // the longest a read waits for a chunk requested ahead before asking for it again
 
 /**
@@ -1827,7 +1866,9 @@ class TelegramClient {
    * burst of bot logins from earning a FLOOD_WAIT of almost an hour; only a test may pass `store: false` to go without.
    * `wsOpen`/`urlFor` are for tests and other transports.
    */
-  constructor({ apiId, publicKeys = TELEGRAM_PUBLIC_KEYS, device = {}, store, timeoutMs = 20000, now = () => Date.now(), log = () => {}, onUpdate = null, wsOpen, urlFor } = {}) {
+  constructor({ apiId, publicKeys = TELEGRAM_PUBLIC_KEYS, device = {}, store, timeoutMs = 20000, now = () => Date.now(), log = () => {}, onUpdate = null, wsOpen, urlFor, abandonedMs } = {}) {
+    this.abandonedMs = abandonedMs;
+    this.maxInflight = 0; // the most requests ever in flight on one connection at a send (tests)
     if (store === false) store = null;
     else if (!store || typeof store.get !== "function" || typeof store.set !== "function") {
       throw mtError("invalid_request", "TelegramClient needs `store` (kino.storage) for the bot login budget; only tests may pass store: false");
@@ -1948,7 +1989,7 @@ class TelegramClient {
     }
     let session;
     try {
-      session = new Session(transport, st, { now: this.now, timeoutMs: this.timeoutMs, onUpdate: this.onUpdate, log: this.log });
+      session = new Session(transport, st, { now: this.now, timeoutMs: this.timeoutMs, onUpdate: this.onUpdate, log: this.log, ...(this.abandonedMs !== undefined ? { abandonedMs: this.abandonedMs } : {}) });
     } catch (e) {
       await transport.close();
       throw e;
@@ -1970,13 +2011,22 @@ class TelegramClient {
    * A closed socket is retried once on a new connection unless `retry` is false (the bot login retries by itself, so
    * that every attempt spends the budget). `hex` answers the result as a hex string (Session.call).
    */
-  async invoke(dc, body, { retry = true, hex = false, deadline, trace, after } = {}) {
+  async invoke(dc, body, { retry = true, hex = false, deadline, trace, after, before } = {}) {
     const c = await this.conn(dc, deadline);
+    // `before` makes room on the connection first (a chunk request waits for fewer than 3 in flight). When the room does
+    // not come (requests that never answer), the connection goes: that takes them off the wire, and a new one (stored
+    // key, no key exchange, no login) starts with nothing in flight.
+    if (before && (await before(c)) === false) {
+      this.log("no room on the connection: reconnecting");
+      await this.drop(dc);
+      return this.invoke(dc, body, { retry, hex, deadline, trace, after });
+    }
     const wrapped = c.inited ? body : invokeWithLayer(LAYER, initConnection({ apiId: this.apiId, ...this.device }, body));
     const wait = this.budget(deadline);
     try {
       const started = this.now();
       const entry = await c.session.request(wrapped, { hex, trace });
+      this.maxInflight = Math.max(this.maxInflight, c.session.maxInflight);
       // `after` sends more requests right behind this one, on a connection already initialised: never a failure of its own.
       if (after && c.inited) { try { await after(c); } catch (e) { this.log("request ahead not sent (" + describeError(e) + ")"); } }
       const res = await c.session.settle(entry, started + wait.ms);
@@ -1987,7 +2037,7 @@ class TelegramClient {
       const e = thrown && typeof thrown === "object" ? thrown : { code: undefined, thrown };
       if (e.code === "closed" && retry) {
         await this.drop(dc);
-        return this.invoke(dc, body, { retry: false, hex, deadline, trace });
+        return this.invoke(dc, body, { retry: false, hex, deadline, trace, before });
       }
       // A connection in an unknown state is never used again: the next call reconnects with the stored key.
       if (e.code === "timeout" || e.code === "closed" || e.code === "protocol" || !isServerAnswer(e) || c.session.broken) await this.drop(dc);
@@ -2111,6 +2161,7 @@ class TelegramClient {
           if (c.session.inflight() >= MAX_IN_FLIGHT) break;
           try { checkRange(a.offset, a.limit); } catch { continue; }
           const entry = await c.session.request(uploadGetFile(location, a.offset, a.limit), { hex: true });
+          this.maxInflight = Math.max(this.maxInflight, c.session.maxInflight);
           this.ahead.set(k, { dc, session: c.session, entry, limit: a.limit });
           if (trace) trace.ahead++;
           while (this.ahead.size > MAX_AHEAD) {
@@ -2119,6 +2170,12 @@ class TelegramClient {
           }
         }
       };
+      // A seek first: the chunks read ahead for this file that this read no longer wants are given up (their answers,
+      // when they come, are dropped without being kept); this read's own chunk, if read ahead, is kept.
+      if (abandon) {
+        const wanted = new Set([keyOf(offset), ...ahead.map((a) => keyOf(a.offset))]);
+        for (const [k, a] of [...this.ahead]) if (k.startsWith(doc) && !wanted.has(k)) dropAhead(k, a);
+      }
       // A chunk requested ahead by an earlier read: its answer may already be here (or on its way).
       const pre = this.ahead.get(keyOf(offset));
       if (pre && pre.limit >= limit) {
@@ -2127,36 +2184,34 @@ class TelegramClient {
         if (c && c.session === pre.session && !c.transport.closed) {
           try {
             const until = Math.min(this.now() + AHEAD_WAIT_MS, deadline === undefined ? Infinity : deadline - MIN_LEFT_MS);
-            const answer = await c.session.settle(pre.entry, until);
-            const file = hex ? parseUploadFileHex(answer) : parseUploadFile(answer);
-            big.release(answer.length);
+            let answer = await c.session.settle(pre.entry, until); // read-aheads are always asked as hex
+            const file = parseUploadFileHex(answer);
+            big.release(answer.length); // its last use: what is returned below is a slice of it
+            answer = null;
             if (file.ctor === CTOR.uploadFile) {
               if (trace) trace.pipe = "hit";
               if (ahead.length) { try { await sendAhead(c); } catch (e) { this.log("request ahead not sent (" + describeError(e) + ")"); } } // keep the pipe full
-              if (hex) return file.bytesHex.length > limit * 2 ? file.bytesHex.slice(0, limit * 2) : file.bytesHex;
-              return file.bytes.length > limit ? file.bytes.subarray(0, limit) : file.bytes;
+              const chunk = file.bytesHex.length > limit * 2 ? file.bytesHex.slice(0, limit * 2) : file.bytesHex;
+              return hex ? chunk : fromHex(chunk);
             }
           } catch (e) {
             this.log("chunk read ahead not usable (" + describeError(e) + "): asking again");
             if (!isServerAnswer(e) || c.session.broken) await this.drop(pre.dc); // the stream is in an unknown state
           }
         } else {
-          pre.session.forget(pre.entry);
+          dropAhead(keyOf(offset), pre);
         }
       }
-      // A seek: the chunks read ahead for this file that this read no longer wants are given up (their answers, when
-      // they come, are dropped without being kept).
-      if (abandon) {
-        const wanted = new Set(ahead.map((a) => keyOf(a.offset)));
-        for (const [k, a] of [...this.ahead]) if (k.startsWith(doc) && !wanted.has(k)) dropAhead(k, a);
-      }
+      // The asked chunk goes out only with room on the wire (fewer than MAX_IN_FLIGHT in flight), never waiting long.
+      const makeRoom = (c) => c.session.drainBelow(MAX_IN_FLIGHT, Math.min(this.now() + ROOM_WAIT_MS, deadline === undefined ? Infinity : deadline - 3 * MIN_LEFT_MS));
       for (let attempt = 0; attempt < 4; attempt++) {
         try {
           await this.authorize(dc, deadline);
-          const answer = await this.invoke(dc, body, { hex, deadline, trace, after: attempt === 0 && ahead.length ? sendAhead : undefined });
+          let answer = await this.invoke(dc, body, { hex, deadline, trace, before: makeRoom, after: attempt === 0 && ahead.length ? sendAhead : undefined });
           const tp = trace ? Date.now() : 0;
           const file = hex ? parseUploadFileHex(answer) : parseUploadFile(answer);
-          if (hex) big.release(answer.length);
+          if (hex) big.release(answer.length); // its last use: the answer below is a slice of it
+          answer = null;
           if (trace) trace.parse += Date.now() - tp;
           if (file.ctor === CTOR.uploadFileCdnRedirect) throw mtError("protocol", "CDN redirects are not supported");
           if (file.ctor !== CTOR.uploadFile) throw mtError("protocol", "unexpected answer to upload.getFile");
@@ -3783,6 +3838,7 @@ const { shellError } = __mod_src_shell_errors;
 const { hexToBase64Native } = __mod_src_shell_b64;
 const { newTrace, logRead, logReadFailure, logRecovery } = __mod_src_shell_timing;
 const { isServerAnswer } = __mod_src_mtproto_errors;
+const { big } = __mod_src_mtproto_big;
 
 const AHEAD = 2;          // whole chunks requested right behind a read at a MiB offset (never past the end of the file)
 const SHORT_FLOOD_S = 5;     // a FLOOD_WAIT this short is waited out once inside the read (kino.sleep: 5 s at most)
@@ -3855,13 +3911,16 @@ async function readTimed(arg, started) {
       ? Array.from({ length: AHEAD }, (_, k) => offset + (k + 1) * CHUNK).filter((o) => o < size).map((o) => ({ offset: o, limit: CHUNK }))
       : [];
     const attempt = () => withSession(c, loadShell(c), async (live) => {
+      big.release(hex.length); // a second attempt starts over
       hex = "";
       for (const piece of list) {
         for (;;) {
           try {
             const tg = trace ? Date.now() : 0;
             if (trace) trace.tries++;
-            hex += await live.client.getFile(locOf(row.data), piece.offset, piece.limit, { hex: true, deadline, trace, ahead: refetched ? [] : ahead, abandon: !tail });
+            const got = await live.client.getFile(locOf(row.data), piece.offset, piece.limit, { hex: true, deadline, trace, ahead: refetched ? [] : ahead, abandon: !tail });
+            big.hold(got.length); // the read's own copy, until it is base64 (the client hands it over uncounted)
+            hex += got;
             if (trace) trace.getfile += Date.now() - tg;
             break;
           } catch (e) {
@@ -3916,6 +3975,9 @@ async function readTimed(arg, started) {
   if (hex.length < want * 2) throw shellError("unavailable", "short read: " + hex.length / 2 + " of " + want + " bytes");
   const tb = trace ? Date.now() : 0;
   const bytes = base64Of(hex.length === want * 2 ? hex : hex.slice(0, want * 2));
+  big.hold(bytes.length); big.release(bytes.length); // the answer, handed to Kino as the call returns
+  big.release(hex.length);
+  hex = "";
   if (trace) { trace.b64 = Date.now() - tb; logRead(trace, { offset, length, bytes: want }); }
   return { bytes };
 }

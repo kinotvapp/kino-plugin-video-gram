@@ -128,6 +128,9 @@ class DcConnection {
     this.dc = dc;
     this.socket = socket;
     this.transport = new ServerTransport(socket, (p) => this.onPacket(p));
+    // upload.getFile requests received and not answered yet on this connection; the most ever seen is in dc.stats.
+    this.fileInFlight = 0;
+    this.transport.onClose = () => { this.fileInFlight = 0; };
     this.dh = null;
     this.sessions = new Map(); // session id hex -> { seq }
     this.inited = false;
@@ -250,6 +253,11 @@ class DcConnection {
       out.pending.push(new Writer().int(CTOR.badServerSalt).long(msgId).int(seqno).int(48).raw(this.dc.salt).done());
       return this.flush(out);
     }
+    if (methodName(body) === "getFile") {
+      this.fileInFlight++;
+      this.dc.stats.maxFileInFlight = Math.max(this.dc.stats.maxFileInFlight || 0, this.fileInFlight);
+      out.isFile = true;
+    }
     const hookIndex = this.dc.hooks.findIndex((h) => h.method === "any" || h.method === methodName(body));
     if (hookIndex >= 0) {
       const [hook] = this.dc.hooks.splice(hookIndex, 1);
@@ -266,6 +274,8 @@ class DcConnection {
       setTimeout(() => { if (this.socket.readyState === 1) this.answer(rest, out, msgId, seqno, body, entry); }, reply.delayMs);
       return;
     }
+    // Answered from here on (a silent request stays in flight; a bundled one counts as answered when its bundle goes).
+    if (out.isFile && !(reply && reply.silent) && !(this.dc.bundleFiles && !(reply && (reply.error || reply.garbage || reply.close || reply.transportError || reply.badMsg || reply.hugeLength)))) this.fileInFlight = Math.max(0, this.fileInFlight - 1);
     {
       if (reply && reply.badMsg) {
         out.pending.push(new Writer().int(CTOR.badMsgNotification).long(msgId).int(seqno).int(reply.badMsg).done());
@@ -294,6 +304,7 @@ class DcConnection {
       this.bundle.files++;
       if (this.bundle.files >= b.count) {
         const msgs = this.bundle.msgs;
+        this.fileInFlight = Math.max(0, this.fileInFlight - this.bundle.files);
         this.bundle = null;
         if (b.pad) msgs.push(new Writer().int(0x1badf00d).raw(Buffer.alloc(b.pad)).done());
         if (b.once) this.dc.bundleFiles = null;
