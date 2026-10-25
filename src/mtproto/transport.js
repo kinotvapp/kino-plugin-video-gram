@@ -15,7 +15,9 @@ import { mtError } from "./errors.js";
 
 export const DC_HOSTS = Object.freeze({ 1: "pluto", 2: "venus", 3: "aurora", 4: "vesta", 5: "flora" });
 export const MAX_SEND_BYTES = 786000; // kino.ws frame cap
-export const MAX_PACKET_BYTES = (2 << 20) + 1024; // a 1 MiB chunk is ~1 MiB + 100 bytes; anything past 2 MiB is not MTProto
+// A 1 MiB chunk is ~1 MiB + 100 bytes; with chunks read ahead, Telegram may pack the answers of up to three requests
+// into one container. Past 4 MiB + 64 KiB it is not an answer of ours.
+export const MAX_PACKET_BYTES = (4 << 20) + 65536;
 const MASK128 = (1n << 128n) - 1n;
 const ZEROS = "00".repeat(16);
 

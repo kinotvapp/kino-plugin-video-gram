@@ -162,7 +162,9 @@ export class Session {
       try {
         await this.pumpOnce(deadline, entry.trace);
       } catch (e) {
-        if (e && e.code === "timeout") { this.forget(entry); throw e; }
+        if (e && e.code === "timeout" && !this.broken) { this.forget(entry); throw e; } // between packets: the stream is intact
+        // Anything else leaves the stream in an unknown state: this session is never used again (the client drops it).
+        this.broken = true;
         for (const w of [...this.waiting.values()]) this.finish(w, null, e);
         throw e;
       }
@@ -201,7 +203,7 @@ export class Session {
       if (ctor === CTOR.rpcResult) {
         const to = new Reader(fromHex(m.hex.slice(8, 24))).long();
         const entry = this.waiting.get(to);
-        if (!entry) continue; // a late answer to a request nobody waits for any more
+        if (!entry) { this.log("answer for an unknown request dropped"); continue; } // late, duplicated or forgotten
         let result = m.hex.slice(24);
         if (result.length >= 8 && hexU32(result, 0) === CTOR.gzipPacked) {
           const tg = trace ? Date.now() : 0;

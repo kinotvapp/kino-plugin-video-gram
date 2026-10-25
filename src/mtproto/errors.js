@@ -51,3 +51,33 @@ export function fromTransportError(status) {
   if (status === -429) return mtError("flood_wait", "transport error -429", { status, seconds: 5, transport: true });
   return mtError("protocol", "transport error " + status, { status, transport: true });
 }
+
+const scrubText = (s) => String(s).replace(/[0-9a-fA-F]{16,}/g, "<hex>").replace(/[A-Za-z0-9+/_-]{32,}={0,2}/g, "<b64>").replace(/["\\]/g, "'").replace(/\s+/g, " ").slice(0, 160);
+
+/**
+ * One line of detail for any thrown value, for the logs: a typed error as `code=<code> rpc=<RPC> seconds= dc=`, anything
+ * else as `code=- name=<constructor or typeof> message="<text>" at=<first stack frame>`. Long hex or base64 runs are cut
+ * out (no data, no keys), and nothing is ever `undefined`.
+ */
+export function describeError(e) {
+  if (e && typeof e === "object" && typeof e.code === "string" && /^[a-z_]{1,40}$/.test(e.code)) {
+    const parts = ["code=" + e.code];
+    if (typeof e.rpc === "string" && /^[A-Z0-9_]{1,60}$/.test(e.rpc)) parts.push("rpc=" + e.rpc);
+    if (Number.isFinite(e.seconds)) parts.push("seconds=" + Math.round(e.seconds));
+    if (Number.isFinite(e.dc)) parts.push("dc=" + Math.round(e.dc));
+    if (e.deadline === true) parts.push("deadline=1");
+    return parts.join(" ");
+  }
+  if (e instanceof Error || (e && typeof e === "object" && typeof e.message === "string")) {
+    const name = typeof e.name === "string" && e.name ? e.name : "Error";
+    const frame = typeof e.stack === "string" ? (e.stack.split("\n").map((l) => l.trim()).find((l) => l.startsWith("at ")) || "") : "";
+    return 'code=- name=' + scrubText(name).replace(/\s/g, "") + ' message="' + scrubText(e.message) + '"' + (frame ? " at=" + scrubText(frame.slice(3)).replace(/\s/g, "") : "");
+  }
+  if (e === null) return 'code=- name=null message=""';
+  if (e === undefined) return 'code=- name=nothing message=""'; // `throw undefined`: said so, never the word undefined
+  if (typeof e === "object") return 'code=- name=object message="[object]"';
+  return "code=- name=" + typeof e + ' message="' + scrubText(e) + '"';
+}
+
+/** Whether `e` leaves the connection it came from in a known state (a server's own answer): else it must be dropped. */
+export const isServerAnswer = (e) => !!(e && typeof e === "object" && ["flood_wait", "file_migrate", "user_migrate", "file_reference_expired", "rpc_error", "channel_invalid", "bot_method_invalid", "token_invalid", "api_id_invalid", "auth_key_unregistered", "login_budget", "invalid_request"].includes(e.code) && !e.transport);

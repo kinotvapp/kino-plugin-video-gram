@@ -320,7 +320,7 @@ test("USER_MIGRATE then a failed login there leaves the home DC where it was", a
 test("a packet length over the cap is a protocol error at once, not a wait", async () => {
   const c = await newClient({ timeoutMs: 3000 }).connect(2);
   await c.botLogin(CREDS);
-  tg.dc(2).once("getFile", () => ({ hugeLength: 3 * MiB }));
+  tg.dc(2).once("getFile", () => ({ hugeLength: 5 * MiB })); // over the 4 MiB + 64 KiB cap
   const t0 = Date.now();
   await assert.rejects(c.getFile({ ...DOC, dcId: 2 }, 0, 4096), (e) => e.code === "protocol" && /cap/.test(e.message));
   assert.ok(Date.now() - t0 < 2000);

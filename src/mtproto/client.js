@@ -11,6 +11,7 @@ import {
 } from "./tl.js";
 import { mtError } from "./errors.js";
 import { ALLOWED_CALLS } from "./requests.js";
+import { describeError, isServerAnswer } from "./errors.js";
 import { TELEGRAM_PUBLIC_KEYS } from "./keys.js";
 
 export const CHUNK = 1048576;
@@ -108,6 +109,19 @@ export class TelegramClient {
   aheadCount() { return this.ahead.size; }
 
   /**
+   * Tears everything down after a failure the caller cannot place: every connection closes (the requests in flight on
+   * them are dropped), the chunks read ahead are forgotten. The keys and logins stay: the next call reconnects with
+   * them, with no key exchange and no new login.
+   */
+  reset() {
+    return this.serial(async () => {
+      for (const a of this.ahead.values()) a.session.forget(a.entry);
+      this.ahead.clear();
+      for (const dc of [...this.conns.keys()]) await this.drop(dc);
+    });
+  }
+
+  /**
    * Runs `fn` after the calls already queued (one at a time). With a `deadline` (a time of `now()`), the call is
    * dropped unsent when its turn comes too late, and a caller queued behind a busy client gets a typed timeout at its
    * deadline instead of waiting for its turn (`kino.sleep` polls; it is only used while the client is busy).
@@ -175,7 +189,7 @@ export class TelegramClient {
 
   async conn(dc, deadline) {
     let c = this.conns.get(dc);
-    if (c && !c.transport.closed) return c;
+    if (c && !c.transport.closed && !c.session.broken) return c;
     if (c) await this.drop(dc);
     const transport = await new Transport(dc, { open: this.wsOpen, url: this.urlFor ? this.urlFor(dc) : undefined }).open();
     let st = this.dcs.get(dc);
@@ -224,12 +238,15 @@ export class TelegramClient {
       const res = await c.session.settle(entry, started + wait.ms);
       c.inited = true;
       return res;
-    } catch (e) {
+    } catch (thrown) {
+      // Anything may be thrown from below (a native failure is not always an Error): read it through `e`.
+      const e = thrown && typeof thrown === "object" ? thrown : { code: undefined, thrown };
       if (e.code === "closed" && retry) {
         await this.drop(dc);
         return this.invoke(dc, body, { retry: false, hex, deadline, trace });
       }
-      if (e.code === "timeout" || e.code === "closed" || e.code === "protocol") await this.drop(dc);
+      // A connection in an unknown state is never used again: the next call reconnects with the stored key.
+      if (e.code === "timeout" || e.code === "closed" || e.code === "protocol" || !isServerAnswer(e) || c.session.broken) await this.drop(dc);
       if (e.code === "timeout" && wait.clamped) e.deadline = true; // the caller's deadline, not the server's silence alone
       if (e.code === "auth_key_unregistered") {
         // A key the server forgot (-404), refuses (AUTH_KEY_INVALID) or sees on two connections at once
@@ -238,7 +255,7 @@ export class TelegramClient {
         if (e.transport || /^AUTH_KEY_(INVALID|DUPLICATED)$/.test(String(e.rpc || ""))) { await this.drop(dc); this.dcs.delete(dc); }
         else { const st = this.dcs.get(dc); if (st) st.loggedIn = false; }
       }
-      throw e;
+      throw thrown;
     }
   }
 
@@ -365,8 +382,8 @@ export class TelegramClient {
               return hex ? file.bytesHex : file.bytes;
             }
           } catch (e) {
-            this.log("chunk read ahead not usable (" + (e && e.code) + "): asking again");
-            if (e && (e.code === "closed" || e.code === "protocol")) await this.drop(pre.dc);
+            this.log("chunk read ahead not usable (" + describeError(e) + "): asking again");
+            if (!isServerAnswer(e) || c.session.broken) await this.drop(pre.dc); // the stream is in an unknown state
           }
         } else {
           pre.session.forget(pre.entry);
@@ -383,8 +400,8 @@ export class TelegramClient {
           if (file.ctor !== CTOR.uploadFile) throw mtError("protocol", "unexpected answer to upload.getFile");
           return hex ? file.bytesHex : file.bytes;
         } catch (e) {
-          if (e.code === "file_migrate" && e.dc !== dc) { dc = e.dc; continue; }
-          if (e.code === "auth_key_unregistered" && dc !== this.homeDc) continue; // authorize() again (a new key if it was dropped)
+          if (e && e.code === "file_migrate" && e.dc !== dc) { dc = e.dc; continue; }
+          if (e && e.code === "auth_key_unregistered" && dc !== this.homeDc) continue; // authorize() again (a new key if it was dropped)
           throw e;
         }
       }

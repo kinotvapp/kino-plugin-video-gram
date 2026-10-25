@@ -11,7 +11,8 @@ import { credentials, withSession, saveSession } from "./live.js";
 import { loadShell, rowFor, rowOf } from "./library.js";
 import { shellError } from "./errors.js";
 import { hexToBase64Native } from "./b64.js";
-import { newTrace, logRead, logReadFailure } from "./timing.js";
+import { newTrace, logRead, logReadFailure, logRecovery } from "./timing.js";
+import { isServerAnswer } from "../mtproto/errors.js";
 
 const AHEAD = 2;          // whole chunks requested right behind a read at a MiB offset (never past the end of the file)
 const SHORT_FLOOD_S = 5;     // a FLOOD_WAIT this short is waited out once inside the read (kino.sleep: 5 s at most)
@@ -80,7 +81,7 @@ async function readTimed(arg, started) {
     const ahead = list.length === 1 && offset % CHUNK === 0
       ? Array.from({ length: AHEAD }, (_, k) => offset + (k + 1) * CHUNK).filter((o) => o < size).map((o) => ({ offset: o, limit: CHUNK }))
       : [];
-    await withSession(c, loadShell(c), async (live) => {
+    const attempt = () => withSession(c, loadShell(c), async (live) => {
       hex = "";
       for (const piece of list) {
         for (;;) {
@@ -92,6 +93,7 @@ async function readTimed(arg, started) {
             break;
           } catch (e) {
             const left = deadline - Date.now();
+            if (!e || typeof e !== "object") throw e;
             if (e.code === "file_reference_expired" && !refetched && left > 2 * MIN_LEFT_MS) {
               refetched = true;
               const fresh = await live.discovery.refetch({ chatId: row.data.chatId, msgId: row.data.msgId }, { deadline });
@@ -113,6 +115,26 @@ async function readTimed(arg, started) {
         }
       }
     }, { deadline });
+    // A failure that leaves the connection in an unknown state (a protocol error, a closed socket, a timeout that is
+    // not the read's own deadline, anything thrown that is not one of ours): everything is torn down, the client
+    // reconnects with the stored key (no key exchange, no login) and the read is tried once more.
+    try {
+      await attempt();
+    } catch (e) {
+      const recoverable = !(e && e.shell) && !isServerAnswer(e) && !(e && e.code === "timeout" && e.deadline === true);
+      if (!recoverable || deadline - Date.now() < 3 * MIN_LEFT_MS) throw e;
+      logRecovery(e, { offset, length, started });
+      if (trace) trace.recov++;
+      const live = await (async () => { try { return await withSession(c, loadShell(c), async (l) => l, { deadline }); } catch { return null; } })();
+      if (live) await live.client.reset();
+      try {
+        await attempt();
+      } catch (e2) {
+        // A second failure is the read's: as a typed error the app can show (the detail goes to the log line).
+        if (e2 && typeof e2 === "object" && (e2.shell || isServerAnswer(e2) || e2.code === "timeout")) throw e2;
+        throw Object.assign(shellError("unavailable", "read failed twice"), { cause: e2, detail: e2 });
+      }
+    }
   } finally {
     saveSession();
   }

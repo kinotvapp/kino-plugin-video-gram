@@ -1,7 +1,7 @@
 {
   "id": "telegram-library",
   "name": "Telegram Library",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "apiVersion": 13,
   "entry": "plugin.js",
   "description": "Tu biblioteca personal: los videos de tus canales privados de Telegram, con tu propio bot, en Kino. Your personal library: the videos of your private Telegram channels, with your own bot.",

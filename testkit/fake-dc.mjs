@@ -272,6 +272,8 @@ class DcConnection {
         return this.flush(out);
       }
       if (reply && reply.silent) return;
+      // Fault injection: a packet of random bytes instead of the answer (the client cannot decrypt it).
+      if (reply && reply.garbage) { this.transport.send(randomBytes(reply.garbage === true ? 96 : reply.garbage)); return; }
       if (reply && reply.close) { this.socket.serverClose(); return; }
       if (reply && reply.hugeLength) { this.transport.sendLengthOnly(reply.hugeLength); return; }
       if (reply && reply.tamper) out.tamper = reply.tamper;
@@ -283,6 +285,8 @@ class DcConnection {
     const gzip = head === CTOR.rpcError ? false : head === CTOR.uploadFile ? this.dc.gzipFiles : this.dc.gzipResults;
     out.pending.push(rpcResult(msgId, result, gzip));
     this.flush(out);
+    // Fault injection: the same answer once more (a duplicate for a request already answered).
+    if (reply && reply.duplicate) this.flush({ ...out, pending: [rpcResult(msgId, result, gzip)] });
   }
   flush({ authKey, sessionId, pending, tamper }) {
     if (!pending.length) return;
@@ -308,7 +312,15 @@ class DcConnection {
     const { key, iv } = kdf(authKey, msgKey, 8);
     const enc = ige(plain, key, iv, true);
     if (tamper === "byte") enc[enc.length - 20] ^= 0x40;
-    this.transport.send(Buffer.concat([sha1(authKey).subarray(12, 20), msgKey, enc]));
+    const packet = Buffer.concat([sha1(authKey).subarray(12, 20), msgKey, enc]);
+    // dc.coalesce: the packets of one tick go out together, several in one WebSocket frame; dc.splitFrames: each packet
+    // is cut over that many frames.
+    if (this.dc.coalesce) {
+      if (!this.outQueue) { this.outQueue = []; setImmediate(() => { const q = this.outQueue; this.outQueue = null; if (this.socket.readyState === 1) this.transport.sendMany(q); }); }
+      this.outQueue.push(packet);
+      return;
+    }
+    this.transport.send(packet, { split: this.dc.splitFrames || 1 });
   }
 
   rpc(r, entry) {

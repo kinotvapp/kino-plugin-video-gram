@@ -464,7 +464,37 @@ function fromTransportError(status) {
   if (status === -429) return mtError("flood_wait", "transport error -429", { status, seconds: 5, transport: true });
   return mtError("protocol", "transport error " + status, { status, transport: true });
 }
-return { CODES, mtError, fromRpcError, fromTransportError };
+
+const scrubText = (s) => String(s).replace(/[0-9a-fA-F]{16,}/g, "<hex>").replace(/[A-Za-z0-9+/_-]{32,}={0,2}/g, "<b64>").replace(/["\\]/g, "'").replace(/\s+/g, " ").slice(0, 160);
+
+/**
+ * One line of detail for any thrown value, for the logs: a typed error as `code=<code> rpc=<RPC> seconds= dc=`, anything
+ * else as `code=- name=<constructor or typeof> message="<text>" at=<first stack frame>`. Long hex or base64 runs are cut
+ * out (no data, no keys), and nothing is ever `undefined`.
+ */
+function describeError(e) {
+  if (e && typeof e === "object" && typeof e.code === "string" && /^[a-z_]{1,40}$/.test(e.code)) {
+    const parts = ["code=" + e.code];
+    if (typeof e.rpc === "string" && /^[A-Z0-9_]{1,60}$/.test(e.rpc)) parts.push("rpc=" + e.rpc);
+    if (Number.isFinite(e.seconds)) parts.push("seconds=" + Math.round(e.seconds));
+    if (Number.isFinite(e.dc)) parts.push("dc=" + Math.round(e.dc));
+    if (e.deadline === true) parts.push("deadline=1");
+    return parts.join(" ");
+  }
+  if (e instanceof Error || (e && typeof e === "object" && typeof e.message === "string")) {
+    const name = typeof e.name === "string" && e.name ? e.name : "Error";
+    const frame = typeof e.stack === "string" ? (e.stack.split("\n").map((l) => l.trim()).find((l) => l.startsWith("at ")) || "") : "";
+    return 'code=- name=' + scrubText(name).replace(/\s/g, "") + ' message="' + scrubText(e.message) + '"' + (frame ? " at=" + scrubText(frame.slice(3)).replace(/\s/g, "") : "");
+  }
+  if (e === null) return 'code=- name=null message=""';
+  if (e === undefined) return 'code=- name=nothing message=""'; // `throw undefined`: said so, never the word undefined
+  if (typeof e === "object") return 'code=- name=object message="[object]"';
+  return "code=- name=" + typeof e + ' message="' + scrubText(e) + '"';
+}
+
+/** Whether `e` leaves the connection it came from in a known state (a server's own answer): else it must be dropped. */
+const isServerAnswer = (e) => !!(e && typeof e === "object" && ["flood_wait", "file_migrate", "user_migrate", "file_reference_expired", "rpc_error", "channel_invalid", "bot_method_invalid", "token_invalid", "api_id_invalid", "auth_key_unregistered", "login_budget", "invalid_request"].includes(e.code) && !e.transport);
+return { CODES, mtError, fromRpcError, fromTransportError, describeError, isServerAnswer };
 })();
 
 // ---- src/mtproto/transport.js ----
@@ -486,7 +516,9 @@ const { mtError } = __mod_src_mtproto_errors;
 
 const DC_HOSTS = Object.freeze({ 1: "pluto", 2: "venus", 3: "aurora", 4: "vesta", 5: "flora" });
 const MAX_SEND_BYTES = 786000; // kino.ws frame cap
-const MAX_PACKET_BYTES = (2 << 20) + 1024; // a 1 MiB chunk is ~1 MiB + 100 bytes; anything past 2 MiB is not MTProto
+// A 1 MiB chunk is ~1 MiB + 100 bytes; with chunks read ahead, Telegram may pack the answers of up to three requests
+// into one container. Past 4 MiB + 64 KiB it is not an answer of ours.
+const MAX_PACKET_BYTES = (4 << 20) + 65536;
 const MASK128 = (1n << 128n) - 1n;
 const ZEROS = "00".repeat(16);
 
@@ -1454,7 +1486,9 @@ class Session {
       try {
         await this.pumpOnce(deadline, entry.trace);
       } catch (e) {
-        if (e && e.code === "timeout") { this.forget(entry); throw e; }
+        if (e && e.code === "timeout" && !this.broken) { this.forget(entry); throw e; } // between packets: the stream is intact
+        // Anything else leaves the stream in an unknown state: this session is never used again (the client drops it).
+        this.broken = true;
         for (const w of [...this.waiting.values()]) this.finish(w, null, e);
         throw e;
       }
@@ -1493,7 +1527,7 @@ class Session {
       if (ctor === CTOR.rpcResult) {
         const to = new Reader(fromHex(m.hex.slice(8, 24))).long();
         const entry = this.waiting.get(to);
-        if (!entry) continue; // a late answer to a request nobody waits for any more
+        if (!entry) { this.log("answer for an unknown request dropped"); continue; } // late, duplicated or forgotten
         let result = m.hex.slice(24);
         if (result.length >= 8 && hexU32(result, 0) === CTOR.gzipPacked) {
           const tg = trace ? Date.now() : 0;
@@ -1626,6 +1660,7 @@ const { Session } = __mod_src_mtproto_session;
 const { CTOR, LAYER, invokeWithLayer, initConnection, importBotAuthorization, exportAuthorization, importAuthorization, inputDocumentFileLocation, uploadGetFile, parseUploadFile, parseUploadFileHex, parseAuthorization, parseExportedAuthorization } = __mod_src_mtproto_tl;
 const { mtError } = __mod_src_mtproto_errors;
 const { ALLOWED_CALLS } = __mod_src_mtproto_requests;
+const { describeError, isServerAnswer } = __mod_src_mtproto_errors;
 const { TELEGRAM_PUBLIC_KEYS } = __mod_src_mtproto_keys;
 
 const CHUNK = 1048576;
@@ -1723,6 +1758,19 @@ class TelegramClient {
   aheadCount() { return this.ahead.size; }
 
   /**
+   * Tears everything down after a failure the caller cannot place: every connection closes (the requests in flight on
+   * them are dropped), the chunks read ahead are forgotten. The keys and logins stay: the next call reconnects with
+   * them, with no key exchange and no new login.
+   */
+  reset() {
+    return this.serial(async () => {
+      for (const a of this.ahead.values()) a.session.forget(a.entry);
+      this.ahead.clear();
+      for (const dc of [...this.conns.keys()]) await this.drop(dc);
+    });
+  }
+
+  /**
    * Runs `fn` after the calls already queued (one at a time). With a `deadline` (a time of `now()`), the call is
    * dropped unsent when its turn comes too late, and a caller queued behind a busy client gets a typed timeout at its
    * deadline instead of waiting for its turn (`kino.sleep` polls; it is only used while the client is busy).
@@ -1790,7 +1838,7 @@ class TelegramClient {
 
   async conn(dc, deadline) {
     let c = this.conns.get(dc);
-    if (c && !c.transport.closed) return c;
+    if (c && !c.transport.closed && !c.session.broken) return c;
     if (c) await this.drop(dc);
     const transport = await new Transport(dc, { open: this.wsOpen, url: this.urlFor ? this.urlFor(dc) : undefined }).open();
     let st = this.dcs.get(dc);
@@ -1839,12 +1887,15 @@ class TelegramClient {
       const res = await c.session.settle(entry, started + wait.ms);
       c.inited = true;
       return res;
-    } catch (e) {
+    } catch (thrown) {
+      // Anything may be thrown from below (a native failure is not always an Error): read it through `e`.
+      const e = thrown && typeof thrown === "object" ? thrown : { code: undefined, thrown };
       if (e.code === "closed" && retry) {
         await this.drop(dc);
         return this.invoke(dc, body, { retry: false, hex, deadline, trace });
       }
-      if (e.code === "timeout" || e.code === "closed" || e.code === "protocol") await this.drop(dc);
+      // A connection in an unknown state is never used again: the next call reconnects with the stored key.
+      if (e.code === "timeout" || e.code === "closed" || e.code === "protocol" || !isServerAnswer(e) || c.session.broken) await this.drop(dc);
       if (e.code === "timeout" && wait.clamped) e.deadline = true; // the caller's deadline, not the server's silence alone
       if (e.code === "auth_key_unregistered") {
         // A key the server forgot (-404), refuses (AUTH_KEY_INVALID) or sees on two connections at once
@@ -1853,7 +1904,7 @@ class TelegramClient {
         if (e.transport || /^AUTH_KEY_(INVALID|DUPLICATED)$/.test(String(e.rpc || ""))) { await this.drop(dc); this.dcs.delete(dc); }
         else { const st = this.dcs.get(dc); if (st) st.loggedIn = false; }
       }
-      throw e;
+      throw thrown;
     }
   }
 
@@ -1980,8 +2031,8 @@ class TelegramClient {
               return hex ? file.bytesHex : file.bytes;
             }
           } catch (e) {
-            this.log("chunk read ahead not usable (" + (e && e.code) + "): asking again");
-            if (e && (e.code === "closed" || e.code === "protocol")) await this.drop(pre.dc);
+            this.log("chunk read ahead not usable (" + describeError(e) + "): asking again");
+            if (!isServerAnswer(e) || c.session.broken) await this.drop(pre.dc); // the stream is in an unknown state
           }
         } else {
           pre.session.forget(pre.entry);
@@ -1998,8 +2049,8 @@ class TelegramClient {
           if (file.ctor !== CTOR.uploadFile) throw mtError("protocol", "unexpected answer to upload.getFile");
           return hex ? file.bytesHex : file.bytes;
         } catch (e) {
-          if (e.code === "file_migrate" && e.dc !== dc) { dc = e.dc; continue; }
-          if (e.code === "auth_key_unregistered" && dc !== this.homeDc) continue; // authorize() again (a new key if it was dropped)
+          if (e && e.code === "file_migrate" && e.dc !== dc) { dc = e.dc; continue; }
+          if (e && e.code === "auth_key_unregistered" && dc !== this.homeDc) continue; // authorize() again (a new key if it was dropped)
           throw e;
         }
       }
@@ -3087,10 +3138,11 @@ const __mod_src_shell_timing = (() => {
 // Timing lines for the device logs (Kino's "Registro" and logcat KinoPlugin/<id>): one line per read and per refresh,
 // numbers and short codes only. Never a setting, a key, an id, a file reference or any data. Set TIMING to false to
 // switch them off (the core then gets no trace and measures nothing).
+const { describeError } = __mod_src_mtproto_errors;
 const TIMING = true;
 
 /** A read's trace: every field is a duration in ms or a count; the core adds to it (src/mtproto/*). */
-const newTrace = () => (TIMING ? { start: Date.now(), queue: 0, sentAt: 0, firstFrameAt: 0, wsrecv: 0, frames: 0, frameBytes: 0, tohex: 0, ctr: 0, ige: 0, mac: 0, gunzip: 0, parse: 0, getfile: 0, b64: 0, tries: 0, pipe: "miss", ahead: 0 } : undefined);
+const newTrace = () => (TIMING ? { start: Date.now(), queue: 0, sentAt: 0, firstFrameAt: 0, wsrecv: 0, frames: 0, frameBytes: 0, tohex: 0, ctr: 0, ige: 0, mac: 0, gunzip: 0, parse: 0, getfile: 0, b64: 0, tries: 0, pipe: "miss", ahead: 0, recov: 0 } : undefined);
 
 const n = (v) => (Number.isFinite(v) ? Math.round(v) : 0);
 
@@ -3098,20 +3150,20 @@ const n = (v) => (Number.isFinite(v) ? Math.round(v) : 0);
 function logRead(trace, { offset, length, bytes }) {
   if (!trace) return;
   const net = trace.sentAt && trace.firstFrameAt ? trace.firstFrameAt - trace.sentAt : 0;
-  kino.log(`read off=${n(offset)} len=${n(length)} bytes=${n(bytes)} total=${n(Date.now() - trace.start)} queue=${n(trace.queue)} net=${n(net)} wsrecv=${n(trace.wsrecv)} frames=${n(trace.frames)} framebytes=${n(trace.frameBytes)} tohex=${n(trace.tohex)} ctr=${n(trace.ctr)} ige=${n(trace.ige)} mac=${n(trace.mac)} gunzip=${n(trace.gunzip)} parse=${n(trace.parse)} getfile=${n(trace.getfile)} b64=${n(trace.b64)} tries=${n(trace.tries)} pipe=${trace.pipe === "hit" ? "hit" : "miss"} ahead=${n(trace.ahead)}`);
+  kino.log(`read off=${n(offset)} len=${n(length)} bytes=${n(bytes)} total=${n(Date.now() - trace.start)} queue=${n(trace.queue)} net=${n(net)} wsrecv=${n(trace.wsrecv)} frames=${n(trace.frames)} framebytes=${n(trace.frameBytes)} tohex=${n(trace.tohex)} ctr=${n(trace.ctr)} ige=${n(trace.ige)} mac=${n(trace.mac)} gunzip=${n(trace.gunzip)} parse=${n(trace.parse)} getfile=${n(trace.getfile)} b64=${n(trace.b64)} tries=${n(trace.tries)} pipe=${trace.pipe === "hit" ? "hit" : "miss"} ahead=${n(trace.ahead)} recov=${n(trace.recov)}`);
 }
 
 const word = (v, re) => (typeof v === "string" && re.test(v) ? v : "-");
 
-/** One warn line per failed read (always on, also with TIMING off): the typed code and Telegram's RPC name, no data. */
+/** One warn line per failed read (always on, also with TIMING off): the typed code and Telegram's RPC name, or what was thrown. */
 function logReadFailure(e, { offset, length, started }) {
-  const code = word(e && (e.shell || e.code), /^[a-z_]{1,40}$/);
-  const rpc = word(e && e.rpc, /^[A-Z0-9_]{1,60}$/);
-  const extra = [];
-  if (e && Number.isFinite(e.seconds)) extra.push("seconds=" + n(e.seconds));
-  if (e && Number.isFinite(e.dc)) extra.push("dc=" + n(e.dc));
-  if (e && e.deadline === true) extra.push("deadline=1");
-  console.warn(`read failed off=${n(offset)} len=${n(length)} ms=${n(Date.now() - started)} code=${code} rpc=${rpc}${extra.length ? " " + extra.join(" ") : ""}`);
+  const what = e && typeof e === "object" && e.detail !== undefined ? e.detail : e;
+  console.warn(`read failed off=${n(offset)} len=${n(length)} ms=${n(Date.now() - started)} ${describeError(what)}`);
+}
+
+/** One warn line when a read tears the connection down and tries once more. */
+function logRecovery(e, { offset, length, started }) {
+  console.warn(`read recovering off=${n(offset)} len=${n(length)} ms=${n(Date.now() - started)} ${describeError(e)}`);
 }
 
 /** `refresh total=… connect=… login=<new|reused|-> loginms=… pages=… disc=… upsert=… purge=… added=… incomplete=0|1 result=<ok|code>` */
@@ -3119,7 +3171,7 @@ function logRefresh(r) {
   if (!TIMING) return;
   kino.log(`refresh total=${n(r.total)} connect=${n(r.connect)} login=${word(r.login, /^(new|reused|-)$/)} loginms=${n(r.loginms)} pages=${n(r.pages)} disc=${n(r.disc)} upsert=${n(r.upsert)} purge=${n(r.purge)} added=${n(r.added)} incomplete=${r.incomplete ? 1 : 0} result=${word(r.result, /^[a-z_]{1,40}$/)}`);
 }
-return { TIMING, newTrace, logRead, logReadFailure, logRefresh };
+return { TIMING, newTrace, logRead, logReadFailure, logRecovery, logRefresh };
 })();
 
 // ---- src/shell/library.js ----
@@ -3616,7 +3668,8 @@ const { credentials, withSession, saveSession } = __mod_src_shell_live;
 const { loadShell, rowFor, rowOf } = __mod_src_shell_library;
 const { shellError } = __mod_src_shell_errors;
 const { hexToBase64Native } = __mod_src_shell_b64;
-const { newTrace, logRead, logReadFailure } = __mod_src_shell_timing;
+const { newTrace, logRead, logReadFailure, logRecovery } = __mod_src_shell_timing;
+const { isServerAnswer } = __mod_src_mtproto_errors;
 
 const AHEAD = 2;          // whole chunks requested right behind a read at a MiB offset (never past the end of the file)
 const SHORT_FLOOD_S = 5;     // a FLOOD_WAIT this short is waited out once inside the read (kino.sleep: 5 s at most)
@@ -3685,7 +3738,7 @@ async function readTimed(arg, started) {
     const ahead = list.length === 1 && offset % CHUNK === 0
       ? Array.from({ length: AHEAD }, (_, k) => offset + (k + 1) * CHUNK).filter((o) => o < size).map((o) => ({ offset: o, limit: CHUNK }))
       : [];
-    await withSession(c, loadShell(c), async (live) => {
+    const attempt = () => withSession(c, loadShell(c), async (live) => {
       hex = "";
       for (const piece of list) {
         for (;;) {
@@ -3697,6 +3750,7 @@ async function readTimed(arg, started) {
             break;
           } catch (e) {
             const left = deadline - Date.now();
+            if (!e || typeof e !== "object") throw e;
             if (e.code === "file_reference_expired" && !refetched && left > 2 * MIN_LEFT_MS) {
               refetched = true;
               const fresh = await live.discovery.refetch({ chatId: row.data.chatId, msgId: row.data.msgId }, { deadline });
@@ -3718,6 +3772,26 @@ async function readTimed(arg, started) {
         }
       }
     }, { deadline });
+    // A failure that leaves the connection in an unknown state (a protocol error, a closed socket, a timeout that is
+    // not the read's own deadline, anything thrown that is not one of ours): everything is torn down, the client
+    // reconnects with the stored key (no key exchange, no login) and the read is tried once more.
+    try {
+      await attempt();
+    } catch (e) {
+      const recoverable = !(e && e.shell) && !isServerAnswer(e) && !(e && e.code === "timeout" && e.deadline === true);
+      if (!recoverable || deadline - Date.now() < 3 * MIN_LEFT_MS) throw e;
+      logRecovery(e, { offset, length, started });
+      if (trace) trace.recov++;
+      const live = await (async () => { try { return await withSession(c, loadShell(c), async (l) => l, { deadline }); } catch { return null; } })();
+      if (live) await live.client.reset();
+      try {
+        await attempt();
+      } catch (e2) {
+        // A second failure is the read's: as a typed error the app can show (the detail goes to the log line).
+        if (e2 && typeof e2 === "object" && (e2.shell || isServerAnswer(e2) || e2.code === "timeout")) throw e2;
+        throw Object.assign(shellError("unavailable", "read failed twice"), { cause: e2, detail: e2 });
+      }
+    }
   } finally {
     saveSession();
   }
