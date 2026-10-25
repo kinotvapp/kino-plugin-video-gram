@@ -1282,7 +1282,7 @@ export function createKino(manifest, { appVersion = "sdk", lang = "es-CO", devic
     const t = v.replace(/^0+/, "");
     if (/[^0-9a-f]/i.test(t)) throw kinoError("crypto_error", `"${field}" is not valid hex`);
     if (t.length > BYTES.modPowMaxBits / 4) throw kinoError("crypto_error", field === "mod" ? `the modulus is over ${BYTES.modPowMaxBits} bits` : `"${field}" is over ${BYTES.modPowMaxBits} bits`);
-    if (field === "mod" && v === "") throw kinoError("crypto_error", INVALID_CRYPTO);
+    if (v === "") throw kinoError("crypto_error", INVALID_CRYPTO);
     return t === "" ? 0n : BigInt("0x" + t);
   };
   function modPow(base, exp, mod) {
@@ -1583,6 +1583,8 @@ export function createKino(manifest, { appVersion = "sdk", lang = "es-CO", devic
       if (u.protocol !== "wss:") { reject(kinoError("not_https", "only wss:// is allowed")); return; }
       const literal = /^[\d.]+$/.test(u.hostname) || u.hostname.includes(":") || u.hostname.startsWith("[");
       if (literal || !hostMatches(u.hostname, manifest.hosts)) { reject(hostRefused("host not allowed: " + u.hostname, u.hostname)); return; }
+      // As PluginHttp.authorizeSocket: wss on port 443 only (URL drops the default port, so "" is 443).
+      if (u.port !== "" && u.port !== "443") { reject(hostRefused("only port 443 is allowed for wss://", u.hostname)); return; }
       if (live >= C.maxSockets) { reject(kinoError("limit", `too many open sockets (at most ${C.maxSockets})`)); return; }
       live++;
       const protocol = options && typeof options.protocol === "string" && options.protocol ? options.protocol : undefined;
