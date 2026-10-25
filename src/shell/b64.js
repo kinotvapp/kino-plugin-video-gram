@@ -9,9 +9,13 @@ const IV = "00000000000000000000000000000000";
 const pass = (dataHex, outputEncoding) =>
   kino.crypto.encrypt("aes-128-ctr", { key: KEY, keyEncoding: "hex", iv: IV, ivEncoding: "hex", data: dataHex, inputEncoding: "hex", outputEncoding });
 
-/** base64 of the bytes `hex` spells (even length, any case). */
+/**
+ * base64 of the bytes `hex` spells (even length, any case). Kino with apiVersion 13's `convert` re-encodes natively in
+ * one call; an older Kino gets the two-CTR trick above.
+ */
 export function hexToBase64Native(hex) {
   if (hex.length === 0) return "";
+  if (typeof kino.crypto.convert === "function") return kino.crypto.convert(hex, "hex", "base64");
   return pass(pass(hex, "hex"), "base64");
 }
 

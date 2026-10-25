@@ -7,7 +7,7 @@ phone talks to Telegram directly.
 
 This is for **your own** channel. It is not a catalogue of films, and it is not meant to share one.
 
-- Plugin id `telegram-library`. Requires Kino with **apiVersion 13** (Kino 0.9.75 or newer). Both numbers are **provisional**: the app release that carries `socket`, `byteSource` and `catalog` is not out yet, and they may still change. Phone first.
+- Plugin id `telegram-library`. Requires Kino with **apiVersion 13** (Kino 0.9.75 or newer). Both numbers are **provisional**: the app release that carries `socket`, `byteSource` and `catalog` is not out yet, and they may still change. For full speed it needs the Kino build with the `kino.crypto` ops `convert` and `aesIgeVerify`; on a Kino without them it falls back to slower code and still works. Phone first.
 - Capabilities: `home`, `search`, `browse`, `scopedSearch`, `resolve`, `socket`, `byteSource`, `catalog`, `imageSource`,
   plus its own section, categories (one tile per channel), `details` and a theme. No `download`, no `storageLarge`.
 - Posters: TMDB's, through Kino's own TMDB access (`kino.meta`: the plugin has no TMDB key and no TMDB host); when TMDB

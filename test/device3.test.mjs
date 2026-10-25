@@ -199,7 +199,8 @@ function failingCrypto(op, only = () => true) {
 }
 
 test("(g) a pump that fails leaves its session marked broken and fails every request still in flight on it", async () => {
-  const fail = failingCrypto("aesIge", (a) => a[0] === "decrypt"); // an answer that cannot be read
+  // An answer that cannot be read: the session decrypts with aesIgeVerify on a Kino that has it, else aesIge "decrypt".
+  const fail = typeof kino.crypto.aesIgeVerify === "function" ? failingCrypto("aesIgeVerify") : failingCrypto("aesIge", (a) => a[0] === "decrypt");
   try {
     const c = await client();
     tg.dc(2).once("getFile", () => ({}));

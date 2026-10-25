@@ -128,6 +128,26 @@ export class Session {
     enc.hex = null;
     const { key, iv } = this.keyIv(msgKey, 8);
     const t0 = trace ? Date.now() : 0;
+    // Kino with apiVersion 13's aesIgeVerify: the AES-IGE decryption and the msg_key check (SHA-256(auth_key[96:128] ||
+    // plaintext), bytes 8..24) in one native call, with no joined copy of the plaintext. An older Kino: the two calls.
+    if (typeof kino.crypto.aesIgeVerify === "function") {
+      let plainHex;
+      try {
+        plainHex = kino.crypto.aesIgeVerify(key, iv, encHex, {
+          mac: msgKey, macPrefix: this.ak.slice(192, 256), macOffset: 8,
+          keyEncoding: "hex", ivEncoding: "hex", inputEncoding: "hex", outputEncoding: "hex",
+        });
+      } catch (e) {
+        big.release(encHex.length);
+        if (e && e.message === "the mac doesn't match") throw protocol("msg_key mismatch");
+        throw e;
+      }
+      big.hold(plainHex.length);
+      big.release(encHex.length);
+      encHex = null;
+      if (trace) trace.ige += Date.now() - t0; // decryption and MAC together (mac stays 0 on this path)
+      return plainHex;
+    }
     const plainHex = igeDecryptHex(encHex, key, iv);
     big.hold(plainHex.length);
     big.release(encHex.length);

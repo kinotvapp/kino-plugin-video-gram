@@ -80,7 +80,9 @@ test("getFile with { hex: true } across FILE_MIGRATE and a whole gzip_packed mes
 
 test("hexToBase64Native: exact base64 for every length, through two native AES-CTR calls and no JS pass", () => {
   let calls = 0;
-  const counting = Object.freeze({ ...kino, crypto: Object.freeze({ ...kino.crypto, encrypt: (...a) => { calls++; return kino.crypto.encrypt(...a); } }) });
+  // An older Kino, without apiVersion 13's convert: the two-CTR path (device8.test.mjs covers convert).
+  const { convert: _noConvert, ...older } = kino.crypto;
+  const counting = Object.freeze({ ...kino, crypto: Object.freeze({ ...older, encrypt: (...a) => { calls++; return kino.crypto.encrypt(...a); } }) });
   const saved = globalThis.kino;
   globalThis.kino = counting;
   try {
