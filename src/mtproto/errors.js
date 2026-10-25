@@ -18,6 +18,9 @@ export const CODES = Object.freeze([
   "bot_method_invalid",     // a method bots may not call (BOT_METHOD_INVALID)
   "token_invalid",          // the bot token was refused at login (ACCESS_TOKEN_INVALID / ACCESS_TOKEN_EXPIRED)
   "api_id_invalid",         // the api_id/api_hash pair was refused (API_ID_INVALID, API_ID_PUBLISHED_FLOOD)
+  "password_needed",        // the account has a 2FA password: auth.checkPassword next (SESSION_PASSWORD_NEEDED)
+  "password_invalid",       // the 2FA password was wrong (PASSWORD_HASH_INVALID), or its SRP round went stale (SRP_ID_INVALID)
+  "login_token_invalid",    // a QR login token expired, was already used or is unknown (AUTH_TOKEN_*)
 ]);
 
 export function mtError(code, message, extra) {
@@ -41,6 +44,10 @@ export function fromRpcError({ code, message }) {
   if (/^ACCESS_TOKEN_(INVALID|EXPIRED)$/.test(m)) return mtError("token_invalid", m, { status: code, rpc: m });
   if (/^API_ID_(INVALID|PUBLISHED_FLOOD)$/.test(m)) return mtError("api_id_invalid", m, { status: code, rpc: m });
   if (m === "BOT_METHOD_INVALID") return mtError("bot_method_invalid", m, { status: code, rpc: m });
+  // Before the 401 rule: SESSION_PASSWORD_NEEDED is a 401 that keeps the key (the login goes on with the password).
+  if (m === "SESSION_PASSWORD_NEEDED") return mtError("password_needed", m, { status: code, rpc: m });
+  if (m === "PASSWORD_HASH_INVALID" || m === "SRP_ID_INVALID" || m === "SRP_PASSWORD_CHANGED") return mtError("password_invalid", m, { status: code, rpc: m });
+  if (/^AUTH_TOKEN_(INVALID|EXPIRED|ALREADY_ACCEPTED|INVALIDX)$/.test(m)) return mtError("login_token_invalid", m, { status: code, rpc: m });
   if (code === 401 || /^AUTH_KEY_(UNREGISTERED|INVALID|DUPLICATED)$/.test(m) || m === "SESSION_REVOKED") return mtError("auth_key_unregistered", m, { status: code, rpc: m });
   return mtError("rpc_error", code + " " + m, { status: code, rpc: m });
 }
@@ -80,4 +87,4 @@ export function describeError(e) {
 }
 
 /** Whether `e` leaves the connection it came from in a known state (a server's own answer): else it must be dropped. */
-export const isServerAnswer = (e) => !!(e && typeof e === "object" && ["flood_wait", "file_migrate", "user_migrate", "file_reference_expired", "rpc_error", "channel_invalid", "bot_method_invalid", "token_invalid", "api_id_invalid", "auth_key_unregistered", "login_budget", "invalid_request"].includes(e.code) && !e.transport);
+export const isServerAnswer = (e) => !!(e && typeof e === "object" && ["flood_wait", "file_migrate", "user_migrate", "file_reference_expired", "rpc_error", "channel_invalid", "bot_method_invalid", "token_invalid", "api_id_invalid", "auth_key_unregistered", "login_budget", "invalid_request", "password_needed", "password_invalid", "login_token_invalid"].includes(e.code) && !e.transport);

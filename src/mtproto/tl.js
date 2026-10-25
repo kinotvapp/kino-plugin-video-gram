@@ -168,6 +168,19 @@ export const exportAuthorization = (dcId) => new Writer().int(CTOR.exportAuthori
 
 export const importAuthorization = ({ id, bytes }) => new Writer().int(CTOR.importAuthorization).long(id).bytes(bytes).done();
 
+// account login (QR) and logout, layer 198:
+// auth.exportLoginToken#b7e085fe api_id:int api_hash:string except_ids:Vector<long> = auth.LoginToken
+// auth.importLoginToken#95ac5ce4 token:bytes = auth.LoginToken
+// account.getPassword#548a30f5 = account.Password
+// auth.checkPassword#d18b4d16 password:InputCheckPasswordSRP = auth.Authorization
+// inputCheckPasswordSRP#d27ff082 srp_id:long A:bytes M1:bytes
+// auth.logOut#3e72ba19 = auth.LoggedOut
+export const exportLoginToken = ({ apiId, apiHash }) => new Writer().int(0xb7e085fe).int(apiId).string(apiHash).vectorLong([]).done();
+export const importLoginToken = (token) => new Writer().int(0x95ac5ce4).bytes(token).done();
+export const getPassword = () => new Writer().int(0x548a30f5).done();
+export const checkPassword = ({ srpId, A, M1 }) => new Writer().int(0xd18b4d16).int(0xd27ff082).long(srpId).bytes(A).bytes(M1).done();
+export const logOut = () => new Writer().int(0x3e72ba19).done();
+
 export const msgsAck = (ids) => new Writer().int(CTOR.msgsAck).vectorLong(ids).done();
 
 export const inputDocumentFileLocation = ({ id, accessHash, fileReference, thumbSize = "" }) =>

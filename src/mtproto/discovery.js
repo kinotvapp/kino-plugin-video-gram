@@ -55,6 +55,8 @@ const SKIP_TYPES = new Set([
   "EmojiStatus", "ChatAdminRights", "ChatBannedRights", "Username", "ForumTopic", "PeerNotifySettings", "DraftMessage", "EncryptedMessage",
 ]);
 const skip = (name, type) => (type === "Update" ? !KEEP_UPDATES.has(name) : SKIP_TYPES.has(type));
+/** What an answer's decode may walk without building (shared with the account library). */
+export const skipForIndex = skip;
 const VIDEO_MIMES = new Set(["application/x-matroska", "application/mp4", "application/x-mpegurl", "application/vnd.apple.mpegurl"]);
 
 /** The Bot API style chat id of a Peer: "-100<id>" for a channel, "-<id>" for a basic group, "<id>" for a user. */

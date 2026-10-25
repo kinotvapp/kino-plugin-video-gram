@@ -25,6 +25,8 @@ export const LAYER = 198;
 export const ROOTS = [
   "updates.State", "updates.Difference", "updates.ChannelDifference", "messages.Messages",
   "Message", "MessageMedia", "Document", "DocumentAttribute", "Chat", "User", "Peer", "Update", "Updates",
+  // account mode (0.3.0): the dialog list, the QR login and the 2FA password
+  "messages.Dialogs", "auth.LoginToken", "auth.Authorization", "account.Password", "auth.LoggedOut",
 ];
 
 const PRIMITIVES = { "#": "#", int: "i", long: "l", double: "d", int128: "q", int256: "Q", string: "s", bytes: "b", Bool: "B", true: "t" };

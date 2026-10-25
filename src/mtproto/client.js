@@ -8,9 +8,12 @@ import { Session } from "./session.js";
 import {
   CTOR, LAYER, invokeWithLayer, initConnection, importBotAuthorization, exportAuthorization, importAuthorization,
   inputDocumentFileLocation, uploadGetFile, parseUploadFile, parseUploadFileHex, parseAuthorization, parseExportedAuthorization,
+  exportLoginToken, importLoginToken, getPassword, checkPassword, logOut,
 } from "./tl.js";
+import { decode } from "./schema/reader.js";
+import { srpCheck } from "./srp.js";
 import { mtError } from "./errors.js";
-import { ALLOWED_CALLS } from "./requests.js";
+import { BOT_CALLS, ACCOUNT_CALLS, ACCOUNT_AUTH_CALLS } from "./requests.js";
 import { describeError, isServerAnswer } from "./errors.js";
 import { big } from "./big.js";
 import { TELEGRAM_PUBLIC_KEYS } from "./keys.js";
@@ -36,22 +39,22 @@ const AHEAD_WAIT_MS = 8000; // the longest a read waits for a chunk requested ah
  * kino.storage or anything with get/set of strings. Answers { allowed, remaining, retryAfterSeconds, record() };
  * record() notes a login now, or throws `login_budget` (with `seconds`) when none is left.
  */
-export function loginBudget(store, now = Date.now()) {
+export function loginBudget(store, now = Date.now(), { key = BUDGET_KEY, max = BUDGET_MAX, what = "bot logins" } = {}) {
   let times = [];
   try {
-    const v = JSON.parse(store.get(BUDGET_KEY) || "[]");
+    const v = JSON.parse(store.get(key) || "[]");
     if (Array.isArray(v)) times = v.filter((t) => typeof t === "number" && t <= now && now - t < BUDGET_WINDOW_MS).sort((a, b) => a - b);
   } catch { times = []; }
-  const allowed = times.length < BUDGET_MAX;
+  const allowed = times.length < max;
   const retryAfterSeconds = allowed ? 0 : Math.ceil((times[0] + BUDGET_WINDOW_MS - now) / 1000);
   return {
     allowed,
-    remaining: Math.max(0, BUDGET_MAX - times.length),
+    remaining: Math.max(0, max - times.length),
     retryAfterSeconds,
     record() {
-      if (!allowed) throw mtError("login_budget", "too many bot logins on this device in the last hour", { seconds: retryAfterSeconds });
+      if (!allowed) throw mtError("login_budget", "too many " + what + " on this device in the last hour", { seconds: retryAfterSeconds });
       times.push(now);
-      store.set(BUDGET_KEY, JSON.stringify(times));
+      store.set(key, JSON.stringify(times));
     },
   };
 }
@@ -72,8 +75,13 @@ function decodeState(v) {
   return s;
 }
 
-// `call` sends only what is on the allowlist (requests.js): the first 4 bytes of the body must be one of those method ids.
-const ALLOWED = new Set(ALLOWED_CALLS);
+// `call` sends only what is on the mode's allowlist (requests.js): the first 4 bytes of the body must be one of those
+// method ids. Account mode is read only (ACCOUNT_CALLS); its login methods go only through the login calls below.
+const ALLOWED = Object.freeze({ bot: new Set(BOT_CALLS), account: new Set(ACCOUNT_CALLS) });
+const ACCOUNT_AUTH = new Set(ACCOUNT_AUTH_CALLS);
+const methodId = (body) => (body[0] | (body[1] << 8) | (body[2] << 16) | (body[3] << 24)) >>> 0;
+/** 2FA password attempts per device and hour (each one is a guess Telegram counts). */
+export const PASSWORD_BUDGET = Object.freeze({ key: "mtproto.passwordTries", max: 5, what: "password attempts" });
 
 const DEFAULT_DEVICE = Object.freeze({ deviceModel: "Kino", systemVersion: "Android", appVersion: "1.0", systemLangCode: "en", langPack: "", langCode: "en" });
 
@@ -90,7 +98,9 @@ export class TelegramClient {
    * burst of bot logins from earning a FLOOD_WAIT of almost an hour; only a test may pass `store: false` to go without.
    * `wsOpen`/`urlFor` are for tests and other transports.
    */
-  constructor({ apiId, publicKeys = TELEGRAM_PUBLIC_KEYS, device = {}, store, timeoutMs = 20000, now = () => Date.now(), log = () => {}, onUpdate = null, wsOpen, urlFor, abandonedMs } = {}) {
+  constructor({ apiId, publicKeys = TELEGRAM_PUBLIC_KEYS, device = {}, store, timeoutMs = 20000, now = () => Date.now(), log = () => {}, onUpdate = null, wsOpen, urlFor, abandonedMs, mode = "bot" } = {}) {
+    if (mode !== "bot" && mode !== "account") throw mtError("invalid_request", "mode is bot or account");
+    this.mode = mode;
     this.abandonedMs = abandonedMs;
     this.maxInflight = 0; // the most requests ever in flight on one connection at a send (tests)
     if (store === false) store = null;
@@ -312,6 +322,7 @@ export class TelegramClient {
   }
 
   botLogin({ apiId, apiHash, botToken, deadline }) {
+    if (this.mode !== "bot") return Promise.reject(mtError("invalid_request", "botLogin is for bot mode"));
     return this.serial(async () => {
       if (apiId !== undefined) this.apiId = Number(apiId);
       if (!this.homeDc) throw mtError("invalid_request", "connect first");
@@ -348,8 +359,8 @@ export class TelegramClient {
   call(body, { deadline } = {}) {
     try {
       if (!(body instanceof Uint8Array) || body.length < 4) throw mtError("invalid_request", "call needs the serialized method as a Uint8Array");
-      const id = (body[0] | (body[1] << 8) | (body[2] << 16) | (body[3] << 24)) >>> 0;
-      if (!ALLOWED.has(id)) throw mtError("invalid_request", "method 0x" + id.toString(16).padStart(8, "0") + " is not allowed through call (see ALLOWED_CALLS)");
+      const id = methodId(body);
+      if (!ALLOWED[this.mode].has(id)) throw mtError("invalid_request", "method 0x" + id.toString(16).padStart(8, "0") + " is not allowed through call in " + this.mode + " mode (requests.js)");
     } catch (e) {
       return Promise.reject(e);
     }
@@ -358,6 +369,103 @@ export class TelegramClient {
       const st = this.dcs.get(this.homeDc);
       if (!st || !st.loggedIn) throw mtError("invalid_request", "log in first");
       return this.invoke(this.homeDc, body, { deadline });
+    }, deadline);
+  }
+
+  // ---- account mode: the QR login, the 2FA password and the logout ----
+
+  /** One account login method on DC `dc` (ACCOUNT_AUTH_CALLS only, account mode only), decoded as `expect`. */
+  async authInvoke(dc, body, expect, deadline) {
+    if (this.mode !== "account") throw mtError("invalid_request", "account login methods are for account mode");
+    const id = methodId(body);
+    if (!ACCOUNT_AUTH.has(id)) throw mtError("invalid_request", "not an account login method");
+    // Asking for a token or for the password's parameters again changes nothing: those two may retry a closed socket.
+    const idempotent = id === 0xb7e085fe || id === 0x548a30f5;
+    return decode(await this.invoke(dc, body, { retry: idempotent, deadline }), { expect });
+  }
+
+  /** An auth.authorization: the DC it came from is the home DC, logged in as that user. */
+  loggedIn(dc, auth) {
+    if (!auth || auth._ !== "auth.authorization" || !auth.user || auth.user._ !== "user") throw mtError("protocol", "unexpected answer to the account login");
+    if (auth.user.bot) throw mtError("protocol", "the login answered a bot, not an account");
+    const st = this.dcs.get(dc);
+    st.loggedIn = true;
+    st.userId = BigInt(auth.user.id);
+    this.homeDc = dc;
+    return { userId: st.userId };
+  }
+
+  /**
+   * One round of the QR login on the home DC: auth.exportLoginToken. Answers { token (Uint8Array), expires (a unix
+   * time of the server's) } while nobody has scanned it, or { userId } once the person accepted it in the official
+   * Telegram app (auth.loginTokenSuccess; auth.loginTokenMigrateTo is followed: auth.importLoginToken on that DC, which
+   * gets its own auth key, and becomes the home DC). A 2FA account throws `password_needed`: the home DC is then the
+   * DC that asked, and checkPassword goes on there. A DC already logged in sends nothing and answers { reused, userId }.
+   */
+  qrLoginStep({ apiHash, deadline }) {
+    if (this.mode !== "account") return Promise.reject(mtError("invalid_request", "account login methods are for account mode"));
+    return this.serial(async () => {
+      if (!this.homeDc) throw mtError("invalid_request", "connect first");
+      if (!apiHash || !this.apiId) throw mtError("invalid_request", "apiId and apiHash are required");
+      const home = this.dcs.get(this.homeDc);
+      if (home && home.loggedIn) return { reused: true, userId: home.userId };
+      let dc = this.homeDc;
+      let res = await this.authInvoke(dc, exportLoginToken({ apiId: this.apiId, apiHash }), "auth.LoginToken", deadline);
+      for (let hops = 0; res._ === "auth.loginTokenMigrateTo"; hops++) {
+        if (hops >= 2) throw mtError("protocol", "too many login migrations");
+        const target = Number(res.dc_id);
+        if (!(target >= 1 && target <= 5)) throw mtError("protocol", "bad login DC " + target);
+        dc = target;
+        try {
+          res = await this.authInvoke(dc, importLoginToken(res.token), "auth.LoginToken", deadline);
+        } catch (e) {
+          if (e && e.code === "password_needed") { const from = this.homeDc; this.homeDc = dc; if (from !== dc) await this.drop(from); }
+          throw e;
+        }
+      }
+      if (dc !== this.homeDc) await this.drop(this.homeDc); // the DC the token came from is not the account's: free its socket
+      if (res._ === "auth.loginTokenSuccess") return this.loggedIn(dc, res.authorization);
+      if (res._ === "auth.loginToken") return { token: res.token, expires: Number(res.expires) };
+      throw mtError("protocol", "unexpected answer to auth.exportLoginToken");
+    }, deadline);
+  }
+
+  /**
+   * The 2FA step: account.getPassword, the SRP proof (srp.js), auth.checkPassword, on the home DC. `password` is only
+   * used here: never kept, never logged. Each attempt spends one of PASSWORD_BUDGET; a stale SRP round (SRP_ID_INVALID)
+   * is retried once with a fresh getPassword. A wrong password throws `password_invalid`.
+   */
+  checkPassword(password, { deadline } = {}) {
+    if (this.mode !== "account") return Promise.reject(mtError("invalid_request", "account login methods are for account mode"));
+    return this.serial(async () => {
+      if (!this.homeDc) throw mtError("invalid_request", "connect first");
+      const home = this.dcs.get(this.homeDc);
+      if (home && home.loggedIn) return { reused: true, userId: home.userId };
+      if (this.store) loginBudget(this.store, this.now(), PASSWORD_BUDGET).record();
+      for (let attempt = 0; ; attempt++) {
+        const pw = await this.authInvoke(this.homeDc, getPassword(), "account.Password", deadline);
+        if (!pw.has_password || !pw.current_algo) throw mtError("protocol", "the account has no 2FA password");
+        const proof = srpCheck({ algo: pw.current_algo, srpB: pw.srp_B, srpId: BigInt(pw.srp_id) }, password);
+        try {
+          return this.loggedIn(this.homeDc, await this.authInvoke(this.homeDc, checkPassword(proof), "auth.Authorization", deadline));
+        } catch (e) {
+          if (e && e.code === "password_invalid" && e.rpc === "SRP_ID_INVALID" && attempt === 0) continue;
+          throw e;
+        }
+      }
+    }, deadline);
+  }
+
+  /** auth.logOut on the home DC (best effort: the caller forgets the session whatever happens). */
+  logOut({ deadline } = {}) {
+    if (this.mode !== "account") return Promise.reject(mtError("invalid_request", "account login methods are for account mode"));
+    return this.serial(async () => {
+      if (!this.homeDc) return false;
+      const home = this.dcs.get(this.homeDc);
+      if (!home || !home.loggedIn) return false;
+      await this.authInvoke(this.homeDc, logOut(), "auth.LoggedOut", deadline);
+      home.loggedIn = false;
+      return true;
     }, deadline);
   }
 

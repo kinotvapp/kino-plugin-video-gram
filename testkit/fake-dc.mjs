@@ -380,6 +380,12 @@ class DcConnection {
       return this.rpc(r, entry);
     }
     if (!this.inited) throw { rpc: [400, "CONNECTION_NOT_INITED"] };
+    (dc.cluster.methodIds = dc.cluster.methodIds || []).push(ctor); // every method id that reached the cluster
+    // Account mode (testkit/fake-account.mjs): the QR login, the 2FA password, the logout and the read-only library calls.
+    if (dc.cluster.account) {
+      const answer = dc.cluster.account.rpc(ctor, r, { dc, entry, conn: this });
+      if (answer !== undefined) return new Uint8Array(answer);
+    }
     if (ctor === CTOR.importBotAuthorization) {
       r.int(); r.int();
       const apiHash = r.string(), token = r.string();
@@ -417,6 +423,7 @@ class DcConnection {
       if (thumbSize) (dc.stats.thumbs = dc.stats.thumbs || []).push(thumbSize);
       (dc.stats.getFileOffsets = dc.stats.getFileOffsets || []).push(offset);
       if (!entry.authorized) throw { rpc: [401, "AUTH_KEY_UNREGISTERED"] };
+      if (dc.cluster.account && entry.account) dc.cluster.account.needAccount(entry);
       const f = dc.cluster.files.get(id.toString());
       if (!f || f.accessHash !== accessHash) throw { rpc: [400, "FILE_ID_INVALID"] };
       if (f.dc !== dc.id) throw { rpc: [303, "FILE_MIGRATE_" + f.dc] };
@@ -431,6 +438,7 @@ class DcConnection {
       if (!entry.authorized) throw { rpc: [401, "AUTH_KEY_UNREGISTERED"] };
       dc.cluster.requests.push(call);
       if (call.method === "messagesGetHistory") throw { rpc: [400, "BOT_METHOD_INVALID"] };
+      if (dc.cluster.account && entry.account) dc.cluster.account.needAccount(entry);
       const api = dc.cluster.api;
       if (!api || typeof api[call.method] !== "function") throw { rpc: [400, "METHOD_NOT_IN_FAKE_DC"] };
       return new Uint8Array(api[call.method](call));
