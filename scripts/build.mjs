@@ -7,8 +7,11 @@
 //
 //   node scripts/build.mjs [entry] [out]     default: src/mtproto/index.js -> dist/mtproto.js
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
-import { dirname, resolve, relative } from "node:path";
+import { dirname, resolve, relative as relativePath, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+
+// Paths go into the bundle (comments, module names), so they always use "/": the same bytes on every OS, and the signature covers them.
+const relative = (from, to) => relativePath(from, to).split(sep).join("/");
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const IMPORT_RE = /^import\s*\{([^}]*)\}\s*from\s*["'](\.{1,2}\/[^"']+)["'];?[ \t]*$/gm;

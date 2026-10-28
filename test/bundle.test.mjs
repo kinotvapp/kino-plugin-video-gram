@@ -24,6 +24,13 @@ test("the bundle is one ES module with no import and no Node-only global", () =>
   assert.ok(source.length < 1024 * 1024, "Kino's entry file limit is 1 MB");
 });
 
+// The signature covers plugin.js: a bundle built on Windows used to carry `src\\shell\\text.js` comments, so the same source
+// gave other bytes on another OS. Every path in the bundle uses "/".
+test("the bundle's own path comments use forward slashes, whatever the OS that built it", () => {
+  assert.doesNotMatch(source, /^\/\/ (?:----|Built by).*[A-Za-z]\\[A-Za-z]/m);
+  assert.match(source, /^\/\/ ---- src\/mtproto\/bytes\.js ----$/m);
+});
+
 test("inside the plugin sandbox: key exchange, bot login, state reuse and chunks against the fake DC", async () => {
   const dir = mkdtempSync(join(tmpdir(), "tg-bundle-"));
   const file = join(dir, "plugin.js");

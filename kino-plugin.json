@@ -1,7 +1,7 @@
 {
   "id": "video-gram",
   "name": "Video-Gram",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "apiVersion": 14,
   "entry": "plugin.js",
   "description": "Tus videos de Telegram en Kino: los de tus canales y chats, con tu propio bot o tu cuenta (solo lectura). No oficial: sin relación con Telegram. (Your Telegram videos in Kino, with your own bot or your account, read only. Unofficial: not affiliated with Telegram.)",
@@ -132,6 +132,6 @@
   },
   "signature": {
     "authorKey": "82b87b938e0a95b142467c815a8823cb54310a13a828c3c4c77b1eda43294ae6",
-    "value": "52738eee05c606a1ae5fe559291f7173475c5d0e41a8b8c8e171d4906e8c5dd189fbf04513607494d6b163a21671c1e83ebf15b21cb90f4111e3196b798b4206"
+    "value": "ab8ac0f892518613a5f9c4bd070be2264b9bc14c41249c2c0eb639a997ca9b3e37cd7142d749023c694a672d4a42cb7b9f3ed2639d90d5f03358641eb1bc8f03"
   }
 }

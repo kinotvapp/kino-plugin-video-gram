@@ -50,11 +50,11 @@ beforeEach(() => {
 });
 afterEach(() => { tg.restore(); dev.close(); });
 
-test("the manifest declares imageSource at apiVersion 14, version 1.2.0, and the bundle exports image", async () => {
+test("the manifest declares imageSource at apiVersion 14, a 1.2.x version, and the bundle exports image", async () => {
   assert.equal(validateManifest(JSON.stringify(MANIFEST)).ok, true);
   assert.ok(MANIFEST.capabilities.includes("imageSource"));
   assert.equal(MANIFEST.apiVersion, 14);
-  assert.equal(MANIFEST.version, "1.2.0");
+  assert.match(MANIFEST.version, /^1\.2\.\d+$/);
   const p = await dev.runtime(SETTINGS);
   assert.equal(typeof p.image, "function");
 });

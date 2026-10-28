@@ -1,6 +1,6 @@
-// Built by scripts/build.mjs from src\plugin.js -- do not edit; edit src/ and rebuild.
+// Built by scripts/build.mjs from src/plugin.js -- do not edit; edit src/ and rebuild.
 
-// ---- src\shell\text.js ----
+// ---- src/shell/text.js ----
 const __mod_src_shell_text = (() => {
 // Every text the person reads, in Spanish (neutral, tuteo) and English, picked by kino.lang. Code, logs and the detail
 // of a kino.error stay English (they are for the developer). A `um.*` text is a kino.error userMessage: Kino shows it
@@ -268,7 +268,7 @@ const TEXT_TABLES = { ES, EN };
 return { bi, isEnglish, t, minutes, videoCount, TEXT_TABLES };
 })();
 
-// ---- src\shell\errors.js ----
+// ---- src/shell/errors.js ----
 const __mod_src_shell_errors = (() => {
 // What reaches Kino when something fails: always a kino.error with one of its codes, an English detail made only of
 // codes and numbers (never a message from elsewhere, so never a secret), and the person's sentence in their language.
@@ -338,7 +338,7 @@ async function guard(fn) {
 return { shellError, kindOf, toKinoError, guard };
 })();
 
-// ---- src\mtproto\bytes.js ----
+// ---- src/mtproto/bytes.js ----
 const __mod_src_mtproto_bytes = (() => {
 // Uint8Array helpers for a runtime without Buffer (Kino's QuickJS). kino.crypto takes and returns strings, so the hot
 // conversions (hex and base64 of a 1 MiB chunk) are written as single passes over typed arrays: each output character
@@ -531,7 +531,7 @@ const fromUtf8 = (u8) => new TextDecoder().decode(u8);
 return { toHex, fromHex, toBase64, fromBase64, hexToBase64, concat, equal, xor, reversed, readU32LE, readI32LE, writeU32LE, readI64LE, writeI64LE, bigFromBytes, bigToBytes, bigToHex, random, utf8, fromUtf8 };
 })();
 
-// ---- src\mtproto\crypto.js ----
+// ---- src/mtproto/crypto.js ----
 const __mod_src_mtproto_crypto = (() => {
 // The kino.crypto calls MTProto needs, with hex on both sides (hex can be sliced and joined at any byte, base64 only
 // at multiples of 3). Every primitive runs natively in the app: hashes, AES-IGE, AES-CTR, modPow and gunzip.
@@ -563,7 +563,7 @@ const gunzipHex = (hex) => kino.crypto.gunzip(hex, HEX);
 return { sha1Hex, sha256Hex, sha1, sha256, igeEncryptHex, igeDecryptHex, igeEncrypt, igeDecrypt, ctrHex, modPowHex, gunzipHex };
 })();
 
-// ---- src\mtproto\errors.js ----
+// ---- src/mtproto/errors.js ----
 const __mod_src_mtproto_errors = (() => {
 // Typed errors: every failure the library throws is an Error with a string `code` from CODES, plus the extra fields
 // the code needs (`seconds` for flood_wait/login_budget, `dc` for the migrations, `rpc`/`status` for server errors).
@@ -658,7 +658,7 @@ const isServerAnswer = (e) => !!(e && typeof e === "object" && ["flood_wait", "f
 return { CODES, mtError, fromRpcError, fromTransportError, describeError, isServerAnswer };
 })();
 
-// ---- src\mtproto\big.js ----
+// ---- src/mtproto/big.js ----
 const __mod_src_mtproto_big = (() => {
 // A hand-kept MODEL of the big strings this library holds at once (hex of packets and chunks), so a test can bound the
 // peak under QuickJS's 64 MiB per-plugin cap. It is NOT the real QuickJS heap: it only knows what the code tells it
@@ -681,7 +681,7 @@ const big = {
 return { big };
 })();
 
-// ---- src\mtproto\transport.js ----
+// ---- src/mtproto/transport.js ----
 const __mod_src_mtproto_transport = (() => {
 // Obfuscated "intermediate" MTProto transport over kino.ws, as the spike's Transport (mtproto.mjs) did over Node's
 // WebSocket: a 64-byte random init whose tail is encrypted, then packets `len:uint32le payload`, the whole stream in
@@ -886,7 +886,7 @@ class Transport {
 return { DC_HOSTS, MAX_SEND_BYTES, MAX_PACKET_BYTES, dcUrl, CtrStream, makeInit, Transport };
 })();
 
-// ---- src\mtproto\tl.js ----
+// ---- src/mtproto/tl.js ----
 const __mod_src_mtproto_tl = (() => {
 // TL serialization for the constructors this plugin uses (MTProto layer 198), ported from the spike's W/R
 // (telegram-mtproto-spike/mtproto.mjs) to Uint8Array. Readers of server answers never crash on a constructor they do
@@ -1318,7 +1318,7 @@ function parseMessage(r) {
 return { LAYER, CTOR, Writer, Reader, reqPqMulti, pqInnerDataDc, reqDHParams, clientDHInnerData, setClientDHParams, invokeWithLayer, initConnection, importBotAuthorization, exportAuthorization, importAuthorization, exportLoginToken, importLoginToken, getPassword, checkPassword, logOut, msgsAck, inputDocumentFileLocation, uploadGetFile, parseRpcError, parseUploadFile, hexU32, hexBytesAt, parseUploadFileHex, parseExportedAuthorization, parseAuthorization, parseDocument, parseMessageMedia, parseMessage };
 })();
 
-// ---- src\mtproto\msgid.js ----
+// ---- src/mtproto/msgid.js ----
 const __mod_src_mtproto_msgid = (() => {
 // Client message ids: about unixtime * 2^32, divisible by 4, strictly increasing within a session.
 class MsgIds {
@@ -1340,7 +1340,7 @@ class MsgIds {
 return { MsgIds };
 })();
 
-// ---- src\mtproto\authkey.js ----
+// ---- src/mtproto/authkey.js ----
 const __mod_src_mtproto_authkey = (() => {
 // "Creating an authorization key" (MTProto 2.0), exactly as the verified-live spike (mtproto.mjs createAuthKey):
 // req_pq_multi, pq factorisation, p_q_inner_data_dc under RSA_PAD, server_DH_params_ok, the safety checks on dh_prime,
@@ -1546,7 +1546,7 @@ async function createAuthKey(t, { dc, publicKeys, now = () => Date.now(), timeou
 return { TELEGRAM_DH_PRIME_HEX, factorPq, rsaFingerprint, isProbablePrime, checkDhPrime, plainCall, createAuthKey };
 })();
 
-// ---- src\mtproto\session.js ----
+// ---- src/mtproto/session.js ----
 const __mod_src_mtproto_session = (() => {
 // The encrypted MTProto 2.0 session on top of an auth key, ported from the spike's Session (session.mjs): msg_key and
 // AES key derivation with sha256, containers, gzip_packed, new_session_created, bad_server_salt (resend), plus what a
@@ -1939,7 +1939,7 @@ class Session {
 return { Session };
 })();
 
-// ---- src\mtproto\schema\generated.js ----
+// ---- src/mtproto/schema/generated.js ----
 const __mod_src_mtproto_schema_generated = (() => {
 // Generated by scripts/gen-schema.mjs from the layer-198 TL schema -- do not edit.
 // Roots: updates.State, updates.Difference, updates.ChannelDifference, messages.Messages, Message, MessageMedia, Document, DocumentAttribute, Chat, User, Peer, Update, Updates, messages.Dialogs, auth.LoginToken, auth.Authorization, account.Password, auth.LoggedOut. 689 of 1396 constructors, 158 types.
@@ -1949,7 +1949,7 @@ const SCHEMA_CTORS = "7f3b18ea inputPeerEmpty 0\n7da07ec9 inputPeerSelf 0\n35a95
 return { SCHEMA_LAYER, SCHEMA_TYPES, SCHEMA_CTORS };
 })();
 
-// ---- src\mtproto\schema\reader.js ----
+// ---- src/mtproto/schema/reader.js ----
 const __mod_src_mtproto_schema_reader = (() => {
 // A schema-driven TL reader: it interprets the constructor table that scripts/gen-schema.mjs extracts from the layer-198
 // schema (generated.js) and turns a server answer into plain objects: { _: "channel", id: 123n, access_hash: -5n, ... }.
@@ -2204,7 +2204,7 @@ function readBool(r) {
 return { createDecoder, decode, schemaStats };
 })();
 
-// ---- src\mtproto\srp.js ----
+// ---- src/mtproto/srp.js ----
 const __mod_src_mtproto_srp = (() => {
 // The 2FA password check (SRP, "Two-factor authentication" in Telegram's docs) for the one algorithm Telegram uses,
 // passwordKdfAlgoSHA256SHA256PBKDF2HMACSHA512iter100000SHA256ModPow:
@@ -2281,7 +2281,7 @@ function srpCheck({ algo, srpB, srpId }, password, { aBytes } = {}) {
 return { SRP_ALGO, passwordHash, srpCheck };
 })();
 
-// ---- src\mtproto\requests.js ----
+// ---- src/mtproto/requests.js ----
 const __mod_src_mtproto_requests = (() => {
 // Serialized API methods for the discovery (layer 198), written field by field from their TL lines:
 // updates.getState#edd4882a = updates.State
@@ -2372,7 +2372,7 @@ const searchMessages = ({ peer, filter, offsetId = 0, minId = 0, limit = 100 }) 
 return { BOT_CALLS, ALLOWED_CALLS, ACCOUNT_CALLS, ACCOUNT_AUTH_CALLS, getState, getDifference, getChannelDifference, channelsGetMessages, messagesGetMessages, FILTER, inputPeer, getDialogs, searchMessages };
 })();
 
-// ---- src\mtproto\keys.js ----
+// ---- src/mtproto/keys.js ----
 const __mod_src_mtproto_keys = (() => {
 // Telegram's PUBLIC RSA server keys (from tg-public-keys.json, as used by the verified-live spike), keyed by the
 // signed decimal fingerprint the server lists in resPQ. n is big-endian hex, e decimal.
@@ -2389,7 +2389,7 @@ const TELEGRAM_PUBLIC_KEYS = Object.freeze({
 return { TELEGRAM_PUBLIC_KEYS };
 })();
 
-// ---- src\mtproto\client.js ----
+// ---- src/mtproto/client.js ----
 const __mod_src_mtproto_client = (() => {
 // The high-level client: one auth key per DC, a bot login once per home DC, DC migration, chunked file downloads and
 // a JSON-safe state the plugin shell stores encrypted. Calls run one at a time (Kino calls `read` one at a time too).
@@ -2987,7 +2987,7 @@ class TelegramClient {
 return { CHUNK, loginBudget, PASSWORD_BUDGET, TelegramClient };
 })();
 
-// ---- src\mtproto\discovery.js ----
+// ---- src/mtproto/discovery.js ----
 const __mod_src_mtproto_discovery = (() => {
 // Video discovery for a logged-in bot: which videos sit in the channels the bot administers and in private chats with
 // it. Bots cannot list dialogs or read history (messages.getHistory answers BOT_METHOD_INVALID), so everything comes
@@ -3595,7 +3595,7 @@ function createDiscovery({ client, store, budgetBytes = DEFAULT_BUDGET_BYTES, pe
 return { skipForIndex, chatIdOf, thumbOf, videoEntry, createDiscovery };
 })();
 
-// ---- src\mtproto\account-library.js ----
+// ---- src/mtproto/account-library.js ----
 const __mod_src_mtproto_account_library = (() => {
 // The video library of a person's OWN Telegram account (account mode, 0.3.0), read only. Unlike a bot, an account can
 // list its chats and search them, so nothing here uses the update boxes:
@@ -3866,7 +3866,7 @@ const ACCOUNT_STATE_KEY = STATE_KEY;
 return { createAccountDiscovery, ACCOUNT_STATE_KEY };
 })();
 
-// ---- src\shell\store.js ----
+// ---- src/shell/store.js ----
 const __mod_src_shell_store = (() => {
 // The plugin's small kino.storage (256 KB for every key; backed up with a password, never synced). Four keys:
 //   mtproto.botLogins  the client's login budget (a JSON list of at most 3 times)              < 100 B
@@ -3907,7 +3907,7 @@ const kinoStore = Object.freeze({
 return { KEYS, readJson, writeJson, remove, kinoStore };
 })();
 
-// ---- src\shell\live.js ----
+// ---- src/shell/live.js ----
 const __mod_src_shell_live = (() => {
 // One live Telegram client per plugin runtime, reused by every call (Home, refresh, each read): the auth key and the
 // bot login come from tg.session (when it was made on this device, see the device mark), so a new runtime connects
@@ -4229,7 +4229,7 @@ const hasStoredLogin = (c) => {
 return { credentials, sessionFp, loginFp, sessionStoreKey, lastOpenTiming, DEVICE_ROW, deviceMark, markDevice, checkDevice, saveSession, loginBlocked, recordLoginFailure, connect, withSession, idleReset, close, sessionClosed, forgetSession, liveFor, markLoggedIn, hasStoredLogin };
 })();
 
-// ---- src\shell\timing.js ----
+// ---- src/shell/timing.js ----
 const __mod_src_shell_timing = (() => {
 // Timing lines for the device logs (Kino's "Registro" and logcat KinoPlugin/<id>): one line per read and per refresh,
 // numbers and short codes only. Never a setting, a key, an id, a file reference or any data. Set TIMING to false to
@@ -4270,7 +4270,7 @@ function logRefresh(r) {
 return { TIMING, newTrace, logRead, logReadFailure, logRecovery, logRefresh };
 })();
 
-// ---- src\shell\clean.js ----
+// ---- src/shell/clean.js ----
 const __mod_src_shell_clean = (() => {
 // Text from Telegram (file names, captions, channel titles) is the sender's: it may carry control characters or
 // Unicode direction overrides that would make a title read as something else on screen. They are removed before the
@@ -4290,7 +4290,7 @@ function clip(s, n) {
 return { cleanText, clip };
 })();
 
-// ---- src\shell\enrich.js ----
+// ---- src/shell/enrich.js ----
 const __mod_src_shell_enrich = (() => {
 // Names and TMDB: what a video's file name (or caption) says it is, and what Kino's own TMDB access (kino.meta) knows
 // about it. Pure pieces here (parseName, markerOf, queryOf, applyMeta, posterOf, displayTitle, needsLookup) plus the
@@ -4605,7 +4605,7 @@ const viewOf = (row) => (tmdbOn() || !row || !row.data || !row.data.tm ? row : {
 return { MISS_TTL_MS, markerOf, parseName, queryOf, keyOf, applyMeta, needsLookup, posterOf, backdropOf, displayTitle, nameOf, carry, enrichStep, tmdbOn, viewOf };
 })();
 
-// ---- src\shell\library.js ----
+// ---- src/shell/library.js ----
 const __mod_src_shell_library = (() => {
 // The video library: Telegram's channels through the discovery, kept in kino.catalog (one row per video), and the
 // rows, pages and searches Kino shows, read from the catalog only.
@@ -5217,7 +5217,7 @@ function setupView() {
 return { SOFT_ACTIVE, MAX_ACTIVE, REFRESH_MS, loadShell, titleOf, pickedChats, activeChats, migrationPicks, picksWith, rowOf, posterFor, itemOf, countVideos, refresh, forget, forgetAccount, nowMs, homeRows, browsePage, searchPage, rowFor, channelTabs, setupView, chatOfId, msgOfId };
 })();
 
-// ---- src\shell\account.js ----
+// ---- src/shell/account.js ----
 const __mod_src_shell_account = (() => {
 // Account mode's sign-in, from the setup screen only (there is no login in the background):
 //   - "Iniciar sesión con QR" (the qr_login event) asks Telegram for a login token (auth.exportLoginToken, with the
@@ -5381,7 +5381,7 @@ async function logout() {
 return { ACCOUNT_BUDGET, startQr, qrPoll, confirmPassword, logout };
 })();
 
-// ---- src\shell\validate.js ----
+// ---- src/shell/validate.js ----
 const __mod_src_shell_validate = (() => {
 // What the setup screen accepts for the three secrets, one rule each: the screen's Form checks them with these patterns
 // (Kino's own matcher) before any code runs, and the connect event checks them again with the same source.
@@ -5411,7 +5411,7 @@ function problemWith(key, value) {
 return { PATTERNS, problemWith };
 })();
 
-// ---- src\shell\screen.js ----
+// ---- src/shell/screen.js ----
 const __mod_src_shell_screen = (() => {
 // The plugin's setup screen (apiVersion 14 `screen`): the only place the person connects Telegram, picks channels and
 // runs the index. Kino draws it from the tree below, on the phone and on the TV, and keeps the state; nothing here
@@ -5717,7 +5717,7 @@ async function run(name, arg, value, state) {
 return { screen, screenEvent };
 })();
 
-// ---- src\shell\b64.js ----
+// ---- src/shell/b64.js ----
 const __mod_src_shell_b64 = (() => {
 // Hex to base64 without a JavaScript pass over the data. kino.crypto has no plain re-encoding, but AES-CTR XORs the
 // data with a keystream fixed by its key and counter, so running it twice with the same key and counter gives the data
@@ -5752,7 +5752,7 @@ function base64Of(hex) {
 return { hexToBase64Native, base64Of };
 })();
 
-// ---- src\shell\read.js ----
+// ---- src/shell/read.js ----
 const __mod_src_shell_read = (() => {
 // The byteSource `read` export: { handle, offset, length } -> { bytes: base64 } of exactly min(length, size - offset)
 // bytes. Kino's proxy asks 1 MiB at offsets that are multiples of 1 MiB, which is one upload.getFile; any other
@@ -5923,7 +5923,7 @@ async function readTimed(arg, started) {
 return { pieces, locOf, read };
 })();
 
-// ---- src\shell\image.js ----
+// ---- src/shell/image.js ----
 const __mod_src_shell_image = (() => {
 // The imageSource `image` export: { handle: "t:<row id>" } -> { bytes: base64, mime: "image/jpeg" }, Telegram's own
 // thumbnail of the video (the type letter kept in the row's data.th), for a card TMDB has no poster for.
@@ -5990,7 +5990,7 @@ async function image(arg) {
 return { image };
 })();
 
-// ---- src\plugin.js (entry) ----
+// ---- src/plugin.js (entry) ----
 // Video-Gram (id video-gram): a personal library of your Telegram videos for Kino. The person brings their own api_id/api_hash
 // (my.telegram.org) and a bot (@BotFather) that administers their private channel(s); the plugin lists the channels'
 // videos in Inicio and in search, and streams them through Kino's byteSource (`read`), seeking, Cast and DLNA included.
