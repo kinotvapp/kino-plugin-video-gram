@@ -222,7 +222,7 @@ test("secret scan in account mode: api_hash, the auth key, the login token and t
   assert.ok(!d.logs.join("\n").includes("tg://login"));
 });
 
-test("the manifest is screen-only: apiVersion 14, the screen replaces Kino's form, 11 valued settings and no action (Kino's limits)", () => {
+test("the manifest is screen-only: apiVersion 14, the screen replaces Kino's form, 6 valued settings and no action (Kino's limits)", () => {
   const s = MANIFEST.settings;
   assert.equal(MANIFEST.apiVersion, 14);
   assert.ok(MANIFEST.capabilities.includes("screen"));
@@ -233,8 +233,11 @@ test("the manifest is screen-only: apiVersion 14, the screen replaces Kino's for
   assert.deepEqual(s.filter((x) => x.required).map((x) => x.key), []);
   // The old form's furniture is gone: only values remain (no section, status, qr, help or action).
   assert.deepEqual(s.filter((x) => ["section", "status", "action", "qr", "link", "help"].includes(x.type)), []);
-  assert.equal(s.length, 11);
-  assert.ok(s.filter((x) => /^ch\d$/.test(x.key)).length === 6);
+  assert.deepEqual(s.map((x) => x.key), ["access", "api_id", "api_hash", "bot_token", "tmdb", "chats"]);
+  const chats = s.find((x) => x.key === "chats");
+  assert.equal(chats.type, "list");
+  assert.equal(chats.max, 12);
+  assert.deepEqual(chats.fields.map((f) => f.key), ["id", "title"]);
 });
 
 test("the 2FA password is not a setting: it is typed in a masked field, used once and never kept (nothing to sync, nothing to clear)", async () => {

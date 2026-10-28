@@ -82,22 +82,28 @@ test("every text on the screen has its English twin", async () => {
   assert.deepEqual(missing, []);
 });
 
-test("a bot setup: the channels appear as switches bound to their places, the index card has the refresh and forget buttons", async () => {
+test("a bot setup: every known chat is a switch that sends its id, the count shows the recommendation, the index card has its buttons", async () => {
   const p = await d.runtime(BOT);
   let v = await p.view();
   clean(v.tree, "bot before refresh");
-  assert.ok(!texts(v.tree).includes('"key":"sw1"'), "no place switches before the first refresh finds the channels");
+  assert.ok(!texts(v.tree).includes('"key":"chat0"'), "no chat switches before the first refresh finds the channels");
   await p.action("refresh");
   v = await p.view();
   clean(v.tree, "bot after refresh");
   const switches = [];
   const walk = (n) => { if (n && typeof n === "object") { if (n.type === "Switch") switches.push(n); (n.children || []).forEach(walk); } };
   walk(v.tree);
-  assert.deepEqual(switches.filter((s) => /^sw\d$/.test(s.key)).map((s) => s.bind), ["ch1", "ch2", "ch3", "ch4", "ch5", "ch6"]);
+  const chats = switches.filter((s) => /^chat\d+$/.test(s.key));
+  assert.equal(chats.length, 8, "all eight channels, not six places");
+  assert.deepEqual(chats.map((s) => s.onChanged.event), Array(8).fill("toggle"));
+  assert.ok(chats.every((s) => s.bind === undefined), "a chat is not a setting of its own: the pick is the chats list");
+  assert.equal(chats[0].value, true, "the test shorthand picks the first chat");
+  assert.equal(chats[1].value, false);
   assert.equal(switches.find((s) => s.key === "swTmdb").bind, "tmdb");
-  assert.match(texts(v.tree), /Sin lugar/, "two channels wait for a place");
-  assert.match(texts(v.tree), /Dar lugar a los que esperan/);
-  for (const key of ["btnRefresh", "btnForget", "btnFree"]) assert.ok(texts(v.tree).includes('"key":"' + key + '"'), key);
+  assert.match(texts(v.tree), /1 activos \(recomendado hasta 6\)/);
+  assert.match(texts(v.tree), /1 active \(recommended up to 6\)/);
+  for (const key of ["btnRefresh", "btnForget"]) assert.ok(texts(v.tree).includes('"key":"' + key + '"'), key);
+  assert.ok(!texts(v.tree).includes("btnFree"), "the give-places button is gone with the places");
 });
 
 test("account mode: the bot token field goes, the sign-in step waits for api_id and api_hash, then shows the QR button", async () => {
@@ -162,9 +168,9 @@ test("every button turns itself off while its event runs, and every answer turns
   const buttons = [];
   const walk = (n) => { if (n && typeof n === "object") { if (/^btn/.test(n.key || "")) buttons.push(n); (n.children || []).forEach(walk); } };
   walk(tree);
-  assert.ok(buttons.length >= 3);
+  assert.ok(buttons.length >= 2);
   for (const b of buttons) assert.deepEqual(b.onPressed.ui, [{ disable: b.key }], b.key);
-  for (const [event, key] of [["refresh", "btnRefresh"], ["free_slots", "btnFree"], ["forget", "btnForget"]]) {
+  for (const [event, key] of [["refresh", "btnRefresh"], ["forget", "btnForget"]]) {
     const answer = await p.event(event);
     const checked = checkScreenAnswer(answer, "es", { settings: MANIFEST.settings });
     assert.deepEqual(checked.dropped, [], event + ": " + checked.dropped.join("; "));

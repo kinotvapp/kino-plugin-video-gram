@@ -25,15 +25,34 @@ export function testBundle() {
   return parts.join("const PUBLIC_KEYS = " + JSON.stringify(fakeRsa().publicKeys) + ";");
 }
 
-/** Settings as Kino gives them: the person's values, else the manifest default (toggles false without one). */
-function configOf(values) {
-  const out = {};
-  for (const s of MANIFEST.settings) {
-    if (["section", "status", "action"].includes(s.type)) continue;
-    const v = values[s.key] !== undefined ? values[s.key] : s.default !== undefined ? s.default : s.type === "toggle" ? false : undefined;
-    if (v !== undefined && v !== "") out[s.key] = v;
-  }
-  return Object.freeze({ get: (k) => out[k], all: () => ({ ...out }) });
+/**
+ * Settings as Kino gives them: the person's values, else the manifest default (toggles false without one). Read at every
+ * call, so a `config` answer of the screen (applied to `values` by `withScreen`) shows at once, as after Kino's restart.
+ * `chats` is the picked chats' list; as a shorthand from the slot era a test may give `chN: true|false` instead (slot 1 on
+ * by default) and the N-th chat the plugin met, in the order it met them, is the pick.
+ */
+function configOf(values, storage) {
+  const read = (k) => {
+    const s = MANIFEST.settings.find((x) => x.key === k);
+    if (k === "chats" && values.chats === undefined) {
+      const json = (key) => { try { return JSON.parse(storage.get(key)); } catch { return null; } };
+      // The order the plugin uses is the discovery's (first met, then id): it is committed before the shell is saved.
+      const account = values.access === "account";
+      const found = account ? (json("tg.adiscovery") || {}).chats || {} : (json("tg.discovery") || {}).channels || {};
+      const all = Object.entries(found).map(([id, c]) => [account ? id : String(-(1000000000000n + BigInt(id))), c]);
+      all.sort((a, b) => (a[1].seen ?? 1e15) - (b[1].seen ?? 1e15) || (BigInt(a[0]) < BigInt(b[0]) ? -1 : 1));
+      const titles = Object.fromEntries(all.map(([id, c]) => [id, c.title]));
+      const known = all.map(([id]) => id);
+      const picks = [];
+      for (let i = 1; i <= 6; i++) if ((values["ch" + i] !== undefined ? values["ch" + i] : i === 1) === true && known[i - 1]) picks.push({ id: known[i - 1], title: titles[known[i - 1]] || "" });
+      return picks.length ? picks : undefined;
+    }
+    if (!s || ["section", "status", "action"].includes(s.type)) return undefined;
+    const v = values[k] !== undefined ? values[k] : s.default !== undefined ? s.default : s.type === "toggle" ? false : undefined;
+    return v === "" ? undefined : v;
+  };
+  const keys = () => MANIFEST.settings.map((x) => x.key).filter((k) => read(k) !== undefined);
+  return Object.freeze({ get: (k) => read(k), all: () => Object.fromEntries(keys().map((k) => [k, read(k)])) });
 }
 
 /**
@@ -65,14 +84,15 @@ export function device({ lang = "es-CO", metaFixture = null } = {}) {
         const mine = (previous = new Set());
         ws = Object.freeze({ ...base.ws, open: async (...a) => { const sock = await base.ws.open(...a); mine.add(sock); return sock; } });
       }
-      const kino = Object.freeze({ ...base, lang: runtimeLang, config: configOf(values), log: kinoLog, catalog, crypto, ws, meta: meta === null ? undefined : meta, ...(now ? { now } : {}) });
+      const live = { ...values }; // this runtime's settings: a `config` answer of the screen changes them, as Kino's write does
+      const kino = Object.freeze({ ...base, lang: runtimeLang, config: configOf(live, base.storage), log: kinoLog, catalog, crypto, ws, meta: meta === null ? undefined : meta, ...(now ? { now } : {}) });
       const { plugin } = await loadPlugin(file, kino, { console: pluginConsole });
       // Answers cross into Kino as JSON (README section 4), so they come back here as JSON too (main-realm values).
       const calls = {};
       for (const [name, fn] of Object.entries(plugin)) {
         if (typeof fn === "function") calls[name] = async (...args) => { const v = await fn(...JSON.parse(JSON.stringify(args))); return v === undefined ? undefined : JSON.parse(JSON.stringify(v)); };
       }
-      return withScreen(calls, values, runtimeLang);
+      return withScreen(calls, live, runtimeLang);
     },
     /** Every stored key and value, as one string (for the secret scans). */
     storageDump() {
@@ -124,6 +144,7 @@ function withScreen(calls, values, lang) {
   const event = async (name, arg, value) => {
     const answer = await calls.screenEvent({ name, arg, value, state: { ...state } });
     if (answer) merge(state, answer.state);
+    if (answer && answer.config) merge(values, answer.config);
     return answer;
   };
   return {
@@ -141,25 +162,23 @@ function withScreen(calls, values, lang) {
     async view() {
       await event("tick");
       const tree = await calls.screen({ state: { ...state } });
-      const out = { places: {}, tree };
+      const out = { places: {}, on: {}, tree };
       walk(tree, (n) => {
         if (n.key === "accountLine") out.account_status = say(n);
         if (n.type === "QrImage") out.login_qr = n.value;
         if (n.key === "noteLine") out.note = say(n);
         if (n.key === "waitingLine") out.channels_more = say(n);
         if (n.key === "indexLine") out.index_status = say(n);
-        const m = n.type === "Switch" && /^sw(\d)$/.exec(n.key || "");
-        if (m) out.places[Number(m[1])] = say(n, "labelText");
+        const m = n.type === "Switch" && /^chat(\d+)$/.exec(n.key || "");
+        if (m) { out.places[Number(m[1]) + 1] = say(n, "labelText"); out.on[Number(m[1]) + 1] = n.value === true; }
       });
       const line = [];
-      for (let i = 1; i <= 6; i++) {
+      for (const i of Object.keys(out.places).map(Number).sort((a, b) => a - b)) {
         const name = out.places[i];
-        if (name === undefined) { line.push(i + " " + (en ? "free" : "libre")); continue; }
         const gone = / \((sin acceso|no access)\)$/.test(name);
-        line.push(i + (gone ? " ✗ " : values["ch" + i] === true || (values["ch" + i] === undefined && i === 1) ? " ✓ " : " — ") + name);
+        line.push(i + (gone ? " ✗ " : out.on[i] ? " ✓ " : " — ") + name);
       }
       out.channels_status = line.join(" · ");
-      if (out.channels_more === undefined) out.channels_more = en ? "None" : "Ninguno";
       return out;
     },
   };

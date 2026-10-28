@@ -231,7 +231,7 @@ test("channel toggles: turning one on indexes it from the start, turning one off
   const status = await (await dev.runtime(SETTINGS)).view();
   assert.equal(places(status)[0], "✓ Mis películas");
   assert.match(places(status)[1], /^— Viajes/);
-  assert.match(places(status)[2], /libre/i);
+  assert.equal(places(status)[2], undefined, "only the chats the bot knows are listed");
   const both = await dev.runtime({ ...SETTINGS, ch2: true });
   const rows = await both.home();
   assert.ok(flat(rows).some((i) => i.ref === ids.trip), "channel 2 is indexed after it was turned on");

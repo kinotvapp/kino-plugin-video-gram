@@ -5,13 +5,15 @@
 // answer's `config`, and the 2FA password is used once, from the event's value, and never stored at all. Toggles and
 // the access select are `bind`s that Kino writes as the person changes them.
 import { credentials } from "./live.js";
-import { SLOTS, refresh, forget, freeSlots, setupView } from "./library.js";
+import { SOFT_ACTIVE, MAX_ACTIVE, refresh, forget, setupView, loadShell, pickedChats, picksWith, migrationPicks } from "./library.js";
 import { startQr, qrPoll, confirmPassword, logout } from "./account.js";
 import { PATTERNS, problemWith } from "./validate.js";
 import { t, bi, minutes, videoCount } from "./text.js";
 
 const TICK_MS = 4000;
-const BUSY = ["btnQr", "btnLogout", "btnFree", "btnRefresh", "btnForget"];
+const BUSY = ["btnQr", "btnLogout", "btnRefresh", "btnForget"];
+const CHAT_ROWS = 40;         // chats drawn at once: an account can know hundreds, the search finds the rest
+const SEARCH_FROM = 8;        // the search box shows from this many chats
 const busy = (key) => ({ ui: [{ disable: key }] });
 const settled = (key) => ({ ui: [{ enable: key }] });
 
@@ -119,19 +121,30 @@ function stepsNode(view, state) {
   return { type: "steps", key: "setup", onStepTap: "goStep", items };
 }
 
-function channelsCard(view) {
-  const rows = view.places.map((p) => ({
-    type: "Switch", key: "sw" + p.n, bind: p.key, labelText: p.gone ? p.title + " (" + bi("slots.gone").text + ")" : p.title, labelTextEn: p.gone ? p.title + " (" + bi("slots.gone").textEn + ")" : p.title,
-  }));
-  const children = [heading("screen.channels"), caption("screen.channelsHint", { n: SLOTS })];
-  if (rows.length) children.push({ type: "Column", gap: 4, children: rows });
-  else children.push({ type: "Text", style: "p", ...bi("slots.none") });
-  if (view.waiting.length) {
-    const list = (field) => view.waiting.slice(0, 4).map((w) => (w.wasOn ? bi("more.wasOn", { title: w.title })[field] : w.title)).join(", ") + (view.waiting.length > 4 ? " +" + (view.waiting.length - 4) : "");
-    const es = bi("more.list", { list: list("text") });
-    const en = bi("more.list", { list: list("textEn") });
-    children.push({ type: "Text", style: "label", ...bi("screen.waiting") }, { type: "Text", key: "waitingLine", style: "caption", color: "muted", text: es.text, textEn: en.textEn });
-    children.push(button("btnFree", "screen.freeButton", "free_slots", confirmOf("free.confirm")));
+/** The Switch of a chat keeps its key while the list changes: its place in the order the chats were met. */
+const chatKey = (view, id) => "chat" + view.chats.findIndex((c) => c.id === id);
+
+function channelsCard(view, state) {
+  const q = String(state.q || "").trim().toLowerCase();
+  const shown = (q ? view.chats.filter((c) => c.title.toLowerCase().includes(q)) : view.chats).slice(0, CHAT_ROWS);
+  const children = [
+    heading("screen.channels"),
+    caption("screen.channelsHint", { n: SOFT_ACTIVE }),
+    { type: "Text", key: "chatsCount", style: "label", ...bi("screen.chatsCount", { k: view.activeCount, n: SOFT_ACTIVE }) },
+  ];
+  if (view.chats.length >= SEARCH_FROM) {
+    children.push({ type: "TextField", key: "chatSearch", kind: "search", ...bi("screen.search", {}, "labelText"), onChanged: "search", onSubmitted: "search" });
+  }
+  if (shown.length) {
+    children.push({ type: "Column", gap: 4, children: shown.map((c) => ({
+      type: "Switch", key: chatKey(view, c.id), value: c.on, onChanged: { event: "toggle", arg: c.id },
+      labelText: c.gone ? c.title + " (" + bi("slots.gone").text + ")" : c.title, labelTextEn: c.gone ? c.title + " (" + bi("slots.gone").textEn + ")" : c.title,
+    })) });
+  } else {
+    children.push({ type: "Text", style: "p", ...bi("slots.none") });
+  }
+  if (shown.length < (q ? view.chats.filter((c) => c.title.toLowerCase().includes(q)).length : view.chats.length)) {
+    children.push(caption("screen.moreChats", { shown: shown.length, total: view.chats.length }));
   }
   return card(children);
 }
@@ -154,7 +167,7 @@ function indexCard(view) {
 export async function screen({ state }) {
   const view = setupView();
   const children = [{ type: "Text", style: "h2", ...bi("screen.title") }, statusBanner(view), stepsNode(view, state)];
-  if (view.ready) children.push(channelsCard(view), indexCard(view));
+  if (view.ready) children.push(channelsCard(view, state), indexCard(view));
   return {
     type: "SingleChildScrollView",
     every: { ms: TICK_MS, event: "tick" },
@@ -185,6 +198,36 @@ async function resync(state) {
   return sig === state.sig ? null : { qr: next.qr, qrMs: next.qrMs, note, sig };
 }
 
+/** The chat's switch as the screen draws it after this answer (the person's own tap left it where they put it). */
+const switchState = (id, on) => ({ inputs: { [chatKey(setupView(), id)]: on } });
+
+/** Writes the picks with `id` on or off. Past MAX_ACTIVE nothing is written; the screen is told, and the switch goes back. */
+function pick(id, on) {
+  const shell = loadShell(credentials());
+  const already = pickedChats().some((x) => x.id === id);
+  if (on && !already && pickedChats().length >= MAX_ACTIVE) return { toast: t("screen.maxChats", { n: MAX_ACTIVE }), state: { ...switchState(id, false), sig: null } };
+  return { config: { chats: picksWith(shell, id, on) }, state: { ...switchState(id, on), sig: null } };
+}
+
+/** A switch was tapped. Turning one on past the recommended number asks first (and the switch waits, off, for the answer). */
+function toggle(id, on) {
+  if (typeof id !== "string") return null;
+  const already = pickedChats().some((x) => x.id === id);
+  if (on === already) return null;
+  if (!on || already || pickedChats().length < SOFT_ACTIVE) return pick(id, on);
+  if (pickedChats().length >= MAX_ACTIVE) return pick(id, true);
+  return {
+    state: switchState(id, false),
+    dialog: {
+      ...bi("screen.warnTitle", {}, "title"), ...bi("screen.warnBody", { n: pickedChats().length }, "body"),
+      buttons: [
+        { ...bi("screen.warnConfirm", {}, "label"), event: "confirmOn", arg: id, variant: "primary" },
+        { ...bi("screen.warnCancel", {}, "label"), variant: "text" },
+      ],
+    },
+  };
+}
+
 /** The connect step's submit: what was typed, or what is already saved, must make a complete and well-formed set. */
 function connect(value) {
   const c = credentials();
@@ -212,7 +255,12 @@ export async function screenEvent({ name, arg, value, state }) {
 
 async function run(name, arg, value, state) {
   switch (name) {
-    case "open":
+    case "open": {
+      // The first opening after the update to the list of chats: the chats this device was reading become its picks.
+      const picks = migrationPicks();
+      const patch = await resync(state);
+      return picks || patch ? { ...(picks ? { config: { chats: picks } } : {}), ...(patch ? { state: patch } : {}) } : null;
+    }
     case "tick":
     case "qr_renew": {
       const patch = await resync(state);
@@ -236,10 +284,12 @@ async function run(name, arg, value, state) {
       const answer = await logout();
       return { state: { qr: null, qrMs: null, note: null, step: null, sig: null }, toast: answer.message, ...settled("btnLogout") };
     }
-    case "free_slots": {
-      const n = freeSlots();
-      return { state: { sig: null }, toast: n ? t("free.done", { n }) : t("free.none"), ...settled("btnFree") };
-    }
+    case "search":
+      return { state: { q: String(value ?? "").slice(0, 60), sig: null } };
+    case "toggle":
+      return toggle(arg, value === true);
+    case "confirmOn":
+      return pick(arg, true);
     case "refresh":
       return { state: { sig: null }, toast: await refreshNow(), ...settled("btnRefresh") };
     case "forget":

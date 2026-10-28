@@ -2,7 +2,7 @@
 //   mtproto.botLogins  the client's login budget (a JSON list of at most 3 times)              < 100 B
 //   tg.session         { v, fp, state }: the auth key and server salt per DC, for this device    ~0.6 KB per DC
 //   tg.discovery       the discovery's update state: pts/qts/date/seq and the known channels   ~0.1 KB per channel
-//   tg.shell           this shell's state: channel slots, purges, the index marker, last error   < 2 KB
+//   tg.shell           this shell's state: the known chats, purges, the index marker, last error   < 2 KB
 // The video entries are never here: they live in kino.catalog. No setting value is ever written here; `fp` is a
 // truncated SHA-256 of the api_id and the bot token, so a new bot starts from scratch.
 //   tg.usession        account mode: the account's session, sealed like tg.session, never synced  ~0.6 KB per DC

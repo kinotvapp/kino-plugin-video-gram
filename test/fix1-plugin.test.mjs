@@ -227,32 +227,7 @@ test("I5 slots are first-seen: two devices of the same bot show the same channel
   assert.match(places(sa)[1], /^— Pelis/, "a later channel is appended");
 });
 
-test("I5 a channel the bot lost keeps its slot (marked), so its switched-on slot is never handed to a newcomer", async () => {
-  world.addChannel({ id: CH1, accessHash: 11n, title: "Pelis" });
-  world.addChannel({ id: CH2, accessHash: 22n, title: "Viajes" });
-  const d = newDevice();
-  const p = await d.runtime(SETTINGS);
-  await p.home();
-  world.forbid(CH1);
-  world.addChannel({ id: 2100000000n, accessHash: 33n, title: "Nuevo" });
-  await p.action("refresh");
-  const st = await p.view();
-  assert.match(places(st)[0], /^✗ Pelis \(sin acceso\)/);
-  assert.match(places(st)[1], /^— Viajes/);
-  assert.match(places(st)[2], /^— Nuevo/, "the newcomer is appended, switched off");
-});
-
 // ---- minors ----
-
-test("M1 more than 6 channels: the line under the places names the ones waiting and how to give them one", async () => {
-  for (let i = 0; i < 10; i++) world.addChannel({ id: 1900000000n + BigInt(i), accessHash: 5n, title: "C" + i });
-  const d = newDevice();
-  const p = await d.runtime(SETTINGS);
-  await p.home();
-  assert.match((await p.view()).channels_more, /^C6, C7, C8, C9\. Para dar un lugar: apaga uno y toca Dar lugar/);
-  const en = await d.runtime(SETTINGS, { lang: "en-US" });
-  assert.match((await en.view()).channels_more, /^C6, C7, C8, C9\. To give one a place: turn one off, then tap Give/);
-});
 
 test("M2 the count follows a purge that runs on a Home that skips the refresh", async () => {
   world.addChannel({ id: CH1, accessHash: 11n, title: "Pelis" });

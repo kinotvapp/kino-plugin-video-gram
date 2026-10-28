@@ -1,7 +1,7 @@
 {
   "id": "video-gram",
   "name": "Video-Gram",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "apiVersion": 14,
   "entry": "plugin.js",
   "description": "Tus videos de Telegram en Kino: los de tus canales y chats, con tu propio bot o tu cuenta (solo lectura). No oficial: sin relación con Telegram. (Your Telegram videos in Kino, with your own bot or your account, read only. Unofficial: not affiliated with Telegram.)",
@@ -88,48 +88,6 @@
       "hintEn": "Bot only: the one @BotFather gives, 123456:ABC..."
     },
     {
-      "key": "ch1",
-      "type": "toggle",
-      "label": "Mostrar el lugar 1",
-      "labelEn": "Show place 1",
-      "default": true
-    },
-    {
-      "key": "ch2",
-      "type": "toggle",
-      "label": "Mostrar el lugar 2",
-      "labelEn": "Show place 2",
-      "default": false
-    },
-    {
-      "key": "ch3",
-      "type": "toggle",
-      "label": "Mostrar el lugar 3",
-      "labelEn": "Show place 3",
-      "default": false
-    },
-    {
-      "key": "ch4",
-      "type": "toggle",
-      "label": "Mostrar el lugar 4",
-      "labelEn": "Show place 4",
-      "default": false
-    },
-    {
-      "key": "ch5",
-      "type": "toggle",
-      "label": "Mostrar el lugar 5",
-      "labelEn": "Show place 5",
-      "default": false
-    },
-    {
-      "key": "ch6",
-      "type": "toggle",
-      "label": "Mostrar el lugar 6",
-      "labelEn": "Show place 6",
-      "default": false
-    },
-    {
       "key": "tmdb",
       "type": "toggle",
       "label": "Buscar pósters en TMDB",
@@ -137,6 +95,27 @@
       "default": true,
       "hint": "Envía el nombre de cada video a TMDB por Kino",
       "hintEn": "Sends each video's name to TMDB through Kino"
+    },
+    {
+      "key": "chats",
+      "type": "list",
+      "max": 12,
+      "label": "Chats activos",
+      "labelEn": "Active chats",
+      "fields": [
+        {
+          "key": "id",
+          "type": "text",
+          "label": "Id del chat",
+          "labelEn": "Chat id"
+        },
+        {
+          "key": "title",
+          "type": "text",
+          "label": "Nombre",
+          "labelEn": "Name"
+        }
+      ]
     }
   ],
   "screen": {
@@ -153,6 +132,6 @@
   },
   "signature": {
     "authorKey": "82b87b938e0a95b142467c815a8823cb54310a13a828c3c4c77b1eda43294ae6",
-    "value": "7c524ddd6936660006389a5b13675fe1341d08371798d424553877d5e092184ece36a1ee5c9ab99890456d1a429fc7d5e824568965129059328b078a3d46e000"
+    "value": "52738eee05c606a1ae5fe559291f7173475c5d0e41a8b8c8e171d4906e8c5dd189fbf04513607494d6b163a21671c1e83ebf15b21cb90f4111e3196b798b4206"
   }
 }

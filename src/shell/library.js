@@ -1,12 +1,13 @@
 // The video library: Telegram's channels through the discovery, kept in kino.catalog (one row per video), and the
 // rows, pages and searches Kino shows, read from the catalog only.
 //
-// Channels: the bot learns every channel it administers (account mode: every chat of the account where a video exists);
-// they get the 6 slots in the order they were first seen, and keep them (see assignSlots). The slot's toggle in the
-// settings (which syncs) says whether that channel is shown and indexed. A channel that is off is never scanned and has
-// no rows: turning it off removes its rows from the catalog (by id, in steps); turning it on reads it again from its
-// start. Slot 1's toggle starts on, the others off (the manifest's defaults). Six, not more: Kino's settings contract
-// allows 12 valued settings and 16 others per plugin, and account mode needed two of the old eight toggles' places.
+// Channels: the bot learns every channel it administers (account mode: every chat of the account where a video exists),
+// in the order it first met them (`shell.chats`, never reordered). The person picks which ones to read in the setup
+// screen; the picks are the `chats` list setting (id and title, which syncs). A chat that is not picked is never scanned
+// and has no rows: unpicking removes its rows from the catalog (by id, in steps); picking one reads it again from its
+// start. A newly met chat is never picked by itself: anyone who learns the bot's username can make it an administrator
+// of their own channel. SOFT_ACTIVE chats is what the screen recommends (more is allowed after a warning, up to
+// MAX_ACTIVE): every active chat is read at each refresh and indexed in the catalog, so more of them cost time and memory.
 //
 // Refresh: from Home (at most every 5 minutes, sooner while a pass is unfinished or a toggle changed) and from the
 // "Actualizar ahora" action. Never from search. A refresh that fails keeps the old rows and stores the error.
@@ -20,7 +21,10 @@ import { lastOpenTiming } from "./live.js";
 import { nameOf, carry, displayTitle, posterOf, backdropOf, enrichStep, tmdbOn, viewOf } from "./enrich.js";
 import { clip, cleanText } from "./clean.js";
 
-export const SLOTS = 6;
+/** The most chats the screen recommends reading; past it the person is warned (a refresh takes longer, the index grows). */
+export const SOFT_ACTIVE = 6;
+/** The most chats the person can pick at all (the `chats` setting's `max`). */
+export const MAX_ACTIVE = 12;
 export const REFRESH_MS = 5 * 60 * 1000;
 const BATCH = 500;              // kino.catalog: items per upsert, ids per get/remove
 const MAX_PAGES = 25;           // discovery RPCs per refresh (Home has 20 s)
@@ -33,31 +37,16 @@ const HLS = /mpegurl/i;
 
 // ---- shell state (tg.shell) ----
 
-const freshShell = (fp) => ({ v: 1, fp, slots: [], missing: [], waiting: [], wasOn: [], titles: {}, selfId: null, applied: [], top: {}, purge: [], indexedAt: 0, incomplete: false, count: 0, unslotted: 0, checking: 0, error: null, refused: null, channelErrors: 0, en: { off: 0, at: 0, done: false } });
+const freshShell = (fp) => ({ v: 1, fp, chats: [], missing: [], titles: {}, selfId: null, applied: [], migrated: false, top: {}, purge: [], indexedAt: 0, incomplete: false, count: 0, checking: 0, error: null, refused: null, channelErrors: 0, en: { off: 0, at: 0, done: false } });
 
 export function loadShell(c) {
   const s = readJson(KEYS.shell);
   const fp = c && c.complete ? sessionFp(c) : null;
-  if (!s || s.v !== 1 || !Array.isArray(s.slots)) return freshShell(fp);
-  return migrateSlots({ ...freshShell(fp), ...s });
-}
-
-/**
- * 0.2.x had 8 slots, 0.3.0 has 6. The channels of slots 7 and 8 are not dropped and nothing moves: they wait first in
- * line for a place (in their old order), marked when they were switched on, so the status line can say so and how to
- * give them one (switch a place off, then "Dar lugar a los que esperan"). Their rows go with the next refresh's purge,
- * as for any channel switched off. Slots 1 to 6 keep their channel and their toggle.
- */
-function migrateSlots(shell) {
-  if (shell.slots.length <= SLOTS) return shell;
-  const over = shell.slots.slice(SLOTS);
-  const missing = new Set(shell.missing || []);
-  shell.slots = shell.slots.slice(0, SLOTS);
-  shell.missing = (shell.missing || []).filter((x) => shell.slots.includes(x));
-  const keep = over.filter((x) => !missing.has(x));
-  shell.waiting = [...keep, ...(shell.waiting || []).filter((x) => !keep.includes(x))];
-  shell.wasOn = [...new Set([...(shell.wasOn || []), ...keep.filter((x) => (shell.applied || []).includes(x))])];
-  shell.unslotted = shell.waiting.length;
+  if (!s || s.v !== 1 || !(Array.isArray(s.chats) || Array.isArray(s.slots))) return freshShell(fp);
+  const shell = { ...freshShell(fp), ...s };
+  // Before 1.2.0 the chats sat in 6 fixed slots (and a waiting line): the same chats, in the same order, are the list now.
+  if (!Array.isArray(s.chats)) shell.chats = [...(s.slots || []), ...(s.waiting || [])].filter(Boolean);
+  for (const old of ["slots", "waiting", "wasOn", "unslotted"]) delete shell[old];
   return shell;
 }
 
@@ -65,12 +54,53 @@ function migrateSlots(shell) {
 export const titleOf = (shell, chatId) => (chatId === shell.selfId ? t("chat.saved") : shell.titles[chatId] || chatId);
 const saveShell = (s) => writeJson(KEYS.shell, s);
 
-/** The chats (Bot API ids, "-100...") whose toggle is on. */
+/** The picked chats: the records of the `chats` setting, as { id, title }. */
+export function pickedChats() {
+  const list = kino.config.get("chats");
+  const seen = new Set();
+  const out = [];
+  for (const r of Array.isArray(list) ? list : []) {
+    const id = String((r && r.id) ?? "").trim();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push({ id, title: String((r && r.title) ?? "") });
+  }
+  return out;
+}
+
+/**
+ * The chats (Bot API ids, "-100...") that are read and shown: the picked ones the bot or account can still reach. A
+ * device that has not migrated yet (1.1.x had a toggle per slot) keeps the chats it was reading until the screen opens.
+ */
 export function activeChats(shell) {
-  const on = new Set();
   const missing = new Set(shell.missing || []);
-  shell.slots.forEach((chatId, i) => { if (chatId && !missing.has(chatId) && kino.config.get("ch" + (i + 1)) === true) on.add(chatId); });
-  return on;
+  return new Set(pickedIds(shell).filter((id) => !missing.has(id)));
+}
+
+/** The ids the person picked (before the screen's first opening on an old device: the chats it was reading). */
+function pickedIds(shell) {
+  const picked = pickedChats().map((x) => x.id);
+  return picked.length || shell.migrated ? picked : shell.applied;
+}
+
+/**
+ * The list setting to write the first time the screen opens on a device that read its chats through 1.0.x's toggles: the
+ * chats it was reading become the picks. Null when there is nothing to do. Marks the shell, so it happens once.
+ */
+export function migrationPicks() {
+  const shell = loadShell(credentials());
+  if (shell.migrated) return null;
+  shell.migrated = true;
+  saveShell(shell);
+  if (pickedChats().length || !shell.applied.length) return null;
+  return shell.applied.slice(0, MAX_ACTIVE).map((id) => ({ id, title: clip(titleOf(shell, id), 100) }));
+}
+
+/** The `chats` list with `chatId` picked or unpicked, as records ready for an answer's `config`; keeps the order of the picks. */
+export function picksWith(shell, chatId, on) {
+  const rest = pickedChats().filter((x) => x.id !== chatId);
+  const out = on ? [...pickedChats().filter((x) => x.id !== chatId), { id: chatId, title: clip(titleOf(shell, chatId), 100) }] : rest;
+  return out.map((x) => ({ id: x.id, title: x.title }));
 }
 
 const chatOfId = (id) => String(id).slice(0, String(id).lastIndexOf(":"));
@@ -213,8 +243,8 @@ function noticeFor(problem, now = Date.now()) {
 async function resetIndex(shell) {
   remove(KEYS.discovery);
   remove(ACCOUNT_STATE_KEY);
-  shell.slots = []; shell.missing = []; shell.waiting = []; shell.wasOn = []; shell.titles = {}; shell.selfId = null; shell.applied = []; shell.top = {}; shell.purge = [];
-  shell.indexedAt = 0; shell.incomplete = false; shell.count = 0; shell.unslotted = 0; shell.checking = 0; shell.channelErrors = 0;
+  shell.chats = []; shell.missing = []; shell.titles = {}; shell.selfId = null; shell.applied = []; shell.top = {}; shell.purge = [];
+  shell.indexedAt = 0; shell.incomplete = false; shell.count = 0; shell.checking = 0; shell.channelErrors = 0;
   const mark = await deviceMark();
   try { await kino.catalog.clear(); } catch (e) { kino.log("catalog clear failed: " + (e && e.code)); }
   await markDevice(mark || undefined);
@@ -227,14 +257,12 @@ export async function countVideos() {
 }
 
 /**
- * The slots, STABLE and first-seen: a slot keeps its channel for good; a channel the bot meets for the first time is
- * appended to the first free slot (in the order the bot met them, `seen`), and its toggle starts off (only slot 1's
- * toggle starts on, and slot 1 is the first channel the bot ever met). Why: anyone who learns the bot's username can
- * make it an administrator of their own channel. With stable slots such a channel lands in a later slot, switched off,
- * and can never take the owner's slot or push it out (a 9th channel just gets no slot). A channel the bot lost keeps
- * its slot, marked missing, so that slot is never handed to a newcomer whose videos would then show switched on.
+ * The chats the bot or account knows, in the order they were first met (`seen`), kept in `shell.chats`: a chat that is
+ * already there keeps its place, a new one goes to the end, and nothing is picked by itself (a stranger's channel the bot
+ * was added to must never show videos until the person picks it). A chat that is no longer known is marked missing and
+ * stays in the list, so the person can still unpick it.
  */
-function assignSlots(shell, chats) {
+function learnChats(shell, chats) {
   const order = (id) => (Number.isInteger(chats[id].seen) ? chats[id].seen : Number.MAX_SAFE_INTEGER);
   const ids = Object.keys(chats || {}).sort((a, b) => order(a) - order(b) || (BigInt(a) < BigInt(b) ? -1 : BigInt(a) > BigInt(b) ? 1 : 0));
   const known = new Set(ids);
@@ -242,14 +270,8 @@ function assignSlots(shell, chats) {
     if (chats[chatId].kind === "self") shell.selfId = chatId;
     shell.titles[chatId] = clip(chats[chatId].title, 100);
   }
-  // Who waits for a place: those already waiting keep their turn (slots 7 and 8 of 0.2.x first), then the newcomers.
-  const waiting = (shell.waiting || []).filter((x) => known.has(x) && !shell.slots.includes(x));
-  for (const chatId of ids) if (!shell.slots.includes(chatId) && !waiting.includes(chatId)) waiting.push(chatId);
-  while (shell.slots.length < SLOTS && waiting.length) shell.slots.push(waiting.shift());
-  shell.waiting = waiting;
-  shell.wasOn = (shell.wasOn || []).filter((x) => waiting.includes(x));
-  shell.missing = shell.slots.filter((chatId) => !known.has(chatId));
-  shell.unslotted = waiting.length;
+  for (const chatId of ids) if (!shell.chats.includes(chatId)) shell.chats.push(chatId);
+  shell.missing = shell.chats.filter((chatId) => !known.has(chatId));
 }
 
 /** The discovery's known chats as { chatId: { title, seen, kind } }, whichever the mode. */
@@ -258,34 +280,6 @@ function chatsOf(res, mode) {
   const out = {};
   for (const [rawId, ch] of Object.entries((res.state && res.state.channels) || {})) out[channelChatId(rawId)] = { title: ch.title, seen: ch.seen, kind: "channel" };
   return out;
-}
-
-/**
- * The "Dar lugar a los que esperan" action: every place whose toggle is off (or whose channel the bot lost) goes to the
- * next channel waiting, in line order; the channel that had it waits at the end of the line. Nothing is switched on:
- * the toggle of a place given away is off, so a newcomer (perhaps a stranger's channel) still shows nothing until the
- * person turns it on. Answers how many places changed hands.
- */
-export function freeSlots() {
-  const c = credentials();
-  const shell = loadShell(c);
-  let n = 0;
-  const missing = new Set(shell.missing || []);
-  const line = shell.waiting.slice(); // only those waiting now get a place: one that gives its place waits after them
-  const gave = [];
-  for (let i = 0; i < shell.slots.length && line.length; i++) {
-    const chatId = shell.slots[i];
-    if (kino.config.get("ch" + (i + 1)) === true && !missing.has(chatId)) continue;
-    shell.slots[i] = line.shift();
-    if (!missing.has(chatId)) gave.push(chatId);
-    n++;
-  }
-  shell.waiting = [...line, ...gave];
-  shell.missing = shell.slots.filter((x) => missing.has(x));
-  shell.wasOn = (shell.wasOn || []).filter((x) => shell.waiting.includes(x));
-  shell.unslotted = shell.waiting.length;
-  if (n) saveShell(shell);
-  return n;
 }
 
 /** Applies one refresh's changes to the catalog: only videos of active channels, never an HLS playlist. */
@@ -389,7 +383,7 @@ async function runRefresh({ force = false } = {}) {
       tp = Date.now();
       await purgeStep(shell);
       tm.purge += Date.now() - tp;
-      // A second pass only when the first gave an active slot to a channel it had not scanned (slot 1 starts on).
+      // A second pass only when what the first learned made a chat active that it had not scanned.
       for (let pass = 0; pass < 2 && Date.now() < deadline; pass++) {
         const active = activeChats(shell);
         const td = Date.now();
@@ -403,7 +397,7 @@ async function runRefresh({ force = false } = {}) {
         tm.upsert += Date.now() - tu;
         res.commit();
         shell.channelErrors = (res.errors || []).filter((x) => x.scope === "channel").length;
-        assignSlots(shell, chatsOf(res, c.mode));
+        learnChats(shell, chatsOf(res, c.mode));
         shell.checking = Number(res.checking) || 0;
         shell.incomplete = !!res.incomplete;
         if (res.floodWait !== undefined) {
@@ -510,7 +504,7 @@ export async function homeRows({ shell, problem }, started = nowMs()) {
   const top = await recent(active, 0, ROW_ITEMS);
   if (top.items.length) {
     rows.push({ id: "recent", title: t("row.recent"), ref: "recent", items: top.items.map(itemOf) });
-    for (const chatId of shell.slots) {
+    for (const chatId of shell.chats) {
       if (!active.has(chatId)) continue;
       // A channel's own row is optional: past the budget Home answers with what it has (never a timeout).
       if (nowMs() - started > HOME_BUDGET_MS) { kino.log("home: channel rows skipped, out of time"); break; }
@@ -519,7 +513,7 @@ export async function homeRows({ shell, problem }, started = nowMs()) {
     }
   } else if (!problem) {
     const none = c.mode === "account" ? (shell.checking > 0 ? notice("checking", t("setup.checking")) : notice("noChannels", t("setup.noChats"))) : notice("noChannels", t("setup.noChannels"));
-    rows.push(shell.slots.length === 0 ? none : active.size === 0 ? notice("noneActive", t("setup.noneActive")) : notice("empty", t("setup.empty")));
+    rows.push(shell.chats.length === 0 ? none : active.size === 0 ? notice("noneActive", t("setup.noneActive")) : notice("empty", t("setup.empty")));
   }
   return rows.slice(0, 20);
 }
@@ -565,10 +559,10 @@ export async function rowFor(ref) {
   return viewOf(row);
 }
 
-export const channelTabs = (shell) => shell.slots.filter((x) => activeChats(shell).has(x)).map((chatId) => ({ chatId, title: titleOf(shell, chatId) }));
+export const channelTabs = (shell) => shell.chats.filter((x) => activeChats(shell).has(x)).map((chatId) => ({ chatId, title: titleOf(shell, chatId) }));
 
 /**
- * What the setup screen draws, from stored state only (no network): the account line, the places and the waiting line,
+ * What the setup screen draws, from stored state only (no network): the account line, every known chat with its pick,
  * the index line. `account` is { key, vars, role } for a `t()` text and a banner role.
  */
 export function setupView() {
@@ -595,13 +589,11 @@ export function setupView() {
     loggedIn = hasLogin(c);
     if (loggedIn) set("status.connected", "success");
   }
-  const places = [];
-  for (let i = 0; i < SLOTS; i++) {
-    const chatId = shell.slots[i];
-    if (!chatId) continue;
-    places.push({ n: i + 1, key: "ch" + (i + 1), title: clip(titleOf(shell, chatId), 40), gone: (shell.missing || []).includes(chatId) });
-  }
-  const waiting = (shell.waiting || []).map((x) => ({ title: clip(titleOf(shell, x), 40), wasOn: (shell.wasOn || []).includes(x) }));
+  const picked = new Set(pickedIds(shell));
+  const missing = new Set(shell.missing || []);
+  // Every chat the bot or account knows, in the order it was met, then the picked ones it can no longer reach (so they can be unpicked).
+  const chats = shell.chats.map((id) => ({ id, title: clip(titleOf(shell, id), 60), on: picked.has(id), gone: missing.has(id) }));
+  for (const r of pickedChats()) if (!shell.chats.includes(r.id)) chats.push({ id: r.id, title: clip(r.title || r.id, 60), on: true, gone: true });
   const parts = [shell.count > 0 ? videoCount(shell.count) : t("index.none")];
   if (shell.indexedAt) {
     const m = Math.floor((now - shell.indexedAt) / 60000);
@@ -611,7 +603,7 @@ export function setupView() {
   if (c.mode === "account" && shell.checking > 0) parts.push(t("index.checking", { n: shell.checking }));
   if (problem) parts.push(problem.kind === "flood" || problem.kind === "budget" ? t("setup.flood", { min: minutes((problem.until - now) / 1000) }) : noticeFor(problem).items[0].title);
   if (shell.channelErrors > 0) parts.push(t("index.channelErrors", { n: shell.channelErrors }));
-  return { mode: c.mode, complete: c.complete, loggedIn, ready: c.complete && (c.mode === "bot" || loggedIn), account, places, waiting, index: parts.join(" · "), qrStage: !!(qr && qr.fp === (c.complete ? sessionFp(c) : null) && qr.stage), have: { api_id: !!c.apiId, api_hash: !!c.apiHash, bot_token: !!c.botToken } };
+  return { mode: c.mode, complete: c.complete, loggedIn, ready: c.complete && (c.mode === "bot" || loggedIn), account, chats, activeCount: chats.filter((x) => x.on).length, index: parts.join(" · "), qrStage: !!(qr && qr.fp === (c.complete ? sessionFp(c) : null) && qr.stage), have: { api_id: !!c.apiId, api_hash: !!c.apiHash, bot_token: !!c.botToken } };
 }
 
 export { chatOfId, msgOfId };
