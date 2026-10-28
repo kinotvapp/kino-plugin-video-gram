@@ -145,10 +145,12 @@ test("5 a read that needs a refetch while a refresh pass holds the line still su
   await refreshing;
 });
 
-test("6 the README says slots never move, new channels arrive off, and strangers can add the bot (es and en); round 9", () => {
+test("6 the README says new channels arrive off, the recommended number is warned about, and strangers can add the bot (es and en); round 9", () => {
   const text = readFileSync(join(root, "README.md"), "utf8");
-  assert.match(text, /no se mueven: un canal nuevo ocupa el siguiente lugar\s+libre y llega \*\*desactivado\*\*/);
-  assert.match(text, /never move: a new channel takes the next free place and\s+arrives \*\*off\*\*/);
+  assert.match(text, /Un\s+canal nuevo llega \*\*desactivado\*\*/);
+  assert.match(text, /A new\s+channel arrives \*\*off\*\*/);
+  assert.match(text, /Recomendamos hasta \*\*6\*\*/);
+  assert.match(text, /We recommend up to \*\*6\*\*/);
   assert.match(text, /Cualquiera que conozca el nombre de tu bot puede agregarlo/);
   assert.match(text, /Anyone who knows your bot's name can add it/);
   assert.match(text, /va a TMDB a través de Kino/);
