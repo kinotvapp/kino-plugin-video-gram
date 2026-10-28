@@ -1,6 +1,6 @@
-// Built by scripts/build.mjs from src/plugin.js -- do not edit; edit src/ and rebuild.
+// Built by scripts/build.mjs from src\plugin.js -- do not edit; edit src/ and rebuild.
 
-// ---- src/shell/text.js ----
+// ---- src\shell\text.js ----
 const __mod_src_shell_text = (() => {
 // Every text the person reads, in Spanish (neutral, tuteo) and English, picked by kino.lang. Code, logs and the detail
 // of a kino.error stay English (they are for the developer). A `um.*` text is a kino.error userMessage: Kino shows it
@@ -45,8 +45,10 @@ const ES = {
   "validate.apiId": "Debe ser solo números",
   "validate.apiHash": "Deben ser 32 letras de la a a la f y números",
   "validate.token": "Debe verse como 123456:ABC… (lo da @BotFather)",
-  "validate.tokenNeeded": "Con un bot hace falta su token (o elige «Mi cuenta»)",
-  "setup.signin": "Inicia sesión con tu cuenta: Ajustes ▸ Video-Gram ▸ Iniciar sesión con QR",
+  "validate.apiIdSwapped": "Eso parece el api_hash: el api_id es solo números",
+  "validate.apiHashSwapped": "Eso parece el api_id: el api_hash son 32 letras y números",
+  "validate.tokenSwapped": "Eso parece un api_hash: el token se ve como 123456:ABC…",
+  "setup.signin": "Inicia sesión con tu cuenta: Ajustes ▸ Video-Gram ▸ Configurar",
   "setup.closed": "Tu sesión de Telegram se cerró: vuelve a iniciar sesión con QR en Ajustes ▸ Video-Gram",
   "setup.configAccount": "Escribe tu api_id y tu api_hash en Ajustes ▸ Video-Gram",
   "setup.noChats": "No hay chats con videos todavía: publica un video en un canal o en Mensajes guardados",
@@ -57,19 +59,19 @@ const ES = {
   "status.signin": "Sin sesión: toca Iniciar sesión con QR",
   "status.accountOn": "Sesión iniciada con tu cuenta en este aparato (solo lectura)",
   "status.closed": "Telegram cerró esta sesión: vuelve a iniciar sesión con QR",
-  "status.password": "Tu cuenta tiene contraseña de dos pasos: escríbela arriba, toca Guardar y luego Confirmar la contraseña",
-  "qr.botMode": "El inicio de sesión con QR es para «Mi cuenta»: elígelo en Conectar con y toca Guardar",
+  "status.password": "Tu cuenta tiene contraseña de dos pasos: escríbela y toca Confirmar la contraseña",
+  "qr.botMode": "El inicio de sesión con QR es para «Mi cuenta»: elígelo en Conectar con",
   "qr.already": "Ya iniciaste sesión con tu cuenta en este aparato",
   "qr.scan": "En tu teléfono, abre Telegram ▸ Ajustes ▸ Dispositivos ▸ Vincular un dispositivo y escanea el código",
   "qr.waiting": "Esperando que escanees el código con Telegram",
   "qr.expired": "El código venció: toca Iniciar sesión con QR otra vez",
   "qr.done": "Listo: sesión iniciada con tu cuenta (solo lectura)",
-  "qr.password": "Tu cuenta tiene contraseña de dos pasos: escríbela arriba, toca Guardar y luego Confirmar la contraseña",
+  "qr.password": "Tu cuenta tiene contraseña de dos pasos: escríbela y toca Confirmar la contraseña",
   "qr.failed": "No se pudo iniciar sesión ahora; vuelve a intentar",
   "qr.budget": "Demasiados intentos de inicio de sesión en este aparato: vuelve a intentar en {min}",
   "pw.notNeeded": "Telegram no está pidiendo una contraseña ahora",
-  "pw.empty": "Escribe primero la contraseña arriba y toca Guardar",
-  "pw.wrong": "La contraseña no es correcta; escríbela de nuevo, toca Guardar y luego Confirmar",
+  "pw.empty": "Escribe primero la contraseña",
+  "pw.wrong": "La contraseña no es correcta; escríbela de nuevo",
   "pw.budget": "Demasiados intentos de contraseña: vuelve a intentar en {min}",
   "logout.done": "Listo: se cerró la sesión de tu cuenta y se borró su índice en este aparato",
   "logout.none": "No hay una sesión de tu cuenta en este aparato",
@@ -78,12 +80,49 @@ const ES = {
   "slots.gone": "sin acceso",
   "slots.none": "Todavía no hay canales ni chats con videos",
   "more.none": "Ninguno",
-  "more.list": "{list}. Para dar un lugar: apaga uno arriba, toca Guardar y luego Dar lugar a los que esperan",
+  "more.list": "{list}. Para dar un lugar: apaga uno y toca Dar lugar a los que esperan",
   "more.wasOn": "{title} (estaba activo)",
-  "free.done": "Listo: {n} lugar(es) entregados; llegan apagados, actívalos arriba",
+  "free.done": "Listo: {n} lugar(es) entregados; llegan apagados, actívalos",
   "free.none": "No hay lugares apagados o no hay canales esperando",
+  "free.confirm": "Los lugares apagados pasan a los canales sin lugar (llegan apagados). ¿Seguir?",
   "index.checking": "revisando {n} chat(s)",
   "tab.recent": "Recientes",
+  "screen.title": "Video-Gram",
+  "screen.step.connect": "Conectar con Telegram",
+  "screen.step.account": "Tu cuenta de Telegram",
+  "screen.step.connected": "{mode}: datos guardados",
+  "screen.step.signedIn": "Sesión iniciada (solo lectura)",
+  "screen.save": "Guardar y seguir",
+  "screen.keepHint": "Déjalo vacío para conservar el que ya está guardado",
+  "screen.field.apiId": "api_id",
+  "screen.field.apiHash": "api_hash",
+  "screen.field.token": "Token del bot",
+  "screen.field.password": "Contraseña de dos pasos",
+  "screen.pwButton": "Confirmar la contraseña",
+  "screen.saved": "Datos guardados",
+  "screen.connectHow": "Crea una app en my.telegram.org (api_id y api_hash). Con un bot: créalo con @BotFather y hazlo administrador de tu canal. Con tu cuenta: inicia sesión con QR; Kino solo lee, nunca envía ni cambia nada. Todo queda en este aparato.",
+  "screen.access": "Conectar con",
+  "screen.access.bot": "Un bot en mis canales",
+  "screen.access.account": "Mi cuenta (solo lectura)",
+  "screen.openApps": "Abrir my.telegram.org",
+  "screen.openBotFather": "Abrir @BotFather",
+  "screen.qrButton": "Iniciar sesión con QR",
+  "screen.qrHint": "El código se renueva solo. Escanéalo con Telegram desde otro teléfono (Ajustes ▸ Dispositivos ▸ Vincular un dispositivo).",
+  "screen.logoutButton": "Cerrar sesión",
+  "screen.logoutConfirm": "¿Cerrar la sesión de tu cuenta en este aparato y borrar su índice?",
+  "screen.helpTitle": "Tu cuenta y la seguridad",
+  "screen.helpBody": "Al iniciar sesión con tu cuenta, este aparato guarda una clave de sesión de Telegram. Esa clave da acceso a toda tu cuenta: tus chats, tus canales y tus grupos. Kino la guarda cifrada, solo en este aparato, nunca la sincroniza y la usa únicamente para leer: listar tus chats con videos, buscar videos y reproducirlos. Nunca envía, edita, borra ni reenvía mensajes, no marca nada como leído y no entra ni sale de chats.\n\nLa sesión aparece en Telegram, en Ajustes ▸ Dispositivos, y Telegram te avisa del nuevo inicio de sesión. Para cerrarla: toca Cerrar sesión aquí, o ciérrala desde Telegram en Ajustes ▸ Dispositivos. Si la cierras desde Telegram, Kino lo nota y te pide iniciar sesión otra vez.\n\nLa contraseña de dos pasos se usa una sola vez, para ese inicio de sesión, y Kino la borra enseguida: nunca la guarda.\n\nSolo se ven los chats que actives aquí, y cada chat nuevo con videos llega desactivado.",
+  "screen.channels": "Canales y chats",
+  "screen.channelsHint": "Kino muestra solo los que actives ({n} lugares). Cada canal o chat nuevo llega desactivado, salvo el primero. Cualquiera que conozca tu bot puede agregarlo a su canal: revisa cuáles activas.",
+  "screen.waiting": "Sin lugar",
+  "screen.freeButton": "Dar lugar a los que esperan",
+  "screen.index": "Índice",
+  "screen.indexHint": "Kino lee los canales activos al abrir Inicio, como mucho cada 5 minutos. Los videos se buscan en este aparato, sin internet.",
+  "screen.tmdb": "Buscar pósters en TMDB",
+  "screen.tmdbHint": "Envía el nombre de cada video a TMDB por Kino",
+  "screen.refreshButton": "Actualizar ahora",
+  "screen.forgetButton": "Olvidar este aparato",
+  "screen.forgetConfirm": "¿Borrar la sesión y el índice de este aparato? Tus videos siguen en Telegram.",
 };
 const EN = {
   "row.recent": "Recent",
@@ -124,8 +163,10 @@ const EN = {
   "validate.apiId": "Digits only",
   "validate.apiHash": "It must be 32 letters from a to f and digits",
   "validate.token": "It looks like 123456:ABC… (@BotFather gives it)",
-  "validate.tokenNeeded": "A bot needs its token (or pick «My account»)",
-  "setup.signin": "Sign in with your account: Settings ▸ Video-Gram ▸ Sign in with a QR",
+  "validate.apiIdSwapped": "That looks like the api_hash: the api_id is digits only",
+  "validate.apiHashSwapped": "That looks like the api_id: the api_hash is 32 letters and digits",
+  "validate.tokenSwapped": "That looks like an api_hash: the token looks like 123456:ABC…",
+  "setup.signin": "Sign in with your account: Settings ▸ Video-Gram ▸ Set up",
   "setup.closed": "Your Telegram session was ended: sign in again with a QR in Settings ▸ Video-Gram",
   "setup.configAccount": "Enter your api_id and api_hash in Settings ▸ Video-Gram",
   "setup.noChats": "No chats with videos yet: post a video in a channel or in Saved Messages",
@@ -136,19 +177,19 @@ const EN = {
   "status.signin": "Not signed in: tap Sign in with a QR",
   "status.accountOn": "Signed in with your account on this device (read only)",
   "status.closed": "Telegram ended this session: sign in again with a QR",
-  "status.password": "Your account has a two-step password: type it above, tap Save, then Confirm the password",
-  "qr.botMode": "Signing in with a QR is for «My account»: pick it in Connect with and tap Save",
+  "status.password": "Your account has a two-step password: type it and tap Confirm the password",
+  "qr.botMode": "Signing in with a QR is for «My account»: pick it in Connect with",
   "qr.already": "You are already signed in with your account on this device",
   "qr.scan": "On your phone, open Telegram ▸ Settings ▸ Devices ▸ Link Desktop Device and scan the code",
   "qr.waiting": "Waiting for you to scan the code with Telegram",
   "qr.expired": "The code expired: tap Sign in with a QR again",
   "qr.done": "Done: signed in with your account (read only)",
-  "qr.password": "Your account has a two-step password: type it above, tap Save, then Confirm the password",
+  "qr.password": "Your account has a two-step password: type it and tap Confirm the password",
   "qr.failed": "Could not sign in now; try again",
   "qr.budget": "Too many sign-in attempts on this device: try again in {min}",
   "pw.notNeeded": "Telegram is not asking for a password now",
-  "pw.empty": "Type the password above and tap Save first",
-  "pw.wrong": "The password is not right; type it again, tap Save, then Confirm",
+  "pw.empty": "Type the password first",
+  "pw.wrong": "The password is not right; type it again",
   "pw.budget": "Too many password attempts: try again in {min}",
   "logout.done": "Done: your account was signed out and its index deleted on this device",
   "logout.none": "There is no session of your account on this device",
@@ -157,13 +198,56 @@ const EN = {
   "slots.gone": "no access",
   "slots.none": "No channels or chats with videos yet",
   "more.none": "None",
-  "more.list": "{list}. To give one a place: turn one off above, tap Save, then Give places to those waiting",
+  "more.list": "{list}. To give one a place: turn one off, then tap Give places to those waiting",
   "more.wasOn": "{title} (was on)",
-  "free.done": "Done: {n} place(s) given; they arrive off, turn them on above",
+  "free.done": "Done: {n} place(s) given; they arrive off, turn them on",
   "free.none": "No place is off, or no channel is waiting",
+  "free.confirm": "The places that are off go to the channels without one (they arrive off). Go on?",
   "index.checking": "checking {n} chat(s)",
   "tab.recent": "Recent",
+  "screen.title": "Video-Gram",
+  "screen.step.connect": "Connect to Telegram",
+  "screen.step.account": "Your Telegram account",
+  "screen.step.connected": "{mode}: details saved",
+  "screen.step.signedIn": "Signed in (read only)",
+  "screen.save": "Save and continue",
+  "screen.keepHint": "Leave it empty to keep the one already saved",
+  "screen.field.apiId": "api_id",
+  "screen.field.apiHash": "api_hash",
+  "screen.field.token": "Bot token",
+  "screen.field.password": "Two-step password",
+  "screen.pwButton": "Confirm the password",
+  "screen.saved": "Details saved",
+  "screen.connectHow": "Create an app at my.telegram.org (api_id and api_hash). With a bot: create it with @BotFather and make it an administrator of your channel. With your account: sign in with a QR; Kino only reads, never sends or changes anything. Everything stays on this device.",
+  "screen.access": "Connect with",
+  "screen.access.bot": "A bot in my channels",
+  "screen.access.account": "My account (read only)",
+  "screen.openApps": "Open my.telegram.org",
+  "screen.openBotFather": "Open @BotFather",
+  "screen.qrButton": "Sign in with a QR",
+  "screen.qrHint": "The code renews itself. Scan it with Telegram from another phone (Settings ▸ Devices ▸ Link Desktop Device).",
+  "screen.logoutButton": "Sign out",
+  "screen.logoutConfirm": "Sign your account out on this device and delete its index?",
+  "screen.helpTitle": "Your account and security",
+  "screen.helpBody": "When you sign in with your account, this device keeps a Telegram session key. That key gives access to your whole account: your chats, channels and groups. Kino keeps it encrypted, on this device only, never syncs it and uses it only to read: list your chats with videos, search videos and play them. It never sends, edits, deletes or forwards messages, never marks anything as read and never joins or leaves chats.\n\nThe session shows in Telegram under Settings ▸ Devices, and Telegram tells you about the new login. To end it: tap Sign out here, or end it from Telegram under Settings ▸ Devices. If you end it from Telegram, Kino notices and asks you to sign in again.\n\nThe two-step password is used once, for that login, and Kino erases it right away: it never keeps it.\n\nOnly the chats you turn on here show, and each new chat with videos arrives off.",
+  "screen.channels": "Channels and chats",
+  "screen.channelsHint": "Kino shows only the ones you turn on ({n} places). Each new channel or chat arrives off, except the first one. Anyone who knows your bot can add it to their channel: check which ones you turn on.",
+  "screen.waiting": "Without a place",
+  "screen.freeButton": "Give places to those waiting",
+  "screen.index": "Index",
+  "screen.indexHint": "Kino reads the active channels when Home opens, at most every 5 minutes. Videos are searched on this device, offline.",
+  "screen.tmdb": "Look up posters on TMDB",
+  "screen.tmdbHint": "Sends each video's name to TMDB through Kino",
+  "screen.refreshButton": "Refresh now",
+  "screen.forgetButton": "Forget this device",
+  "screen.forgetConfirm": "Delete this device's session and index? Your videos stay on Telegram.",
 };
+
+/** A node's text pair: Spanish under `field`, English under `field` + "En" (a screen carries both; Kino picks by the app's language). */
+function bi(key, vars = {}, field = "text") {
+  const fill = (table) => String(table[key] !== undefined ? table[key] : ES[key]).replace(/\{(\w+)\}/g, (_, k) => (vars[k] === undefined ? "" : String(vars[k])));
+  return { [field]: fill(ES), [field + "En"]: fill(EN) };
+}
 
 const isEnglish = () => String(kino.lang || "").toLowerCase().startsWith("en");
 
@@ -183,10 +267,10 @@ function minutes(seconds) {
 const videoCount = (n) => (n === 1 ? t("index.count.one") : t("index.count.many", { n }));
 
 const TEXT_TABLES = { ES, EN };
-return { isEnglish, t, minutes, videoCount, TEXT_TABLES };
+return { bi, isEnglish, t, minutes, videoCount, TEXT_TABLES };
 })();
 
-// ---- src/shell/errors.js ----
+// ---- src\shell\errors.js ----
 const __mod_src_shell_errors = (() => {
 // What reaches Kino when something fails: always a kino.error with one of its codes, an English detail made only of
 // codes and numbers (never a message from elsewhere, so never a secret), and the person's sentence in their language.
@@ -256,7 +340,7 @@ async function guard(fn) {
 return { shellError, kindOf, toKinoError, guard };
 })();
 
-// ---- src/mtproto/bytes.js ----
+// ---- src\mtproto\bytes.js ----
 const __mod_src_mtproto_bytes = (() => {
 // Uint8Array helpers for a runtime without Buffer (Kino's QuickJS). kino.crypto takes and returns strings, so the hot
 // conversions (hex and base64 of a 1 MiB chunk) are written as single passes over typed arrays: each output character
@@ -449,7 +533,7 @@ const fromUtf8 = (u8) => new TextDecoder().decode(u8);
 return { toHex, fromHex, toBase64, fromBase64, hexToBase64, concat, equal, xor, reversed, readU32LE, readI32LE, writeU32LE, readI64LE, writeI64LE, bigFromBytes, bigToBytes, bigToHex, random, utf8, fromUtf8 };
 })();
 
-// ---- src/mtproto/crypto.js ----
+// ---- src\mtproto\crypto.js ----
 const __mod_src_mtproto_crypto = (() => {
 // The kino.crypto calls MTProto needs, with hex on both sides (hex can be sliced and joined at any byte, base64 only
 // at multiples of 3). Every primitive runs natively in the app: hashes, AES-IGE, AES-CTR, modPow and gunzip.
@@ -481,7 +565,7 @@ const gunzipHex = (hex) => kino.crypto.gunzip(hex, HEX);
 return { sha1Hex, sha256Hex, sha1, sha256, igeEncryptHex, igeDecryptHex, igeEncrypt, igeDecrypt, ctrHex, modPowHex, gunzipHex };
 })();
 
-// ---- src/mtproto/errors.js ----
+// ---- src\mtproto\errors.js ----
 const __mod_src_mtproto_errors = (() => {
 // Typed errors: every failure the library throws is an Error with a string `code` from CODES, plus the extra fields
 // the code needs (`seconds` for flood_wait/login_budget, `dc` for the migrations, `rpc`/`status` for server errors).
@@ -576,7 +660,7 @@ const isServerAnswer = (e) => !!(e && typeof e === "object" && ["flood_wait", "f
 return { CODES, mtError, fromRpcError, fromTransportError, describeError, isServerAnswer };
 })();
 
-// ---- src/mtproto/big.js ----
+// ---- src\mtproto\big.js ----
 const __mod_src_mtproto_big = (() => {
 // A hand-kept MODEL of the big strings this library holds at once (hex of packets and chunks), so a test can bound the
 // peak under QuickJS's 64 MiB per-plugin cap. It is NOT the real QuickJS heap: it only knows what the code tells it
@@ -599,7 +683,7 @@ const big = {
 return { big };
 })();
 
-// ---- src/mtproto/transport.js ----
+// ---- src\mtproto\transport.js ----
 const __mod_src_mtproto_transport = (() => {
 // Obfuscated "intermediate" MTProto transport over kino.ws, as the spike's Transport (mtproto.mjs) did over Node's
 // WebSocket: a 64-byte random init whose tail is encrypted, then packets `len:uint32le payload`, the whole stream in
@@ -804,7 +888,7 @@ class Transport {
 return { DC_HOSTS, MAX_SEND_BYTES, MAX_PACKET_BYTES, dcUrl, CtrStream, makeInit, Transport };
 })();
 
-// ---- src/mtproto/tl.js ----
+// ---- src\mtproto\tl.js ----
 const __mod_src_mtproto_tl = (() => {
 // TL serialization for the constructors this plugin uses (MTProto layer 198), ported from the spike's W/R
 // (telegram-mtproto-spike/mtproto.mjs) to Uint8Array. Readers of server answers never crash on a constructor they do
@@ -1236,7 +1320,7 @@ function parseMessage(r) {
 return { LAYER, CTOR, Writer, Reader, reqPqMulti, pqInnerDataDc, reqDHParams, clientDHInnerData, setClientDHParams, invokeWithLayer, initConnection, importBotAuthorization, exportAuthorization, importAuthorization, exportLoginToken, importLoginToken, getPassword, checkPassword, logOut, msgsAck, inputDocumentFileLocation, uploadGetFile, parseRpcError, parseUploadFile, hexU32, hexBytesAt, parseUploadFileHex, parseExportedAuthorization, parseAuthorization, parseDocument, parseMessageMedia, parseMessage };
 })();
 
-// ---- src/mtproto/msgid.js ----
+// ---- src\mtproto\msgid.js ----
 const __mod_src_mtproto_msgid = (() => {
 // Client message ids: about unixtime * 2^32, divisible by 4, strictly increasing within a session.
 class MsgIds {
@@ -1258,7 +1342,7 @@ class MsgIds {
 return { MsgIds };
 })();
 
-// ---- src/mtproto/authkey.js ----
+// ---- src\mtproto\authkey.js ----
 const __mod_src_mtproto_authkey = (() => {
 // "Creating an authorization key" (MTProto 2.0), exactly as the verified-live spike (mtproto.mjs createAuthKey):
 // req_pq_multi, pq factorisation, p_q_inner_data_dc under RSA_PAD, server_DH_params_ok, the safety checks on dh_prime,
@@ -1464,7 +1548,7 @@ async function createAuthKey(t, { dc, publicKeys, now = () => Date.now(), timeou
 return { TELEGRAM_DH_PRIME_HEX, factorPq, rsaFingerprint, isProbablePrime, checkDhPrime, plainCall, createAuthKey };
 })();
 
-// ---- src/mtproto/session.js ----
+// ---- src\mtproto\session.js ----
 const __mod_src_mtproto_session = (() => {
 // The encrypted MTProto 2.0 session on top of an auth key, ported from the spike's Session (session.mjs): msg_key and
 // AES key derivation with sha256, containers, gzip_packed, new_session_created, bad_server_salt (resend), plus what a
@@ -1857,7 +1941,7 @@ class Session {
 return { Session };
 })();
 
-// ---- src/mtproto/schema/generated.js ----
+// ---- src\mtproto\schema\generated.js ----
 const __mod_src_mtproto_schema_generated = (() => {
 // Generated by scripts/gen-schema.mjs from the layer-198 TL schema -- do not edit.
 // Roots: updates.State, updates.Difference, updates.ChannelDifference, messages.Messages, Message, MessageMedia, Document, DocumentAttribute, Chat, User, Peer, Update, Updates, messages.Dialogs, auth.LoginToken, auth.Authorization, account.Password, auth.LoggedOut. 689 of 1396 constructors, 158 types.
@@ -1867,7 +1951,7 @@ const SCHEMA_CTORS = "7f3b18ea inputPeerEmpty 0\n7da07ec9 inputPeerSelf 0\n35a95
 return { SCHEMA_LAYER, SCHEMA_TYPES, SCHEMA_CTORS };
 })();
 
-// ---- src/mtproto/schema/reader.js ----
+// ---- src\mtproto\schema\reader.js ----
 const __mod_src_mtproto_schema_reader = (() => {
 // A schema-driven TL reader: it interprets the constructor table that scripts/gen-schema.mjs extracts from the layer-198
 // schema (generated.js) and turns a server answer into plain objects: { _: "channel", id: 123n, access_hash: -5n, ... }.
@@ -2122,7 +2206,7 @@ function readBool(r) {
 return { createDecoder, decode, schemaStats };
 })();
 
-// ---- src/mtproto/srp.js ----
+// ---- src\mtproto\srp.js ----
 const __mod_src_mtproto_srp = (() => {
 // The 2FA password check (SRP, "Two-factor authentication" in Telegram's docs) for the one algorithm Telegram uses,
 // passwordKdfAlgoSHA256SHA256PBKDF2HMACSHA512iter100000SHA256ModPow:
@@ -2199,7 +2283,7 @@ function srpCheck({ algo, srpB, srpId }, password, { aBytes } = {}) {
 return { SRP_ALGO, passwordHash, srpCheck };
 })();
 
-// ---- src/mtproto/requests.js ----
+// ---- src\mtproto\requests.js ----
 const __mod_src_mtproto_requests = (() => {
 // Serialized API methods for the discovery (layer 198), written field by field from their TL lines:
 // updates.getState#edd4882a = updates.State
@@ -2290,7 +2374,7 @@ const searchMessages = ({ peer, filter, offsetId = 0, minId = 0, limit = 100 }) 
 return { BOT_CALLS, ALLOWED_CALLS, ACCOUNT_CALLS, ACCOUNT_AUTH_CALLS, getState, getDifference, getChannelDifference, channelsGetMessages, messagesGetMessages, FILTER, inputPeer, getDialogs, searchMessages };
 })();
 
-// ---- src/mtproto/keys.js ----
+// ---- src\mtproto\keys.js ----
 const __mod_src_mtproto_keys = (() => {
 // Telegram's PUBLIC RSA server keys (from tg-public-keys.json, as used by the verified-live spike), keyed by the
 // signed decimal fingerprint the server lists in resPQ. n is big-endian hex, e decimal.
@@ -2307,7 +2391,7 @@ const TELEGRAM_PUBLIC_KEYS = Object.freeze({
 return { TELEGRAM_PUBLIC_KEYS };
 })();
 
-// ---- src/mtproto/client.js ----
+// ---- src\mtproto\client.js ----
 const __mod_src_mtproto_client = (() => {
 // The high-level client: one auth key per DC, a bot login once per home DC, DC migration, chunked file downloads and
 // a JSON-safe state the plugin shell stores encrypted. Calls run one at a time (Kino calls `read` one at a time too).
@@ -2905,7 +2989,7 @@ class TelegramClient {
 return { CHUNK, loginBudget, PASSWORD_BUDGET, TelegramClient };
 })();
 
-// ---- src/mtproto/discovery.js ----
+// ---- src\mtproto\discovery.js ----
 const __mod_src_mtproto_discovery = (() => {
 // Video discovery for a logged-in bot: which videos sit in the channels the bot administers and in private chats with
 // it. Bots cannot list dialogs or read history (messages.getHistory answers BOT_METHOD_INVALID), so everything comes
@@ -3513,7 +3597,7 @@ function createDiscovery({ client, store, budgetBytes = DEFAULT_BUDGET_BYTES, pe
 return { skipForIndex, chatIdOf, thumbOf, videoEntry, createDiscovery };
 })();
 
-// ---- src/mtproto/account-library.js ----
+// ---- src\mtproto\account-library.js ----
 const __mod_src_mtproto_account_library = (() => {
 // The video library of a person's OWN Telegram account (account mode, 0.3.0), read only. Unlike a bot, an account can
 // list its chats and search them, so nothing here uses the update boxes:
@@ -3784,7 +3868,7 @@ const ACCOUNT_STATE_KEY = STATE_KEY;
 return { createAccountDiscovery, ACCOUNT_STATE_KEY };
 })();
 
-// ---- src/shell/store.js ----
+// ---- src\shell\store.js ----
 const __mod_src_shell_store = (() => {
 // The plugin's small kino.storage (256 KB for every key; backed up with a password, never synced). Four keys:
 //   mtproto.botLogins  the client's login budget (a JSON list of at most 3 times)              < 100 B
@@ -3825,7 +3909,7 @@ const kinoStore = Object.freeze({
 return { KEYS, readJson, writeJson, remove, kinoStore };
 })();
 
-// ---- src/shell/live.js ----
+// ---- src\shell\live.js ----
 const __mod_src_shell_live = (() => {
 // One live Telegram client per plugin runtime, reused by every call (Home, refresh, each read): the auth key and the
 // bot login come from tg.session (when it was made on this device, see the device mark), so a new runtime connects
@@ -4147,7 +4231,7 @@ const hasStoredLogin = (c) => {
 return { credentials, sessionFp, loginFp, sessionStoreKey, lastOpenTiming, DEVICE_ROW, deviceMark, markDevice, checkDevice, saveSession, loginBlocked, recordLoginFailure, connect, withSession, idleReset, close, sessionClosed, forgetSession, liveFor, markLoggedIn, hasStoredLogin };
 })();
 
-// ---- src/shell/timing.js ----
+// ---- src\shell\timing.js ----
 const __mod_src_shell_timing = (() => {
 // Timing lines for the device logs (Kino's "Registro" and logcat KinoPlugin/<id>): one line per read and per refresh,
 // numbers and short codes only. Never a setting, a key, an id, a file reference or any data. Set TIMING to false to
@@ -4188,7 +4272,7 @@ function logRefresh(r) {
 return { TIMING, newTrace, logRead, logReadFailure, logRecovery, logRefresh };
 })();
 
-// ---- src/shell/clean.js ----
+// ---- src\shell\clean.js ----
 const __mod_src_shell_clean = (() => {
 // Text from Telegram (file names, captions, channel titles) is the sender's: it may carry control characters or
 // Unicode direction overrides that would make a title read as something else on screen. They are removed before the
@@ -4208,7 +4292,7 @@ function clip(s, n) {
 return { cleanText, clip };
 })();
 
-// ---- src/shell/enrich.js ----
+// ---- src\shell\enrich.js ----
 const __mod_src_shell_enrich = (() => {
 // Names and TMDB: what a video's file name (or caption) says it is, and what Kino's own TMDB access (kino.meta) knows
 // about it. Pure pieces here (parseName, markerOf, queryOf, applyMeta, posterOf, displayTitle, needsLookup) plus the
@@ -4523,7 +4607,7 @@ const viewOf = (row) => (tmdbOn() || !row || !row.data || !row.data.tm ? row : {
 return { MISS_TTL_MS, markerOf, parseName, queryOf, keyOf, applyMeta, needsLookup, posterOf, backdropOf, displayTitle, nameOf, carry, enrichStep, tmdbOn, viewOf };
 })();
 
-// ---- src/shell/library.js ----
+// ---- src\shell\library.js ----
 const __mod_src_shell_library = (() => {
 // The video library: Telegram's channels through the discovery, kept in kino.catalog (one row per video), and the
 // rows, pages and searches Kino shows, read from the catalog only.
@@ -5094,29 +5178,41 @@ async function rowFor(ref) {
 
 const channelTabs = (shell) => shell.slots.filter((x) => activeChats(shell).has(x)).map((chatId) => ({ chatId, title: titleOf(shell, chatId) }));
 
-/** The settings form's status lines (no network). */
-function statusLines() {
+/**
+ * What the setup screen draws, from stored state only (no network): the account line, the places and the waiting line,
+ * the index line. `account` is { key, vars, role } for a `t()` text and a banner role.
+ */
+function setupView() {
   const c = credentials();
   const shell = loadShell(c);
   const now = Date.now();
-  const out = {};
   const problem = problemOf(shell, now);
-  if (!c.complete) out.account_status = t(c.mode === "account" ? "status.missingAccount" : "status.missing");
-  else if (shell.refused && shell.refused.fp === loginFp(c)) out.account_status = t(shell.refused.kind === "token" ? "status.token" : "status.apiId");
-  else if (problem && problem.kind === "flood") out.account_status = t("status.flood", { min: minutes((problem.until - now) / 1000) });
-  else if (c.mode === "account") out.account_status = accountStatus(c);
-  else out.account_status = hasLogin(c) ? t("status.connected") : t("status.notYet");
-  // The places on one line (Kino's settings contract leaves no room for one line per place): "1 ✓ Pelis · 2 — Viajes".
+  const qr = readJson(KEYS.qr);
+  const rec = readJson(KEYS.login);
+  const account = { key: "status.notYet", vars: {}, role: "info" };
+  const set = (key, role, vars = {}) => Object.assign(account, { key, role, vars });
+  let loggedIn = false;
+  if (!c.complete) set(c.mode === "account" ? "status.missingAccount" : "status.missing", "warning");
+  else if (shell.refused && shell.refused.fp === loginFp(c)) set(shell.refused.kind === "token" ? "status.token" : "status.apiId", "error");
+  else if (problem && problem.kind === "flood") set("status.flood", "warning", { min: minutes((problem.until - now) / 1000) });
+  else if (c.mode === "account") {
+    loggedIn = hasLogin(c);
+    if (qr && qr.fp === sessionFp(c) && qr.stage === "password") set("status.password", "warning");
+    else if (qr && qr.fp === sessionFp(c) && qr.stage === "qr" && qr.until > now) set("qr.waiting", "info");
+    else if (loggedIn) set("status.accountOn", "success");
+    else if (rec && rec.fp === loginFp(c) && rec.kind === "closed") set("status.closed", "error");
+    else set("status.signin", "info");
+  } else {
+    loggedIn = hasLogin(c);
+    if (loggedIn) set("status.connected", "success");
+  }
   const places = [];
   for (let i = 0; i < SLOTS; i++) {
     const chatId = shell.slots[i];
-    if (!chatId) { places.push(i + 1 + " " + t("slots.free")); continue; }
-    const name = clip(titleOf(shell, chatId), 24);
-    places.push(i + 1 + ((shell.missing || []).includes(chatId) ? " ✗ " + name + " (" + t("slots.gone") + ")" : kino.config.get("ch" + (i + 1)) === true ? " ✓ " + name : " — " + name));
+    if (!chatId) continue;
+    places.push({ n: i + 1, key: "ch" + (i + 1), title: clip(titleOf(shell, chatId), 40), gone: (shell.missing || []).includes(chatId) });
   }
-  out.channels_status = shell.slots.length ? places.join(" · ").slice(0, 200) : t("slots.none");
-  const waiting = (shell.waiting || []).map((x) => ((shell.wasOn || []).includes(x) ? t("more.wasOn", { title: clip(titleOf(shell, x), 24) }) : clip(titleOf(shell, x), 24)));
-  out.channels_more = waiting.length ? t("more.list", { list: waiting.slice(0, 4).join(", ") + (waiting.length > 4 ? " +" + (waiting.length - 4) : "") }).slice(0, 200) : t("more.none");
+  const waiting = (shell.waiting || []).map((x) => ({ title: clip(titleOf(shell, x), 40), wasOn: (shell.wasOn || []).includes(x) }));
   const parts = [shell.count > 0 ? videoCount(shell.count) : t("index.none")];
   if (shell.indexedAt) {
     const m = Math.floor((now - shell.indexedAt) / 60000);
@@ -5126,37 +5222,25 @@ function statusLines() {
   if (c.mode === "account" && shell.checking > 0) parts.push(t("index.checking", { n: shell.checking }));
   if (problem) parts.push(problem.kind === "flood" || problem.kind === "budget" ? t("setup.flood", { min: minutes((problem.until - now) / 1000) }) : noticeFor(problem).items[0].title);
   if (shell.channelErrors > 0) parts.push(t("index.channelErrors", { n: shell.channelErrors }));
-  out.index_status = parts.join(" · ").slice(0, 200);
-  return out;
+  return { mode: c.mode, complete: c.complete, loggedIn, ready: c.complete && (c.mode === "bot" || loggedIn), account, places, waiting, index: parts.join(" · "), qrStage: !!(qr && qr.fp === (c.complete ? sessionFp(c) : null) && qr.stage), have: { api_id: !!c.apiId, api_hash: !!c.apiHash, bot_token: !!c.botToken } };
 }
-
-/** The account line of the settings form in account mode (no network). */
-function accountStatus(c) {
-  const rec = readJson(KEYS.login);
-  const qr = readJson(KEYS.qr);
-  if (qr && qr.fp === sessionFp(c) && qr.stage === "password") return t("status.password");
-  if (qr && qr.fp === sessionFp(c) && qr.stage === "qr" && qr.until > Date.now()) return t("qr.waiting");
-  if (hasLogin(c)) return t("status.accountOn");
-  if (rec && rec.fp === loginFp(c) && rec.kind === "closed") return t("status.closed");
-  return t("status.signin");
-}
-return { SLOTS, REFRESH_MS, loadShell, titleOf, activeChats, rowOf, posterFor, itemOf, countVideos, freeSlots, refresh, forget, forgetAccount, nowMs, homeRows, browsePage, searchPage, rowFor, channelTabs, statusLines, chatOfId, msgOfId };
+return { SLOTS, REFRESH_MS, loadShell, titleOf, activeChats, rowOf, posterFor, itemOf, countVideos, freeSlots, refresh, forget, forgetAccount, nowMs, homeRows, browsePage, searchPage, rowFor, channelTabs, setupView, chatOfId, msgOfId };
 })();
 
-// ---- src/shell/account.js ----
+// ---- src\shell\account.js ----
 const __mod_src_shell_account = (() => {
-// Account mode's sign-in, from the settings form only (there is no login in the background):
-//   - "Iniciar sesión con QR" (action qr_login) asks Telegram for a login token (auth.exportLoginToken, with the person's
-//     api_id and api_hash). The form's `qr` setting shows it as tg://login?token=<base64url>, for the person to scan with
-//     the OFFICIAL Telegram app (Settings ▸ Devices ▸ Link Desktop Device), which shows whose account is linked and
-//     asks to confirm. Kino asks settingsStatus() every 5 s while the form is open; this module then asks Telegram again
-//     when the token is close to expiring (about 30 s) or 10 s went by: that answer is a new token, or the login
-//     (auth.loginTokenSuccess, or auth.loginTokenMigrateTo, followed by the client). The window closes after 150 s.
-//   - A 2FA account answers SESSION_PASSWORD_NEEDED: the person types the password in the `tg_password` setting, taps
-//     Guardar, then "Confirmar la contraseña" (action check_password): SRP (src/mtproto/srp.js), auth.checkPassword.
-//     The password is read from the settings for that one call and the action always asks Kino to clear the field
-//     (clearSettings): it is never stored by the plugin, never logged, never part of a row or an error.
-//   - "Cerrar sesión" (action logout): auth.logOut (best effort), then the session, the account's index and its catalog
+// Account mode's sign-in, from the setup screen only (there is no login in the background):
+//   - "Iniciar sesión con QR" (the qr_login event) asks Telegram for a login token (auth.exportLoginToken, with the
+//     person's api_id and api_hash). The screen draws it as tg://login?token=<base64url> with Kino's countdown, for the
+//     person to scan with the OFFICIAL Telegram app (Settings ▸ Devices ▸ Link Desktop Device), which shows whose account
+//     is linked and asks to confirm. The screen's tick and the code's own renew event call qrPoll(); this module then asks
+//     Telegram again when the token is close to expiring (about 30 s) or 10 s went by: that answer is a new token, or the
+//     login (auth.loginTokenSuccess, or auth.loginTokenMigrateTo, followed by the client). The window closes after 150 s.
+//   - A 2FA account answers SESSION_PASSWORD_NEEDED: the person types the password in the screen's masked field
+//     (`obscureText`) and submits; confirmPassword() gets it as an argument for that one call (SRP, src/mtproto/srp.js,
+//     auth.checkPassword). Kino empties the field when the call ends; the plugin never stores it, never logs it, never
+//     puts it in a row, an error or the screen's state.
+//   - "Cerrar sesión" (the logout event): auth.logOut (best effort), then the session, the account's index and its catalog
 //     rows are deleted on this device.
 // The login token is never logged and never stored (tg.qr keeps only { fp, stage, until }).
 const { credentials, connect, saveSession, loginBlocked, recordLoginFailure, markLoggedIn, hasStoredLogin, sessionFp, close } = __mod_src_shell_live;
@@ -5169,8 +5253,8 @@ const { loadShell, forgetAccount } = __mod_src_shell_library;
 const QR_WINDOW_MS = 150000;  // how long a QR login stays open after the person pressed the button
 const POLL_MS = 10000;        // ask Telegram again at least this often while the QR is shown
 const RENEW_MS = 8000;        // ...and when the token has less than this left
-const CALL_MS = 7000;         // one poll inside settingsStatus's 10 s
-const ACTION_MS = 20000;      // one action inside its 30 s
+const CALL_MS = 7000;         // one poll inside a screen call's 20 s
+const ACTION_MS = 20000;      // one button inside a screen call's 20 s
 /** QR logins per device and hour (each press of the button). */
 const ACCOUNT_BUDGET = Object.freeze({ key: KEYS.accountLogins, max: 5, what: "account logins" });
 
@@ -5259,39 +5343,36 @@ async function qrPoll() {
       else return { status: failed(c, e) };
     }
   }
-  return qr ? { qr: qr.url, status: t("qr.waiting") } : { status: t("qr.waiting") };
+  return qr ? { qr: qr.url, expiresInMs: Math.max(1000, qr.expiresAt - now), status: t("qr.waiting") } : { status: t("qr.waiting") };
 }
 
-/** The check_password action: the 2FA password from the settings, used once; the field is always cleared. */
-async function confirmPassword() {
-  const clear = { clearSettings: ["tg_password"] };
+/** The 2FA password step: the password the person typed in the screen's masked field, used once and never kept anywhere. */
+async function confirmPassword(typed) {
   const c = credentials();
-  if (c.mode !== "account" || !c.complete) return { message: t("qr.botMode"), ...clear };
+  if (c.mode !== "account" || !c.complete) return { message: t("qr.botMode") };
   const st = readJson(KEYS.qr);
-  if (!st || st.fp !== sessionFp(c) || st.stage !== "password") return { message: t(hasStoredLogin(c) ? "qr.already" : "pw.notNeeded"), ...clear };
-  const typed = kino.config.get("tg_password");
+  if (!st || st.fp !== sessionFp(c) || st.stage !== "password") return { message: t(hasStoredLogin(c) ? "qr.already" : "pw.notNeeded") };
   if (typeof typed !== "string" || !typed) return { message: t("pw.empty") };
   const now = clock();
   try {
     const live = await connect(c, loadShell(c), { deadline: now + ACTION_MS, loginFlow: true });
     await live.client.checkPassword(typed, { deadline: now + ACTION_MS });
     done();
-    return { message: t("qr.done"), ...clear };
+    return { message: t("qr.done") };
   } catch (e) {
     const code = errCode(e);
     kino.log("password check: " + code);
-    if (code === "password_invalid") return { message: t("pw.wrong"), ...clear };
-    if (code === "login_budget") return { message: t("pw.budget", { min: minutes(e.seconds) }), ...clear };
-    if (code === "flood_wait") { recordLoginFailure(c, e); return { message: t("setup.flood", { min: minutes(e.seconds) }), ...clear }; }
-    return { message: t("qr.failed"), ...clear };
+    if (code === "password_invalid") return { message: t("pw.wrong") };
+    if (code === "login_budget") return { message: t("pw.budget", { min: minutes(e.seconds) }) };
+    if (code === "flood_wait") { recordLoginFailure(c, e); return { message: t("setup.flood", { min: minutes(e.seconds) }) }; }
+    return { message: t("qr.failed") };
   }
 }
 
 /** The logout action: auth.logOut when there is a session (best effort), then everything of the account goes. */
 async function logout() {
   const c = credentials();
-  const clear = { clearSettings: ["tg_password"] };
-  if (c.mode !== "account") return { message: t("logout.none"), ...clear };
+  if (c.mode !== "account") return { message: t("logout.none") };
   const had = !!readJson(KEYS.usession);
   if (hasStoredLogin(c)) {
     try {
@@ -5305,12 +5386,298 @@ async function logout() {
   await close();
   await forgetAccount();
   remove(KEYS.login);
-  return { message: t(had ? "logout.done" : "logout.none"), ...clear };
+  return { message: t(had ? "logout.done" : "logout.none") };
 }
 return { ACCOUNT_BUDGET, startQr, qrPoll, confirmPassword, logout };
 })();
 
-// ---- src/shell/b64.js ----
+// ---- src\shell\validate.js ----
+const __mod_src_shell_validate = (() => {
+// What the setup screen accepts for the three secrets, one rule each: the screen's Form checks them with these patterns
+// (Kino's own matcher) before any code runs, and the connect event checks them again with the same source.
+const { t } = __mod_src_shell_text;
+
+/** Kino's pattern subset: a plain regular expression source that matches the whole value. */
+const PATTERNS = Object.freeze({
+  api_id: "^[0-9]{3,12}$",
+  api_hash: "^[0-9a-fA-F]{32}$",
+  bot_token: "^[0-9]{3,15}:[A-Za-z0-9_-]{20,80}$",
+});
+const RULES = Object.fromEntries(Object.entries(PATTERNS).map(([k, v]) => [k, new RegExp(v)]));
+const looksLikeHash = (v) => /^[0-9a-fA-F]{32}$/.test(v);
+const looksLikeId = (v) => /^[0-9]{3,12}$/.test(v);
+
+/**
+ * The text that says why `value` is not a good `key` (api_id, api_hash or bot_token), or null when it is good. A value
+ * that is another field's kind says so: the usual mistake is pasting the api_hash where the api_id goes.
+ */
+function problemWith(key, value) {
+  const v = String(value ?? "").trim();
+  if (!v || RULES[key].test(v)) return null;
+  if (key === "api_id") return looksLikeHash(v) ? t("validate.apiIdSwapped") : t("validate.apiId");
+  if (key === "api_hash") return looksLikeId(v) ? t("validate.apiHashSwapped") : t("validate.apiHash");
+  return looksLikeHash(v) ? t("validate.tokenSwapped") : t("validate.token");
+}
+return { PATTERNS, problemWith };
+})();
+
+// ---- src\shell\screen.js ----
+const __mod_src_shell_screen = (() => {
+// The plugin's setup screen (apiVersion 14 `screen`): the only place the person connects Telegram, picks channels and
+// runs the index. Kino draws it from the tree below, on the phone and on the TV, and keeps the state; nothing here
+// touches a view. The connection is a `steps` flow: the secrets (api_id, api_hash, the bot token, the 2FA password) are
+// typed in fields inside Forms that Kino checks before any code runs; what the connect step collects is written with an
+// answer's `config`, and the 2FA password is used once, from the event's value, and never stored at all. Toggles and
+// the access select are `bind`s that Kino writes as the person changes them.
+const { credentials } = __mod_src_shell_live;
+const { SLOTS, refresh, forget, freeSlots, setupView } = __mod_src_shell_library;
+const { startQr, qrPoll, confirmPassword, logout } = __mod_src_shell_account;
+const { PATTERNS, problemWith } = __mod_src_shell_validate;
+const { t, bi, minutes, videoCount } = __mod_src_shell_text;
+
+const TICK_MS = 4000;
+const BUSY = ["btnQr", "btnLogout", "btnFree", "btnRefresh", "btnForget"];
+const busy = (key) => ({ ui: [{ disable: key }] });
+const settled = (key) => ({ ui: [{ enable: key }] });
+
+const MY_TELEGRAM = "https://my.telegram.org";
+const BOTFATHER = "https://t.me/BotFather";
+
+const card = (children) => ({ type: "Card", variant: "outlined", children: [{ type: "Column", gap: 12, padding: 16, children }] });
+const heading = (key) => ({ type: "Text", style: "h3", ...bi(key) });
+const caption = (key, vars) => ({ type: "Text", style: "caption", color: "muted", ...bi(key, vars) });
+const confirmOf = (key) => ({ confirm: bi(key).text, confirmEn: bi(key).textEn });
+/** A button that turns itself off while its event runs (the answer turns it back on). */
+const button = (key, labelKey, event, extra = {}) => ({ type: "Button", key, variant: "secondary", ...bi(labelKey, {}, "labelText"), onPressed: { ui: busy(key).ui, event }, ...extra });
+
+/** The banner for the account line: its text in both languages and the colour role the view gave it. */
+function statusBanner(view) {
+  const { key, vars, role } = view.account;
+  return { type: "MaterialBanner", key: "accountLine", role, ...bi(key, vars) };
+}
+
+/**
+ * One field of the connect form. It is required while nothing is saved; once saved, empty means "keep what is saved"
+ * (a secret is never shown back). Kino checks `pattern` before the event, with the message of `errorKey`.
+ */
+function field(key, labelKey, errorKey, have, extra = {}) {
+  return {
+    type: "TextField", key, ...bi(labelKey, {}, "labelText"), required: !have, pattern: PATTERNS[key], ...bi(errorKey, {}, "errorText"),
+    ...(have ? bi("screen.keepHint", {}, "hintText") : {}), ...extra,
+  };
+}
+
+function connectStep(view) {
+  const account = view.mode === "account";
+  const fields = [
+    field("api_id", "screen.field.apiId", "validate.apiId", view.have.api_id, { kind: "number" }),
+    field("api_hash", "screen.field.apiHash", "validate.apiHash", view.have.api_hash, { obscureText: true }),
+    ...(account ? [] : [field("bot_token", "screen.field.token", "validate.token", view.have.bot_token, { obscureText: true })]),
+  ];
+  return [
+    caption("screen.connectHow"),
+    {
+      type: "DropdownButton", key: "access", bind: "access", ...bi("screen.access", {}, "labelText"), onChanged: "mode",
+      options: [
+        { value: "bot", ...bi("screen.access.bot", {}, "label") },
+        { value: "account", ...bi("screen.access.account", {}, "label") },
+      ],
+    },
+    { type: "Row", wrap: true, gap: 8, children: [
+      { type: "TextButton", ...bi("screen.openApps", {}, "labelText"), onPressed: { go: { url: { href: MY_TELEGRAM } } } },
+      ...(account ? [] : [{ type: "TextButton", ...bi("screen.openBotFather", {}, "labelText"), onPressed: { go: { url: { href: BOTFATHER } } } }]),
+    ] },
+    { type: "Form", key: "connectForm", onSubmitted: "connect", gap: 12, children: [
+      ...fields,
+      { type: "ElevatedButton", ...bi("screen.save", {}, "labelText"), submit: true },
+    ] },
+  ];
+}
+
+function accountStep(view, state) {
+  const children = [];
+  if (state.note && !view.loggedIn && !view.qrStage) children.push({ type: "MaterialBanner", key: "noteLine", role: "warning", text: state.note, textEn: state.note });
+  if (view.loggedIn) {
+    children.push(button("btnLogout", "screen.logoutButton", "logout", confirmOf("screen.logoutConfirm")));
+  } else if (view.account.key === "status.password") {
+    // The 2FA password: a masked field in a Form, used once from the event's value (Kino empties the field afterwards).
+    children.push({ type: "Form", key: "passwordForm", onSubmitted: "password", gap: 12, children: [
+      { type: "TextField", key: "tg_password", obscureText: true, ...bi("screen.field.password", {}, "labelText"), required: true },
+      { type: "ElevatedButton", ...bi("screen.pwButton", {}, "labelText"), submit: true },
+    ] });
+  } else {
+    if (state.qr) {
+      const life = Number(state.qrMs) > 1000 ? Math.min(Number(state.qrMs), 3600000) : 30000;
+      children.push(
+        { type: "QrImage", value: state.qr, size: { compact: "medium", expanded: "large" }, ...bi("qr.waiting", {}, "labelText"), expiresInMs: life, renewBeforeMs: Math.min(5000, Math.floor(life / 2)), onExpire: "qr_renew" },
+        caption("screen.qrHint"),
+      );
+    }
+    if (!view.qrStage) children.push(button("btnQr", "screen.qrButton", "qr_login", { variant: "primary" }));
+  }
+  children.push({ type: "ExpansionTile", key: "accountHelp", items: [{ key: "help", ...bi("screen.helpTitle", {}, "title"), children: [{ type: "Text", style: "p", ...bi("screen.helpBody") }] }] });
+  return children;
+}
+
+/** The connection flow: connect, then (account mode) the sign-in. The open step is the first one still to do, or the one the person went back to. */
+function stepsNode(view, state) {
+  const account = view.mode === "account";
+  const keys = account ? ["connect", "account"] : ["connect"];
+  const done = { connect: view.complete, account: view.loggedIn };
+  const reachable = (k) => k === "connect" || view.complete;
+  const open = keys.includes(state.step) && reachable(state.step) ? state.step : keys.find((k) => !done[k]) || null;
+  const mode = bi(account ? "screen.access.account" : "screen.access.bot");
+  const items = [
+    {
+      key: "connect", ...bi("screen.step.connect", {}, "title"), state: open === "connect" ? "current" : done.connect ? "done" : "pending",
+      subtitle: bi("screen.step.connected", { mode: mode.text }).text, subtitleEn: bi("screen.step.connected", { mode: mode.textEn }).textEn,
+      ...(open === "connect" ? { children: connectStep(view) } : {}),
+    },
+  ];
+  if (account) {
+    items.push({
+      key: "account", ...bi("screen.step.account", {}, "title"), state: open === "account" ? "current" : done.account ? "done" : "pending",
+      ...bi("screen.step.signedIn", {}, "subtitle"),
+      ...(open === "account" ? { children: accountStep(view, state) } : {}),
+    });
+  }
+  return { type: "steps", key: "setup", onStepTap: "goStep", items };
+}
+
+function channelsCard(view) {
+  const rows = view.places.map((p) => ({
+    type: "Switch", key: "sw" + p.n, bind: p.key, labelText: p.gone ? p.title + " (" + bi("slots.gone").text + ")" : p.title, labelTextEn: p.gone ? p.title + " (" + bi("slots.gone").textEn + ")" : p.title,
+  }));
+  const children = [heading("screen.channels"), caption("screen.channelsHint", { n: SLOTS })];
+  if (rows.length) children.push({ type: "Column", gap: 4, children: rows });
+  else children.push({ type: "Text", style: "p", ...bi("slots.none") });
+  if (view.waiting.length) {
+    const list = (field) => view.waiting.slice(0, 4).map((w) => (w.wasOn ? bi("more.wasOn", { title: w.title })[field] : w.title)).join(", ") + (view.waiting.length > 4 ? " +" + (view.waiting.length - 4) : "");
+    const es = bi("more.list", { list: list("text") });
+    const en = bi("more.list", { list: list("textEn") });
+    children.push({ type: "Text", style: "label", ...bi("screen.waiting") }, { type: "Text", key: "waitingLine", style: "caption", color: "muted", text: es.text, textEn: en.textEn });
+    children.push(button("btnFree", "screen.freeButton", "free_slots", confirmOf("free.confirm")));
+  }
+  return card(children);
+}
+
+function indexCard(view) {
+  return card([
+    heading("screen.index"),
+    caption("screen.indexHint"),
+    { type: "Text", key: "indexLine", style: "p", text: view.index, textEn: view.index },
+    { type: "Switch", key: "swTmdb", bind: "tmdb", ...bi("screen.tmdb", {}, "labelText") },
+    caption("screen.tmdbHint"),
+    { type: "Row", wrap: true, gap: 8, children: [
+      button("btnRefresh", "screen.refreshButton", "refresh", { variant: "primary" }),
+      button("btnForget", "screen.forgetButton", "forget", confirmOf("screen.forgetConfirm")),
+    ] },
+  ]);
+}
+
+/** The `screen` export: a pure view of the stored state and the screen's own (the QR to draw, the step the person went back to). */
+async function screen({ state }) {
+  const view = setupView();
+  const children = [{ type: "Text", style: "h2", ...bi("screen.title") }, statusBanner(view), stepsNode(view, state)];
+  if (view.ready) children.push(channelsCard(view), indexCard(view));
+  return {
+    type: "SingleChildScrollView",
+    every: { ms: TICK_MS, event: "tick" },
+    children: [{ type: "Column", gap: 16, padding: { compact: 16, expanded: 32 }, children }],
+  };
+}
+
+const signature = (state) => kino.crypto.hash("sha256", JSON.stringify([setupView(), state.qr || null, state.note || null, state.step || null])).slice(0, 16);
+
+/** What a refresh answered, as the sentence the person reads. */
+async function refreshNow() {
+  const { shell, added, problem } = await refresh({ force: true });
+  if (problem) {
+    if (problem.kind === "flood" || problem.kind === "budget") return t(problem.kind === "flood" ? "setup.flood" : "setup.budget", { min: minutes((problem.until - Date.now()) / 1000) });
+    const key = { config: credentials().mode === "account" ? "setup.configAccount" : "setup.config", token: "setup.token", api_id: "setup.apiId", network: "setup.network", signin: "setup.signin", closed: "setup.closed" }[problem.kind] || "setup.unavailable";
+    return t(key);
+  }
+  return t("action.refreshed", { count: videoCount(shell.count), added });
+}
+
+/** The state patch that redraws the screen when what it shows changed (and carries the QR to draw, if any). */
+async function resync(state) {
+  const login = await qrPoll();
+  // What the login said while no code is up (it expired, Telegram refused, a wait): kept until the next try.
+  const note = login.qr ? null : login.status || state.note || null;
+  const next = { ...state, qr: login.qr || null, qrMs: login.qr ? login.expiresInMs : null, note };
+  const sig = signature(next);
+  return sig === state.sig ? null : { qr: next.qr, qrMs: next.qrMs, note, sig };
+}
+
+/** The connect step's submit: what was typed, or what is already saved, must make a complete and well-formed set. */
+function connect(value) {
+  const c = credentials();
+  const typed = (k) => String((value && value[k]) ?? "").trim();
+  const config = {};
+  for (const key of c.mode === "account" ? ["api_id", "api_hash"] : ["api_id", "api_hash", "bot_token"]) {
+    const v = typed(key);
+    const problem = v ? problemWith(key, v) : null;
+    if (problem) return { toast: problem };
+    if (v) config[key] = v;
+    else if (!kino.config.get(key)) return { toast: problemWith(key, "!") };
+  }
+  return { config, state: { step: null, sig: null }, toast: t("screen.saved") };
+}
+
+/** The `screenEvent` export. A failure is a toast, and every button comes back on. */
+async function screenEvent({ name, arg, value, state }) {
+  try {
+    return await run(name, arg, value, state);
+  } catch (e) {
+    kino.log("screen event " + name + " failed: " + (e && e.code ? e.code : "error"));
+    return { toast: t("setup.unavailable"), ui: BUSY.map((key) => ({ enable: key })) };
+  }
+}
+
+async function run(name, arg, value, state) {
+  switch (name) {
+    case "open":
+    case "tick":
+    case "qr_renew": {
+      const patch = await resync(state);
+      return patch ? { state: patch } : null;
+    }
+    case "mode":
+      return { state: { sig: null, step: null } };
+    case "goStep":
+      return { state: { step: typeof arg === "string" ? arg : null, sig: null } };
+    case "connect":
+      return connect(value);
+    case "password": {
+      const answer = await confirmPassword(value && value.tg_password);
+      return { state: await resync({ ...state, note: null, sig: null }), toast: answer.message };
+    }
+    case "qr_login": {
+      const message = await startQr();
+      return { state: await resync({ ...state, note: null, sig: null }), toast: message, ...settled("btnQr") };
+    }
+    case "logout": {
+      const answer = await logout();
+      return { state: { qr: null, qrMs: null, note: null, step: null, sig: null }, toast: answer.message, ...settled("btnLogout") };
+    }
+    case "free_slots": {
+      const n = freeSlots();
+      return { state: { sig: null }, toast: n ? t("free.done", { n }) : t("free.none"), ...settled("btnFree") };
+    }
+    case "refresh":
+      return { state: { sig: null }, toast: await refreshNow(), ...settled("btnRefresh") };
+    case "forget":
+      await forget();
+      return { state: { qr: null, qrMs: null, note: null, step: null, sig: null }, toast: t("action.forgot"), ...settled("btnForget") };
+    default:
+      return null;
+  }
+}
+return { screen, screenEvent };
+})();
+
+// ---- src\shell\b64.js ----
 const __mod_src_shell_b64 = (() => {
 // Hex to base64 without a JavaScript pass over the data. kino.crypto has no plain re-encoding, but AES-CTR XORs the
 // data with a keystream fixed by its key and counter, so running it twice with the same key and counter gives the data
@@ -5345,7 +5712,7 @@ function base64Of(hex) {
 return { hexToBase64Native, base64Of };
 })();
 
-// ---- src/shell/read.js ----
+// ---- src\shell\read.js ----
 const __mod_src_shell_read = (() => {
 // The byteSource `read` export: { handle, offset, length } -> { bytes: base64 } of exactly min(length, size - offset)
 // bytes. Kino's proxy asks 1 MiB at offsets that are multiples of 1 MiB, which is one upload.getFile; any other
@@ -5516,7 +5883,7 @@ async function readTimed(arg, started) {
 return { pieces, locOf, read };
 })();
 
-// ---- src/shell/image.js ----
+// ---- src\shell\image.js ----
 const __mod_src_shell_image = (() => {
 // The imageSource `image` export: { handle: "t:<row id>" } -> { bytes: base64, mime: "image/jpeg" }, Telegram's own
 // thumbnail of the video (the type letter kept in the row's data.th), for a card TMDB has no poster for.
@@ -5583,7 +5950,7 @@ async function image(arg) {
 return { image };
 })();
 
-// ---- src/plugin.js (entry) ----
+// ---- src\plugin.js (entry) ----
 // Video-Gram (id video-gram): a personal library of your Telegram videos for Kino. The person brings their own api_id/api_hash
 // (my.telegram.org) and a bot (@BotFather) that administers their private channel(s); the plugin lists the channels'
 // videos in Inicio and in search, and streams them through Kino's byteSource (`read`), seeking, Cast and DLNA included.
@@ -5592,8 +5959,8 @@ return { image };
 // scripts/build.mjs (`npm run build`): the published plugin.js.
 const { guard, shellError } = __mod_src_shell_errors;
 const { credentials } = __mod_src_shell_live;
-const { refresh, forget, homeRows, browsePage, searchPage, rowFor, loadShell, channelTabs, statusLines, posterFor, nowMs, freeSlots } = __mod_src_shell_library;
-const { startQr, qrPoll, confirmPassword, logout } = __mod_src_shell_account;
+const { homeRows, browsePage, searchPage, rowFor, loadShell, channelTabs, posterFor, nowMs, refresh } = __mod_src_shell_library;
+const { screen: drawScreen, screenEvent: handleScreenEvent } = __mod_src_shell_screen;
 const { read: readBytes } = __mod_src_shell_read;
 const { image: imageBytes } = __mod_src_shell_image;
 const { displayTitle, backdropOf } = __mod_src_shell_enrich;
@@ -5699,49 +6066,11 @@ export async function categories() {
   return guard(async () => channelTabs(loadShell(credentials())).map((c) => ({ id: "c" + c.chatId, title: c.title.slice(0, 40), ref: "chan:" + c.chatId })));
 }
 
-export async function settingsStatus() {
-  return guard(async () => {
-    const login = await qrPoll(); // account mode: the QR to draw and how the login goes (asks Telegram only when due)
-    const out = statusLines();
-    if (login.status) out.account_status = login.status;
-    if (login.qr) out.login_qr = login.qr;
-    return out;
-  });
+/** The setup screen (apiVersion 14): the person connects Telegram, picks channels and runs the index there. */
+export async function screen(ctx) {
+  return drawScreen(ctx);
 }
 
-export async function action(key) {
-  return guard(async () => {
-    if (key === "qr_login") return { message: await startQr() };
-    if (key === "check_password") return confirmPassword();
-    if (key === "logout") return logout();
-    if (key === "free_slots") {
-      const n = freeSlots();
-      return { message: n ? t("free.done", { n }) : t("free.none") };
-    }
-    if (key === "forget") {
-      await forget();
-      return { message: t("action.forgot") };
-    }
-    if (key !== "refresh") return null;
-    const { shell, added, problem } = await refresh({ force: true });
-    if (problem) {
-      if (problem.kind === "flood" || problem.kind === "budget") return { message: t(problem.kind === "flood" ? "setup.flood" : "setup.budget", { min: minutes((problem.until - Date.now()) / 1000) }) };
-      const key2 = { config: credentials().mode === "account" ? "setup.configAccount" : "setup.config", token: "setup.token", api_id: "setup.apiId", network: "setup.network", signin: "setup.signin", closed: "setup.closed" }[problem.kind] || "setup.unavailable";
-      return { message: t(key2) };
-    }
-    return { message: t("action.refreshed", { count: videoCount(shell.count), added }) };
-  });
+export async function screenEvent(ctx) {
+  return handleScreenEvent(ctx);
 }
-
-export async function validateSettings(values) {
-  await null;
-  const v = values || {};
-  const out = {};
-  if (v.api_id !== undefined && !/^\d{3,12}$/.test(String(v.api_id).trim())) out.api_id = t("validate.apiId");
-  if (v.api_hash !== undefined && !/^[0-9a-fA-F]{32}$/.test(String(v.api_hash).trim())) out.api_hash = t("validate.apiHash");
-  const account = v.access === "account";
-  if (!account && (v.bot_token === undefined || !String(v.bot_token).trim())) out.bot_token = t("validate.tokenNeeded");
-  else if (v.bot_token !== undefined && String(v.bot_token).trim() && !/^\d{3,15}:[A-Za-z0-9_-]{20,80}$/.test(String(v.bot_token).trim())) out.bot_token = t("validate.token");
-  return Object.keys(out).length ? out : null;
-}
-

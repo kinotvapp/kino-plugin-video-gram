@@ -1,15 +1,15 @@
-// Account mode's sign-in, from the settings form only (there is no login in the background):
-//   - "Iniciar sesión con QR" (action qr_login) asks Telegram for a login token (auth.exportLoginToken, with the person's
-//     api_id and api_hash). The form's `qr` setting shows it as tg://login?token=<base64url>, for the person to scan with
-//     the OFFICIAL Telegram app (Settings ▸ Devices ▸ Link Desktop Device), which shows whose account is linked and
-//     asks to confirm. Kino asks settingsStatus() every 5 s while the form is open; this module then asks Telegram again
-//     when the token is close to expiring (about 30 s) or 10 s went by: that answer is a new token, or the login
-//     (auth.loginTokenSuccess, or auth.loginTokenMigrateTo, followed by the client). The window closes after 150 s.
-//   - A 2FA account answers SESSION_PASSWORD_NEEDED: the person types the password in the `tg_password` setting, taps
-//     Guardar, then "Confirmar la contraseña" (action check_password): SRP (src/mtproto/srp.js), auth.checkPassword.
-//     The password is read from the settings for that one call and the action always asks Kino to clear the field
-//     (clearSettings): it is never stored by the plugin, never logged, never part of a row or an error.
-//   - "Cerrar sesión" (action logout): auth.logOut (best effort), then the session, the account's index and its catalog
+// Account mode's sign-in, from the setup screen only (there is no login in the background):
+//   - "Iniciar sesión con QR" (the qr_login event) asks Telegram for a login token (auth.exportLoginToken, with the
+//     person's api_id and api_hash). The screen draws it as tg://login?token=<base64url> with Kino's countdown, for the
+//     person to scan with the OFFICIAL Telegram app (Settings ▸ Devices ▸ Link Desktop Device), which shows whose account
+//     is linked and asks to confirm. The screen's tick and the code's own renew event call qrPoll(); this module then asks
+//     Telegram again when the token is close to expiring (about 30 s) or 10 s went by: that answer is a new token, or the
+//     login (auth.loginTokenSuccess, or auth.loginTokenMigrateTo, followed by the client). The window closes after 150 s.
+//   - A 2FA account answers SESSION_PASSWORD_NEEDED: the person types the password in the screen's masked field
+//     (`obscureText`) and submits; confirmPassword() gets it as an argument for that one call (SRP, src/mtproto/srp.js,
+//     auth.checkPassword). Kino empties the field when the call ends; the plugin never stores it, never logs it, never
+//     puts it in a row, an error or the screen's state.
+//   - "Cerrar sesión" (the logout event): auth.logOut (best effort), then the session, the account's index and its catalog
 //     rows are deleted on this device.
 // The login token is never logged and never stored (tg.qr keeps only { fp, stage, until }).
 import { credentials, connect, saveSession, loginBlocked, recordLoginFailure, markLoggedIn, hasStoredLogin, sessionFp, close } from "./live.js";
@@ -22,8 +22,8 @@ import { loadShell, forgetAccount } from "./library.js";
 const QR_WINDOW_MS = 150000;  // how long a QR login stays open after the person pressed the button
 const POLL_MS = 10000;        // ask Telegram again at least this often while the QR is shown
 const RENEW_MS = 8000;        // ...and when the token has less than this left
-const CALL_MS = 7000;         // one poll inside settingsStatus's 10 s
-const ACTION_MS = 20000;      // one action inside its 30 s
+const CALL_MS = 7000;         // one poll inside a screen call's 20 s
+const ACTION_MS = 20000;      // one button inside a screen call's 20 s
 /** QR logins per device and hour (each press of the button). */
 export const ACCOUNT_BUDGET = Object.freeze({ key: KEYS.accountLogins, max: 5, what: "account logins" });
 
@@ -112,39 +112,36 @@ export async function qrPoll() {
       else return { status: failed(c, e) };
     }
   }
-  return qr ? { qr: qr.url, status: t("qr.waiting") } : { status: t("qr.waiting") };
+  return qr ? { qr: qr.url, expiresInMs: Math.max(1000, qr.expiresAt - now), status: t("qr.waiting") } : { status: t("qr.waiting") };
 }
 
-/** The check_password action: the 2FA password from the settings, used once; the field is always cleared. */
-export async function confirmPassword() {
-  const clear = { clearSettings: ["tg_password"] };
+/** The 2FA password step: the password the person typed in the screen's masked field, used once and never kept anywhere. */
+export async function confirmPassword(typed) {
   const c = credentials();
-  if (c.mode !== "account" || !c.complete) return { message: t("qr.botMode"), ...clear };
+  if (c.mode !== "account" || !c.complete) return { message: t("qr.botMode") };
   const st = readJson(KEYS.qr);
-  if (!st || st.fp !== sessionFp(c) || st.stage !== "password") return { message: t(hasStoredLogin(c) ? "qr.already" : "pw.notNeeded"), ...clear };
-  const typed = kino.config.get("tg_password");
+  if (!st || st.fp !== sessionFp(c) || st.stage !== "password") return { message: t(hasStoredLogin(c) ? "qr.already" : "pw.notNeeded") };
   if (typeof typed !== "string" || !typed) return { message: t("pw.empty") };
   const now = clock();
   try {
     const live = await connect(c, loadShell(c), { deadline: now + ACTION_MS, loginFlow: true });
     await live.client.checkPassword(typed, { deadline: now + ACTION_MS });
     done();
-    return { message: t("qr.done"), ...clear };
+    return { message: t("qr.done") };
   } catch (e) {
     const code = errCode(e);
     kino.log("password check: " + code);
-    if (code === "password_invalid") return { message: t("pw.wrong"), ...clear };
-    if (code === "login_budget") return { message: t("pw.budget", { min: minutes(e.seconds) }), ...clear };
-    if (code === "flood_wait") { recordLoginFailure(c, e); return { message: t("setup.flood", { min: minutes(e.seconds) }), ...clear }; }
-    return { message: t("qr.failed"), ...clear };
+    if (code === "password_invalid") return { message: t("pw.wrong") };
+    if (code === "login_budget") return { message: t("pw.budget", { min: minutes(e.seconds) }) };
+    if (code === "flood_wait") { recordLoginFailure(c, e); return { message: t("setup.flood", { min: minutes(e.seconds) }) }; }
+    return { message: t("qr.failed") };
   }
 }
 
 /** The logout action: auth.logOut when there is a session (best effort), then everything of the account goes. */
 export async function logout() {
   const c = credentials();
-  const clear = { clearSettings: ["tg_password"] };
-  if (c.mode !== "account") return { message: t("logout.none"), ...clear };
+  if (c.mode !== "account") return { message: t("logout.none") };
   const had = !!readJson(KEYS.usession);
   if (hasStoredLogin(c)) {
     try {
@@ -158,5 +155,5 @@ export async function logout() {
   await close();
   await forgetAccount();
   remove(KEYS.login);
-  return { message: t(had ? "logout.done" : "logout.none"), ...clear };
+  return { message: t(had ? "logout.done" : "logout.none") };
 }

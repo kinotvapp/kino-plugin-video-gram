@@ -98,7 +98,7 @@ test("I1 a normal restart keeps the session; the device mark is not a video", as
   await p.read({ handle: ref, offset: 0, length: MiB });
   assert.deepEqual([stats().keyExchanges, stats().botLogins], [kx, logins]);
   assert.equal(sessionKeyId(a), key);
-  assert.match((await p.settingsStatus()).index_status, /^1 video\b/);
+  assert.match((await p.view()).index_status, /^1 video\b/);
   assert.deepEqual((await p.search({ q: "device", type: "any", cursor: null })).items, []);
 });
 
@@ -220,7 +220,7 @@ test("I5 slots are first-seen: two devices of the same bot show the same channel
   const b = newDevice();
   const pb = await b.runtime(SETTINGS);
   await pb.home(); // b meets both at once
-  const sa = await pa.settingsStatus(), sb = await pb.settingsStatus();
+  const sa = await pa.view(), sb = await pb.view();
   assert.equal(places(sa)[0], places(sb)[0]);
   assert.equal(places(sa)[1], places(sb)[1]);
   assert.equal(places(sa)[0], "✓ Viajes", "the first channel the bot met is slot 1, whatever the ids");
@@ -236,7 +236,7 @@ test("I5 a channel the bot lost keeps its slot (marked), so its switched-on slot
   world.forbid(CH1);
   world.addChannel({ id: 2100000000n, accessHash: 33n, title: "Nuevo" });
   await p.action("refresh");
-  const st = await p.settingsStatus();
+  const st = await p.view();
   assert.match(places(st)[0], /^✗ Pelis \(sin acceso\)/);
   assert.match(places(st)[1], /^— Viajes/);
   assert.match(places(st)[2], /^— Nuevo/, "the newcomer is appended, switched off");
@@ -249,9 +249,9 @@ test("M1 more than 6 channels: the line under the places names the ones waiting 
   const d = newDevice();
   const p = await d.runtime(SETTINGS);
   await p.home();
-  assert.match((await p.settingsStatus()).channels_more, /^C6, C7, C8, C9\. Para dar un lugar: apaga uno arriba/);
+  assert.match((await p.view()).channels_more, /^C6, C7, C8, C9\. Para dar un lugar: apaga uno y toca Dar lugar/);
   const en = await d.runtime(SETTINGS, { lang: "en-US" });
-  assert.match((await en.settingsStatus()).channels_more, /^C6, C7, C8, C9\. To give one a place: turn one off above/);
+  assert.match((await en.view()).channels_more, /^C6, C7, C8, C9\. To give one a place: turn one off, then tap Give/);
 });
 
 test("M2 the count follows a purge that runs on a Home that skips the refresh", async () => {
@@ -270,7 +270,7 @@ test("M2 the count follows a purge that runs on a Home that skips the refresh", 
   await p.home();
   assert.equal(tg.requests.length, calls);
   assert.equal(JSON.parse(d.base.storage.get("tg.shell")).count, 1);
-  assert.match((await p.settingsStatus()).index_status, /^1 video\b/);
+  assert.match((await p.view()).index_status, /^1 video\b/);
 });
 
 test("M3 read keeps its whole budget (getFile + refetch + retry) under 17 s", { timeout: 30000 }, async () => {

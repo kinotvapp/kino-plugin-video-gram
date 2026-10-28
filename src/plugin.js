@@ -6,8 +6,8 @@
 // scripts/build.mjs (`npm run build`): the published plugin.js.
 import { guard, shellError } from "./shell/errors.js";
 import { credentials } from "./shell/live.js";
-import { refresh, forget, homeRows, browsePage, searchPage, rowFor, loadShell, channelTabs, statusLines, posterFor, nowMs, freeSlots } from "./shell/library.js";
-import { startQr, qrPoll, confirmPassword, logout } from "./shell/account.js";
+import { homeRows, browsePage, searchPage, rowFor, loadShell, channelTabs, posterFor, nowMs, refresh } from "./shell/library.js";
+import { screen as drawScreen, screenEvent as handleScreenEvent } from "./shell/screen.js";
 import { read as readBytes } from "./shell/read.js";
 import { image as imageBytes } from "./shell/image.js";
 import { displayTitle, backdropOf } from "./shell/enrich.js";
@@ -113,49 +113,11 @@ export async function categories() {
   return guard(async () => channelTabs(loadShell(credentials())).map((c) => ({ id: "c" + c.chatId, title: c.title.slice(0, 40), ref: "chan:" + c.chatId })));
 }
 
-export async function settingsStatus() {
-  return guard(async () => {
-    const login = await qrPoll(); // account mode: the QR to draw and how the login goes (asks Telegram only when due)
-    const out = statusLines();
-    if (login.status) out.account_status = login.status;
-    if (login.qr) out.login_qr = login.qr;
-    return out;
-  });
+/** The setup screen (apiVersion 14): the person connects Telegram, picks channels and runs the index there. */
+export async function screen(ctx) {
+  return drawScreen(ctx);
 }
 
-export async function action(key) {
-  return guard(async () => {
-    if (key === "qr_login") return { message: await startQr() };
-    if (key === "check_password") return confirmPassword();
-    if (key === "logout") return logout();
-    if (key === "free_slots") {
-      const n = freeSlots();
-      return { message: n ? t("free.done", { n }) : t("free.none") };
-    }
-    if (key === "forget") {
-      await forget();
-      return { message: t("action.forgot") };
-    }
-    if (key !== "refresh") return null;
-    const { shell, added, problem } = await refresh({ force: true });
-    if (problem) {
-      if (problem.kind === "flood" || problem.kind === "budget") return { message: t(problem.kind === "flood" ? "setup.flood" : "setup.budget", { min: minutes((problem.until - Date.now()) / 1000) }) };
-      const key2 = { config: credentials().mode === "account" ? "setup.configAccount" : "setup.config", token: "setup.token", api_id: "setup.apiId", network: "setup.network", signin: "setup.signin", closed: "setup.closed" }[problem.kind] || "setup.unavailable";
-      return { message: t(key2) };
-    }
-    return { message: t("action.refreshed", { count: videoCount(shell.count), added }) };
-  });
+export async function screenEvent(ctx) {
+  return handleScreenEvent(ctx);
 }
-
-export async function validateSettings(values) {
-  await null;
-  const v = values || {};
-  const out = {};
-  if (v.api_id !== undefined && !/^\d{3,12}$/.test(String(v.api_id).trim())) out.api_id = t("validate.apiId");
-  if (v.api_hash !== undefined && !/^[0-9a-fA-F]{32}$/.test(String(v.api_hash).trim())) out.api_hash = t("validate.apiHash");
-  const account = v.access === "account";
-  if (!account && (v.bot_token === undefined || !String(v.bot_token).trim())) out.bot_token = t("validate.tokenNeeded");
-  else if (v.bot_token !== undefined && String(v.bot_token).trim() && !/^\d{3,15}:[A-Za-z0-9_-]{20,80}$/.test(String(v.bot_token).trim())) out.bot_token = t("validate.token");
-  return Object.keys(out).length ? out : null;
-}
-

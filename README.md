@@ -53,14 +53,14 @@ Kino shows it as **Signed**: `plugin.js` is signed with kinotvapp's author key, 
 3. **Agrega el bot a tu canal.** En tu canal privado: Administradores ▸ Agregar administrador ▸ busca tu bot. Basta con
    los permisos que trae por defecto.
 4. **Publica tus videos en el canal** (como video o como archivo: mp4, mkv, webm…).
-5. **En Kino**: Ajustes ▸ Plugins ▸ agrega este plugin, abre su pestaña y pega los tres datos (api_id, api_hash, token).
+5. **En Kino**: Ajustes ▸ Plugins ▸ agrega este plugin, abre su pestaña, toca **Configurar Video-Gram** y pega los tres datos (api_id, api_hash, token) en el paso 1; la pantalla te dice qué falta.
 6. Abre **Inicio**. La primera vez tarda unos segundos (crea la sesión de este aparato); después aparecen "Recientes"
    y una fila por canal.
 
 ### Con tu propia cuenta en vez de un bot (solo lectura)
 
 1. Crea tu app en my.telegram.org como en el paso 1 (api_id y api_hash). No hace falta bot.
-2. En la pestaña del plugin: **Conectar con** ▸ **Mi cuenta (solo lectura)**, pega el api_id y el api_hash y toca
+2. En la pantalla del plugin (Ajustes ▸ Plugins ▸ Video-Gram ▸ **Configurar Video-Gram**): **Conectar con** ▸ **Mi cuenta (solo lectura)**, pega el api_id y el api_hash y toca
    Guardar.
 3. Toca **Iniciar sesión con QR**. Aparece un código. En tu teléfono, abre la app oficial de Telegram ▸ Ajustes ▸
    Dispositivos ▸ **Vincular un dispositivo** y escanéalo; Telegram te muestra qué cuenta se vincula y te pide
@@ -137,14 +137,14 @@ Qué esperar:
 3. **Add the bot to your channel.** In your private channel: Administrators ▸ Add administrator ▸ find your bot. The
    default permissions are enough.
 4. **Post your videos in the channel** (as a video or as a file: mp4, mkv, webm…).
-5. **In Kino**: Settings ▸ Plugins ▸ add this plugin, open its tab and paste the three values (api_id, api_hash, token).
+5. **In Kino**: Settings ▸ Plugins ▸ add this plugin, open its tab, tap **Set up Video-Gram** and paste the three values (api_id, api_hash, token) in step 1; the screen tells you what is still missing.
 6. Open **Home**. The first time takes a few seconds (it creates this device's session); then "Recent" and one row per
    channel appear.
 
 ### With your own account instead of a bot (read only)
 
 1. Create your app at my.telegram.org as in step 1 (api_id and api_hash). No bot is needed.
-2. In the plugin's tab: **Connect with** ▸ **My account (read only)**, paste the api_id and the api_hash and tap Save.
+2. On the plugin's screen (Settings ▸ Plugins ▸ Video-Gram ▸ **Set up Video-Gram**): **Connect with** ▸ **My account (read only)**, paste the api_id and the api_hash and tap Save.
 3. Tap **Sign in with a QR**. A code shows. On your phone, open the official Telegram app ▸ Settings ▸ Devices ▸
    **Link Desktop Device** and scan it; Telegram shows which account is being linked and asks you to confirm. The code
    renews itself every few seconds and works for two and a half minutes.

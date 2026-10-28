@@ -567,29 +567,41 @@ export async function rowFor(ref) {
 
 export const channelTabs = (shell) => shell.slots.filter((x) => activeChats(shell).has(x)).map((chatId) => ({ chatId, title: titleOf(shell, chatId) }));
 
-/** The settings form's status lines (no network). */
-export function statusLines() {
+/**
+ * What the setup screen draws, from stored state only (no network): the account line, the places and the waiting line,
+ * the index line. `account` is { key, vars, role } for a `t()` text and a banner role.
+ */
+export function setupView() {
   const c = credentials();
   const shell = loadShell(c);
   const now = Date.now();
-  const out = {};
   const problem = problemOf(shell, now);
-  if (!c.complete) out.account_status = t(c.mode === "account" ? "status.missingAccount" : "status.missing");
-  else if (shell.refused && shell.refused.fp === loginFp(c)) out.account_status = t(shell.refused.kind === "token" ? "status.token" : "status.apiId");
-  else if (problem && problem.kind === "flood") out.account_status = t("status.flood", { min: minutes((problem.until - now) / 1000) });
-  else if (c.mode === "account") out.account_status = accountStatus(c);
-  else out.account_status = hasLogin(c) ? t("status.connected") : t("status.notYet");
-  // The places on one line (Kino's settings contract leaves no room for one line per place): "1 ✓ Pelis · 2 — Viajes".
+  const qr = readJson(KEYS.qr);
+  const rec = readJson(KEYS.login);
+  const account = { key: "status.notYet", vars: {}, role: "info" };
+  const set = (key, role, vars = {}) => Object.assign(account, { key, role, vars });
+  let loggedIn = false;
+  if (!c.complete) set(c.mode === "account" ? "status.missingAccount" : "status.missing", "warning");
+  else if (shell.refused && shell.refused.fp === loginFp(c)) set(shell.refused.kind === "token" ? "status.token" : "status.apiId", "error");
+  else if (problem && problem.kind === "flood") set("status.flood", "warning", { min: minutes((problem.until - now) / 1000) });
+  else if (c.mode === "account") {
+    loggedIn = hasLogin(c);
+    if (qr && qr.fp === sessionFp(c) && qr.stage === "password") set("status.password", "warning");
+    else if (qr && qr.fp === sessionFp(c) && qr.stage === "qr" && qr.until > now) set("qr.waiting", "info");
+    else if (loggedIn) set("status.accountOn", "success");
+    else if (rec && rec.fp === loginFp(c) && rec.kind === "closed") set("status.closed", "error");
+    else set("status.signin", "info");
+  } else {
+    loggedIn = hasLogin(c);
+    if (loggedIn) set("status.connected", "success");
+  }
   const places = [];
   for (let i = 0; i < SLOTS; i++) {
     const chatId = shell.slots[i];
-    if (!chatId) { places.push(i + 1 + " " + t("slots.free")); continue; }
-    const name = clip(titleOf(shell, chatId), 24);
-    places.push(i + 1 + ((shell.missing || []).includes(chatId) ? " ✗ " + name + " (" + t("slots.gone") + ")" : kino.config.get("ch" + (i + 1)) === true ? " ✓ " + name : " — " + name));
+    if (!chatId) continue;
+    places.push({ n: i + 1, key: "ch" + (i + 1), title: clip(titleOf(shell, chatId), 40), gone: (shell.missing || []).includes(chatId) });
   }
-  out.channels_status = shell.slots.length ? places.join(" · ").slice(0, 200) : t("slots.none");
-  const waiting = (shell.waiting || []).map((x) => ((shell.wasOn || []).includes(x) ? t("more.wasOn", { title: clip(titleOf(shell, x), 24) }) : clip(titleOf(shell, x), 24)));
-  out.channels_more = waiting.length ? t("more.list", { list: waiting.slice(0, 4).join(", ") + (waiting.length > 4 ? " +" + (waiting.length - 4) : "") }).slice(0, 200) : t("more.none");
+  const waiting = (shell.waiting || []).map((x) => ({ title: clip(titleOf(shell, x), 40), wasOn: (shell.wasOn || []).includes(x) }));
   const parts = [shell.count > 0 ? videoCount(shell.count) : t("index.none")];
   if (shell.indexedAt) {
     const m = Math.floor((now - shell.indexedAt) / 60000);
@@ -599,19 +611,7 @@ export function statusLines() {
   if (c.mode === "account" && shell.checking > 0) parts.push(t("index.checking", { n: shell.checking }));
   if (problem) parts.push(problem.kind === "flood" || problem.kind === "budget" ? t("setup.flood", { min: minutes((problem.until - now) / 1000) }) : noticeFor(problem).items[0].title);
   if (shell.channelErrors > 0) parts.push(t("index.channelErrors", { n: shell.channelErrors }));
-  out.index_status = parts.join(" · ").slice(0, 200);
-  return out;
-}
-
-/** The account line of the settings form in account mode (no network). */
-function accountStatus(c) {
-  const rec = readJson(KEYS.login);
-  const qr = readJson(KEYS.qr);
-  if (qr && qr.fp === sessionFp(c) && qr.stage === "password") return t("status.password");
-  if (qr && qr.fp === sessionFp(c) && qr.stage === "qr" && qr.until > Date.now()) return t("qr.waiting");
-  if (hasLogin(c)) return t("status.accountOn");
-  if (rec && rec.fp === loginFp(c) && rec.kind === "closed") return t("status.closed");
-  return t("status.signin");
+  return { mode: c.mode, complete: c.complete, loggedIn, ready: c.complete && (c.mode === "bot" || loggedIn), account, places, waiting, index: parts.join(" · "), qrStage: !!(qr && qr.fp === (c.complete ? sessionFp(c) : null) && qr.stage), have: { api_id: !!c.apiId, api_hash: !!c.apiHash, bot_token: !!c.botToken } };
 }
 
 export { chatOfId, msgOfId };

@@ -48,7 +48,7 @@ test("a stranger's channel (lower id, added later) never takes the owner's slot 
   world.addChannel({ id: STRANGER, accessHash: 2n, title: "Spam" });
   const spam = postVideo(STRANGER, { name: "spam.mp4" });
   await p.action("refresh");
-  let s = await p.settingsStatus();
+  let s = await p.view();
   assert.equal(places(s)[0], "✓ Mis videos");
   assert.match(places(s)[1], /^— Spam/);
   const items = flat(await p.home());
@@ -56,7 +56,7 @@ test("a stranger's channel (lower id, added later) never takes the owner's slot 
   assert.ok(!items.some((i) => i.ref === spam), "a switched-off stranger shows nothing");
   for (let i = 0; i < 9; i++) world.addChannel({ id: 1000000000n + BigInt(i), accessHash: 3n, title: "Otro" + i });
   await p.action("refresh");
-  s = await p.settingsStatus();
+  s = await p.view();
   assert.equal(places(s)[0], "✓ Mis videos", "nine more strangers do not move the owner");
   assert.match(places(s)[1], /^— Spam/);
 });
@@ -188,7 +188,7 @@ test("control and bidi characters are stripped from channel titles, file names a
   const item = flat(rows).find((i) => i.ref === ref);
   assert.ok(item);
   assert.doesNotMatch(JSON.stringify(rows.map((r) => [r.title, r.items.map((i) => [i.title, i.overview])])).replace(/\\u[0-9a-f]{4}/gi, (m) => String.fromCharCode(parseInt(m.slice(2), 16))), bad);
-  assert.doesNotMatch((await p.settingsStatus()).channels_status, bad);
+  assert.doesNotMatch((await p.view()).channels_status, bad);
   assert.doesNotMatch(JSON.stringify(await p.details(ref)).replace(/\\u[0-9a-f]{4}/gi, (m) => String.fromCharCode(parseInt(m.slice(2), 16))), bad);
 });
 

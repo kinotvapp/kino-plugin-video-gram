@@ -31,11 +31,11 @@ async function signIn(d, values = ACC) {
   const p = await run(d, values);
   const started = await p.action("qr_login");
   assert.match(started.message, /Dispositivos ▸ Vincular un dispositivo/);
-  const s1 = await p.settingsStatus();
+  const s1 = await p.view();
   assert.match(s1.login_qr, /^tg:\/\/login\?token=[A-Za-z0-9_-]{43}$/);
   assert.ok(acct.scan());
   skew += 11000; // the next form refresh, 10 s later, asks Telegram again
-  const s2 = await p.settingsStatus();
+  const s2 = await p.view();
   return { p, s1, s2 };
 }
 
@@ -49,7 +49,7 @@ test("no background login: without a session Home asks to sign in, with no key e
   assert.equal(rows[0].items[0].ref, "setup:signin");
   assert.equal(st().keyExchanges, 0);
   assert.equal(acct.calls.length, 0);
-  const s = await p.settingsStatus();
+  const s = await p.view();
   assert.match(s.account_status, /Sin sesión: toca Iniciar sesión con QR/);
   assert.equal(s.login_qr, undefined, "no QR until the person presses the button");
   await assert.rejects(p.resolve("setup:signin"), (e) => e.code === "auth_required");
@@ -75,11 +75,11 @@ test("QR login: the code refreshes, the scan logs in; the session is sealed in i
   const items = flat(rows);
   assert.ok(items.some((i) => i.title === "Viaje a la playa"), JSON.stringify(rows.map((r) => r.title)));
   assert.ok(!items.some((i) => i.title === "Matrix"), "a second chat arrives off");
-  const s3 = await p.settingsStatus();
+  const s3 = await p.view();
   assert.equal(places(s3)[0], "✓ Mensajes guardados");
   assert.equal(places(s3)[1], "— Pelis");
   const en = await d.runtime(ACC, { lang: "en-US", now: clock, closePrevious: true });
-  assert.equal(places(await en.settingsStatus())[0], "✓ Saved Messages");
+  assert.equal(places(await en.view())[0], "✓ Saved Messages");
   // A play: the file through upload.getFile, with the stored session (no login of any kind).
   const ref = items.find((i) => i.title === "Viaje a la playa").ref;
   const p2 = await run(d);
@@ -94,17 +94,15 @@ test("QR login on an account of another DC (migration) with a 2FA password: wron
   acct.post(acct.selfKey, vid("a.mp4"));
   const d = newDevice();
   const { s2 } = await signIn(d);
-  assert.match(s2.account_status, /contraseña de dos pasos: escríbela arriba/);
+  assert.match(s2.account_status, /contraseña de dos pasos: escríbela y toca Confirmar/);
   assert.equal(acct.stats.importLoginToken, 1);
   const WRONG = "otra-clave-equivocada";
   const wrong = await (await run(d, { ...ACC, tg_password: WRONG })).action("check_password");
   assert.match(wrong.message, /no es correcta/);
-  assert.deepEqual(wrong.clearSettings, ["tg_password"]);
   const after = [d.storageDump(), JSON.stringify(await d.catalogDump()), d.logs.join("\n"), JSON.stringify(wrong)].join("\n");
   assert.ok(!after.includes(WRONG), "a wrong password is not stored, logged or answered either");
   const right = await (await run(d, { ...ACC, tg_password: PASSWORD })).action("check_password");
   assert.match(right.message, /sesión iniciada/);
-  assert.deepEqual(right.clearSettings, ["tg_password"]);
   const state = openSession(d.base.storage.get("tg.usession"), { ...ACC, account: true });
   assert.equal(state.homeDc, 4);
   const p = await run(d);
@@ -130,7 +128,7 @@ test("a session ended from Telegram (Settings ▸ Devices): a clean 'closed' sta
   }
   assert.equal(acct.calls.length, calls, "no request at all after the session was ended");
   assert.equal(st().keyExchanges, kx);
-  assert.match((await (await run(d)).settingsStatus()).account_status, /Telegram cerró esta sesión/);
+  assert.match((await (await run(d)).view()).account_status, /Telegram cerró esta sesión/);
 });
 
 test("Cerrar sesión: auth.logOut, then the account's session, index and rows go; a bot session on the device stays", async () => {
@@ -166,8 +164,8 @@ test("QR logins are budgeted per device (5 an hour); the code stops after its wi
   for (let i = 0; i < 5; i++) assert.match((await p.action("qr_login")).message, /escanea el código/);
   assert.match((await p.action("qr_login")).message, /Demasiados intentos/);
   skew += 151000;
-  const s = await (await run(d)).settingsStatus();
-  assert.match(s.account_status, /El código venció/);
+  const s = await (await run(d)).view();
+  assert.match(s.note, /El código venció/);
   assert.equal(s.login_qr, undefined);
 });
 
@@ -215,7 +213,7 @@ test("secret scan in account mode: api_hash, the auth key, the login token and t
   acct.post(acct.selfKey, vid("a.mp4"));
   const d = newDevice();
   const { p, s1 } = await signIn(d);
-  const outs = [s1, await (await run(d, { ...ACC, tg_password: PASSWORD })).action("check_password"), await p.home(), await p.settingsStatus()];
+  const outs = [s1, await (await run(d, { ...ACC, tg_password: PASSWORD })).action("check_password"), await p.home(), await p.view()];
   const token = s1.login_qr.split("token=")[1];
   const state = openSession(d.base.storage.get("tg.usession"), { ...ACC, account: true });
   const hay = [d.storageDump(), JSON.stringify(await d.catalogDump()), d.logs.join("\n")].join("\n");
@@ -224,29 +222,26 @@ test("secret scan in account mode: api_hash, the auth key, the login token and t
   assert.ok(!d.logs.join("\n").includes("tg://login"));
 });
 
-test("the manifest: access defaults to the bot, the bot token is optional, 12 valued settings and 15 others (Kino's limits)", () => {
+test("the manifest is screen-only: apiVersion 14, the screen replaces Kino's form, 11 valued settings and no action (Kino's limits)", () => {
   const s = MANIFEST.settings;
+  assert.equal(MANIFEST.apiVersion, 14);
+  assert.ok(MANIFEST.capabilities.includes("screen"));
+  assert.equal(MANIFEST.screen.settingsIn, "screen");
+  assert.deepEqual(MANIFEST.screen.opensFrom, ["settings"]);
   assert.equal(s.find((x) => x.key === "access").default, "bot");
-  assert.ok(!s.find((x) => x.key === "bot_token").required);
-  const valued = s.filter((x) => !["section", "status", "action", "qr", "link", "help"].includes(x.type));
-  assert.equal(valued.length, 12);
-  assert.equal(s.length - valued.length, 15);
-  assert.equal(s.find((x) => x.key === "login_qr").refreshMs, 5000);
+  // Nothing is `required`: Kino brings its form back whenever a required setting is empty, and the screen is the only way in.
+  assert.deepEqual(s.filter((x) => x.required).map((x) => x.key), []);
+  // The old form's furniture is gone: only values remain (no section, status, qr, help or action).
+  assert.deepEqual(s.filter((x) => ["section", "status", "action", "qr", "link", "help"].includes(x.type)), []);
+  assert.equal(s.length, 11);
   assert.ok(s.filter((x) => /^ch\d$/.test(x.key)).length === 6);
 });
 
-test("the 2FA password never leaves the device: sync false on tg_password (and only there), the kit accepts it", async () => {
+test("the 2FA password is not a setting: it is typed in a masked field, used once and never kept (nothing to sync, nothing to clear)", async () => {
   const { validateManifest } = await import("../sdk/contract.mjs");
   const r = validateManifest(JSON.stringify(MANIFEST));
   assert.equal(r.ok, true, JSON.stringify(r).slice(0, 300));
-  assert.equal(MANIFEST.apiVersion, 13);
-  const pw = MANIFEST.settings.find((x) => x.key === "tg_password");
-  assert.equal(pw.type, "password");
-  assert.equal(pw.sync, false);
-  assert.deepEqual(MANIFEST.settings.filter((x) => x.sync === false).map((x) => x.key), ["tg_password"], "the api_id, api_hash and bot token still sync");
-  assert.equal(MANIFEST.sync, undefined, "no sync block, so no provision can name it");
-  // The kit refuses sync false on anything but a password (the same rule Kino applies).
-  const bad = JSON.parse(JSON.stringify(MANIFEST));
-  bad.settings.find((x) => x.key === "tmdb").sync = false;
-  assert.equal(validateManifest(JSON.stringify(bad)).ok, false);
+  assert.equal(MANIFEST.settings.find((x) => x.key === "tg_password"), undefined);
+  assert.equal(MANIFEST.sync, undefined, "no sync block, so no provision can name a secret");
+  assert.deepEqual(MANIFEST.settings.filter((x) => x.sync === false), []);
 });

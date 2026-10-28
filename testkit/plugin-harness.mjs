@@ -72,7 +72,7 @@ export function device({ lang = "es-CO", metaFixture = null } = {}) {
       for (const [name, fn] of Object.entries(plugin)) {
         if (typeof fn === "function") calls[name] = async (...args) => { const v = await fn(...JSON.parse(JSON.stringify(args))); return v === undefined ? undefined : JSON.parse(JSON.stringify(v)); };
       }
-      return calls;
+      return withScreen(calls, values, runtimeLang);
     },
     /** Every stored key and value, as one string (for the secret scans). */
     storageDump() {
@@ -99,4 +99,68 @@ export function places(status) {
     if (m) out[Number(m[1]) - 1] = m[2];
   }
   return out;
+}
+
+const merge = (state, patch) => {
+  for (const [k, v] of Object.entries(patch || {})) { if (v === null) delete state[k]; else state[k] = v; }
+};
+const walk = (node, visit) => {
+  if (!node || typeof node !== "object") return;
+  visit(node);
+  for (const c of node.children || []) walk(c, visit);
+  for (const i of node.items || []) walk(i, visit);
+};
+
+/**
+ * The runtime as the person drives it through the setup screen: Kino keeps the screen's `state` (merging each answer's
+ * patch) and draws `screen()`. `action(key)` presses the screen's button of that name (check_password submits the 2FA
+ * form with the runtime's `tg_password` value) and answers `{ message }` from the toast; `view()` reads the drawn tree back into the lines a test
+ * asserts on (the account line, the QR text, the places, the waiting line, the index line).
+ */
+function withScreen(calls, values, lang) {
+  const state = {};
+  const en = String(lang).toLowerCase().startsWith("en");
+  const say = (n, field = "text") => (en && n[field + "En"] !== undefined ? n[field + "En"] : n[field]);
+  const event = async (name, arg, value) => {
+    const answer = await calls.screenEvent({ name, arg, value, state: { ...state } });
+    if (answer) merge(state, answer.state);
+    return answer;
+  };
+  return {
+    ...calls,
+    event,
+    state: () => ({ ...state }),
+    async action(key) {
+      const names = { qr_login: "qr_login", logout: "logout", free_slots: "free_slots", refresh: "refresh", forget: "forget", check_password: "password" };
+      if (!names[key]) return null;
+      // The 2FA step is a masked form: what the person typed arrives as the event's value, nowhere else.
+      const answer = key === "check_password" ? await event("password", undefined, { tg_password: values.tg_password }) : await event(names[key]);
+      const toast = answer && answer.toast;
+      return { message: toast && typeof toast === "object" ? toast.text : toast };
+    },
+    async view() {
+      await event("tick");
+      const tree = await calls.screen({ state: { ...state } });
+      const out = { places: {}, tree };
+      walk(tree, (n) => {
+        if (n.key === "accountLine") out.account_status = say(n);
+        if (n.type === "QrImage") out.login_qr = n.value;
+        if (n.key === "noteLine") out.note = say(n);
+        if (n.key === "waitingLine") out.channels_more = say(n);
+        if (n.key === "indexLine") out.index_status = say(n);
+        const m = n.type === "Switch" && /^sw(\d)$/.exec(n.key || "");
+        if (m) out.places[Number(m[1])] = say(n, "labelText");
+      });
+      const line = [];
+      for (let i = 1; i <= 6; i++) {
+        const name = out.places[i];
+        if (name === undefined) { line.push(i + " " + (en ? "free" : "libre")); continue; }
+        const gone = / \((sin acceso|no access)\)$/.test(name);
+        line.push(i + (gone ? " ✗ " : values["ch" + i] === true || (values["ch" + i] === undefined && i === 1) ? " ✓ " : " — ") + name);
+      }
+      out.channels_status = line.join(" · ");
+      if (out.channels_more === undefined) out.channels_more = en ? "None" : "Ninguno";
+      return out;
+    },
+  };
 }

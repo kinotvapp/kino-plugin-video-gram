@@ -42,15 +42,15 @@ async function as022() {
 test("from 8 places to 6: places 1-6 keep their channel, 7 and 8 wait first in line (the one that was on, marked)", async () => {
   await as022();
   const p = await d.runtime(SETTINGS);
-  const s = await p.settingsStatus();
+  const s = await p.view();
   assert.deepEqual(places(s), ["✓ C0", "— C1", "— C2", "— C3", "— C4", "— C5"]);
-  assert.match(s.channels_more, /^C6 \(estaba activo\), C7\. Para dar un lugar: apaga uno arriba, toca Guardar y luego Dar lugar a los que esperan/);
-  const en = await (await d.runtime(SETTINGS, { lang: "en-US" })).settingsStatus();
+  assert.match(s.channels_more, /^C6 \(estaba activo\), C7\. Para dar un lugar: apaga uno y toca Dar lugar a los que esperan/);
+  const en = await (await d.runtime(SETTINGS, { lang: "en-US" })).view();
   assert.match(en.channels_more, /^C6 \(was on\), C7\. To give one a place/);
   await p.action("refresh");
   assert.ok(!(await d.catalogDump()).some((r) => r.id.startsWith(chat(ID(6)) + ":")), "the waiting channel's rows are purged like any channel off");
   assert.ok(!flat(await p.home()).some((i) => i.ref.startsWith(chat(ID(6)))));
-  assert.match((await p.settingsStatus()).channels_more, /^C6 \(estaba activo\), C7\./, "a refresh keeps the line order");
+  assert.match((await p.view()).channels_more, /^C6 \(estaba activo\), C7\./, "a refresh keeps the line order");
 });
 
 test("Dar lugar a los que esperan: only places switched off change hands, in line order, and arrive off; switching one on reads it", async () => {
@@ -59,7 +59,7 @@ test("Dar lugar a los que esperan: only places switched off change hands, in lin
   await p.home();
   const out = await p.action("free_slots");
   assert.match(out.message, /2 lugar\(es\) entregados; llegan apagados/);
-  const s = await p.settingsStatus();
+  const s = await p.view();
   assert.deepEqual(places(s), ["✓ C0", "✓ C1", "— C6", "— C7", "— C4", "— C5"]);
   assert.match(s.channels_more, /^C2, C3\./, "the channels that gave their place wait at the end of the line");
   assert.ok(!flat(await p.home()).some((i) => i.ref.startsWith(chat(ID(6)))), "nothing of a place given away shows until it is on");
@@ -71,11 +71,11 @@ test("Dar lugar a los que esperan: only places switched off change hands, in lin
 test("a fresh 0.3.0 install with 8 channels: six places, two waiting; no place changes by itself on later refreshes", async () => {
   const p = await d.runtime(SETTINGS);
   await p.home();
-  const before = places(await p.settingsStatus());
+  const before = places(await p.view());
   assert.equal(before.length, 6);
-  assert.match((await p.settingsStatus()).channels_more, /^C6, C7\./);
+  assert.match((await p.view()).channels_more, /^C6, C7\./);
   world.addChannel({ id: 1000n, accessHash: 1n, title: "Extraño" });
   await p.action("refresh");
-  assert.deepEqual(places(await p.settingsStatus()), before);
-  assert.match((await p.settingsStatus()).channels_more, /^C6, C7, Extraño\./);
+  assert.deepEqual(places(await p.view()), before);
+  assert.match((await p.view()).channels_more, /^C6, C7, Extraño\./);
 });
